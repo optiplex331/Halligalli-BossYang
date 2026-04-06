@@ -1,4 +1,36 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  DEFAULT_SETTINGS,
+  INITIAL_BREAKDOWN,
+  INITIAL_SUMMARY,
+} from "./game/constants";
+import {
+  BEST_KEY,
+  RECENT_KEY,
+  SETTINGS_KEY,
+  loadBestSummary,
+  loadRecentSummary,
+  loadSettings,
+  normalizeSummary,
+  saveJson,
+} from "./game/persistence";
+import {
+  calcAccuracy,
+  clonePlayers,
+  collectFaceUpCards,
+  createRoundSummary,
+  createPlayers,
+  evaluateBellAvailability,
+  flipCardForPlayer,
+  getSeatLayouts,
+  getTopCard,
+  reconcilePendingBellWindow,
+  sumBreakdown,
+  takePenaltyCards,
+  totalTableCards,
+  visibleTotals,
+} from "./game/rules";
+import { clearGameLoopHandles } from "./game/lifecycle";
 
 const FRUITS = [
   { key: "banana", label: "香蕉", labelEn: "banana", icon: "🍌" },
@@ -13,18 +45,6 @@ const PIP_LAYOUTS = {
   3: ["top-center", "center", "bottom-center"],
   4: ["top-left", "top-right", "bottom-left", "bottom-right"],
   5: ["top-left", "top-right", "center", "bottom-left", "bottom-right"],
-};
-
-const SETTINGS_KEY = "halligalli_settings";
-const BEST_KEY = "halligalli_best";
-const RECENT_KEY = "halligalli_recent";
-
-const DEFAULT_SETTINGS = {
-  difficulty: "normal",
-  duration: 60,
-  playerCount: 4,
-  language: "zh",
-  soundEnabled: true,
 };
 
 const MODES = {
@@ -64,29 +84,6 @@ const BOSS_TAUNTS = {
     "Boss Yang: Missing something that obvious turns regret into the main character!",
     "Boss Yang: The next player is already taking over the table while you're still processing the disaster!",
   ],
-};
-
-const INITIAL_SUMMARY = {
-  score: 0,
-  correctHits: 0,
-  wrongHits: 0,
-  missedHits: 0,
-  accuracy: 0,
-  avgReactionMs: 0,
-  bestReactionMs: 0,
-  difficulty: DEFAULT_SETTINGS.difficulty,
-  durationSec: DEFAULT_SETTINGS.duration,
-  playerCount: DEFAULT_SETTINGS.playerCount,
-};
-
-const INITIAL_BREAKDOWN = {
-  correctBase: 0,
-  collectionBonus: 0,
-  speedBonus: 0,
-  streakBonus: 0,
-  wrongPenalty: 0,
-  missedPenalty: 0,
-  cardPenalty: 0,
 };
 
 const COPY = {
@@ -229,244 +226,6 @@ const COPY = {
   },
 };
 
-function loadJson(key, fallback) {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function loadSettings() {
-  const saved = loadJson(SETTINGS_KEY, DEFAULT_SETTINGS);
-  return {
-    ...DEFAULT_SETTINGS,
-    ...saved,
-  };
-}
-
-function saveJson(key, value) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(key, JSON.stringify(value));
-}
-
-function shuffle(cards) {
-  const next = [...cards];
-
-  for (let index = next.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
-  }
-
-  return next;
-}
-
-function createCard(serial, fruitKey, count) {
-  return {
-    id: `card-${serial}-${Math.random().toString(36).slice(2, 8)}`,
-    fruit: fruitKey,
-    count,
-  };
-}
-
-function createDeck(cardCount = 72) {
-  const countDistribution = [
-    [1, 5],
-    [2, 4],
-    [3, 3],
-    [4, 4],
-    [5, 2],
-  ];
-  const cards = [];
-  let serial = 0;
-
-  FRUITS.forEach((fruit) => {
-    countDistribution.forEach(([count, repeat]) => {
-      for (let index = 0; index < repeat; index += 1) {
-        cards.push(createCard(serial, fruit.key, count));
-        serial += 1;
-      }
-    });
-  });
-
-  while (cards.length < cardCount) {
-    const fruit = FRUITS[cards.length % FRUITS.length];
-    const extraCounts = [1, 2, 3, 4];
-    const count = extraCounts[cards.length % extraCounts.length];
-    cards.push(createCard(serial, fruit.key, count));
-    serial += 1;
-  }
-
-  return shuffle(cards.slice(0, cardCount));
-}
-
-function getSeatLayouts(playerCount) {
-  const layouts = {
-    3: [
-      { labelZh: "上家", labelEn: "Top", x: 50, y: 16 },
-      { labelZh: "右侧玩家", labelEn: "Right", x: 80, y: 50 },
-      { labelZh: "你", labelEn: "You", x: 50, y: 84, isUser: true },
-    ],
-    4: [
-      { labelZh: "上家", labelEn: "Top", x: 50, y: 14 },
-      { labelZh: "右侧玩家", labelEn: "Right", x: 84, y: 50 },
-      { labelZh: "你", labelEn: "You", x: 50, y: 84, isUser: true },
-      { labelZh: "左侧玩家", labelEn: "Left", x: 16, y: 50 },
-    ],
-    5: [
-      { labelZh: "左上玩家", labelEn: "Upper Left", x: 28, y: 18 },
-      { labelZh: "右上玩家", labelEn: "Upper Right", x: 72, y: 18 },
-      { labelZh: "右侧玩家", labelEn: "Right", x: 86, y: 52 },
-      { labelZh: "你", labelEn: "You", x: 50, y: 84, isUser: true },
-      { labelZh: "左侧玩家", labelEn: "Left", x: 14, y: 52 },
-    ],
-    6: [
-      { labelZh: "左上玩家", labelEn: "Upper Left", x: 28, y: 16 },
-      { labelZh: "上家", labelEn: "Top", x: 50, y: 12 },
-      { labelZh: "右上玩家", labelEn: "Upper Right", x: 72, y: 16 },
-      { labelZh: "右侧玩家", labelEn: "Right", x: 85, y: 52 },
-      { labelZh: "你", labelEn: "You", x: 50, y: 84, isUser: true },
-      { labelZh: "左侧玩家", labelEn: "Left", x: 15, y: 52 },
-    ],
-  };
-
-  return layouts[playerCount];
-}
-
-function createPlayers(playerCount) {
-  const deck = createDeck();
-  const seats = getSeatLayouts(playerCount);
-  const players = Array.from({ length: playerCount }, (_, index) => ({
-    id: index,
-    labelZh: seats[index].labelZh,
-    labelEn: seats[index].labelEn,
-    drawPile: [],
-    wonPile: [],
-    faceUpPile: [],
-  }));
-
-  deck.forEach((card, index) => {
-    players[index % playerCount].drawPile.push(card);
-  });
-
-  return players;
-}
-
-function getTopCard(player) {
-  return player.faceUpPile[player.faceUpPile.length - 1] ?? null;
-}
-
-function sumVisible(cards) {
-  const totals = Object.fromEntries(FRUITS.map((fruit) => [fruit.key, 0]));
-
-  cards.forEach((card) => {
-    if (card) {
-      totals[card.fruit] += card.count;
-    }
-  });
-
-  return totals;
-}
-
-function visibleTotals(players) {
-  return sumVisible(players.map(getTopCard));
-}
-
-function totalTableCards(players) {
-  return players.reduce((total, player) => total + player.faceUpPile.length, 0);
-}
-
-function recycleDrawPile(player) {
-  if (player.drawPile.length || !player.wonPile.length) {
-    return player;
-  }
-
-  return {
-    ...player,
-    drawPile: shuffle(player.wonPile),
-    wonPile: [],
-  };
-}
-
-function flipCardForPlayer(player) {
-  const ready = recycleDrawPile(player);
-
-  if (!ready.drawPile.length) {
-    return { player: ready, card: null };
-  }
-
-  const card = ready.drawPile[ready.drawPile.length - 1];
-
-  return {
-    player: {
-      ...ready,
-      drawPile: ready.drawPile.slice(0, -1),
-      faceUpPile: [...ready.faceUpPile, card],
-    },
-    card,
-  };
-}
-
-function takePenaltyCards(player, count) {
-  let nextPlayer = { ...player };
-  const takenCards = [];
-
-  while (takenCards.length < count) {
-    nextPlayer = recycleDrawPile(nextPlayer);
-    if (!nextPlayer.drawPile.length) {
-      break;
-    }
-
-    const card = nextPlayer.drawPile[nextPlayer.drawPile.length - 1];
-    nextPlayer = {
-      ...nextPlayer,
-      drawPile: nextPlayer.drawPile.slice(0, -1),
-    };
-    takenCards.push(card);
-  }
-
-  return {
-    player: {
-      ...nextPlayer,
-      faceUpPile: [...takenCards, ...nextPlayer.faceUpPile],
-    },
-    penaltyCount: takenCards.length,
-  };
-}
-
-function collectFaceUpCards(players, winnerId) {
-  const collectedCards = players.flatMap((player) => player.faceUpPile);
-
-  return {
-    players: players.map((player) =>
-      player.id === winnerId
-        ? {
-            ...player,
-            wonPile: [...player.wonPile, ...collectedCards],
-            faceUpPile: [],
-          }
-        : {
-            ...player,
-            faceUpPile: [],
-          },
-    ),
-    collectedCount: collectedCards.length,
-  };
-}
-
-function calcAccuracy(correctHits, wrongHits, missedHits) {
-  const total = correctHits + wrongHits + missedHits;
-  return total ? correctHits / total : 0;
-}
-
 function fruitLabel(fruitKey, language) {
   const fruit = FRUITS.find((item) => item.key === fruitKey);
   if (!fruit) {
@@ -476,30 +235,9 @@ function fruitLabel(fruitKey, language) {
   return language === "en" ? fruit.labelEn : fruit.label;
 }
 
-function clonePlayers(players) {
-  return players.map((player) => ({
-    ...player,
-    drawPile: [...player.drawPile],
-    wonPile: [...player.wonPile],
-    faceUpPile: [...player.faceUpPile],
-  }));
-}
-
 function modeLabel(modeKey, language) {
   const mode = MODES[modeKey];
   return language === "en" ? mode.labelEn : mode.label;
-}
-
-function sumBreakdown(breakdown) {
-  return (
-    breakdown.correctBase +
-    breakdown.collectionBonus +
-    breakdown.speedBonus +
-    breakdown.streakBonus -
-    breakdown.wrongPenalty -
-    breakdown.missedPenalty -
-    breakdown.cardPenalty
-  );
 }
 
 function FruitCardFace({ card, compact }) {
@@ -558,13 +296,9 @@ function TableSeat({ player, seat, isActive, isCurrentTurn, language, compactCar
 function App() {
   const [screen, setScreen] = useState("home");
   const [settings, setSettings] = useState(loadSettings);
-  const [bestSummary, setBestSummary] = useState(() =>
-    loadJson(BEST_KEY, INITIAL_SUMMARY),
-  );
-  const [recentSummary, setRecentSummary] = useState(() =>
-    loadJson(RECENT_KEY, INITIAL_SUMMARY),
-  );
-  const [players, setPlayers] = useState(() => createPlayers(DEFAULT_SETTINGS.playerCount));
+  const [bestSummary, setBestSummary] = useState(loadBestSummary);
+  const [recentSummary, setRecentSummary] = useState(loadRecentSummary);
+  const [players, setPlayers] = useState(() => createPlayers(DEFAULT_SETTINGS.playerCount, FRUITS));
   const [currentTurn, setCurrentTurn] = useState(0);
   const [actingPlayer, setActingPlayer] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(DEFAULT_SETTINGS.duration);
@@ -591,6 +325,7 @@ function App() {
   const feedbackTimeoutRef = useRef(null);
   const penaltyTimeoutRef = useRef(null);
   const bossTauntTimeoutRef = useRef(null);
+  const startupTimeoutRef = useRef(null);
   const gameStateRef = useRef({});
   const gameRunningRef = useRef(false);
   const audioContextRef = useRef(null);
@@ -663,11 +398,14 @@ function App() {
   useEffect(() => () => stopGameLoops(), []);
 
   function stopGameLoops() {
-    window.clearInterval(revealIntervalRef.current);
-    window.clearInterval(countdownIntervalRef.current);
-    window.clearTimeout(feedbackTimeoutRef.current);
-    window.clearTimeout(penaltyTimeoutRef.current);
-    window.clearTimeout(bossTauntTimeoutRef.current);
+    clearGameLoopHandles({
+      revealIntervalRef,
+      countdownIntervalRef,
+      feedbackTimeoutRef,
+      penaltyTimeoutRef,
+      bossTauntTimeoutRef,
+      startupTimeoutRef,
+    });
   }
 
   function updateFeedback(type, message) {
@@ -682,17 +420,16 @@ function App() {
   }
 
   function applyBellAvailability(nextPlayers) {
-    const totals = visibleTotals(nextPlayers);
-    const matchedFruit = Object.entries(totals).find(([, total]) => total === 5);
+    const evaluation = evaluateBellAvailability(nextPlayers);
 
-    if (matchedFruit) {
+    if (evaluation.available) {
       bellStateRef.current = {
         available: true,
-        fruitKey: matchedFruit[0],
+        fruitKey: evaluation.fruitKey,
         startedAt: Date.now(),
         handled: false,
       };
-      setActiveBellFruit(matchedFruit[0]);
+      setActiveBellFruit(evaluation.fruitKey);
       return;
     }
 
@@ -847,7 +584,7 @@ function App() {
     stopGameLoops();
     gameRunningRef.current = true;
 
-    const freshPlayers = createPlayers(settings.playerCount);
+    const freshPlayers = createPlayers(settings.playerCount, FRUITS);
 
     setPlayers(freshPlayers);
     setCurrentTurn(0);
@@ -877,7 +614,7 @@ function App() {
     };
     setScreen("play");
 
-    setTimeout(() => {
+    startupTimeoutRef.current = window.setTimeout(() => {
       gameStateRef.current = {
         players: freshPlayers,
         currentTurn: 0,
@@ -997,38 +734,26 @@ function App() {
 
     gameRunningRef.current = false;
     stopGameLoops();
-    const snapshot = gameStateRef.current;
-
-    const accuracy = calcAccuracy(
-      snapshot.correctHits,
-      snapshot.wrongHits,
-      snapshot.missedHits,
+    const pendingResolution = reconcilePendingBellWindow(
+      gameStateRef.current,
+      bellStateRef.current,
     );
-    const avgReactionMs = snapshot.reactionTimes.length
-      ? Math.round(
-          snapshot.reactionTimes.reduce((total, time) => total + time, 0) /
-            snapshot.reactionTimes.length,
-        )
-      : 0;
-    const bestReactionMs = snapshot.reactionTimes.length
-      ? Math.min(...snapshot.reactionTimes)
-      : 0;
+    const resolvedSnapshot = pendingResolution.snapshot;
+    const summary = normalizeSummary(createRoundSummary(resolvedSnapshot));
 
-    const summary = {
-      score: Math.max(0, sumBreakdown(snapshot.scoreBreakdown ?? INITIAL_BREAKDOWN)),
-      correctHits: snapshot.correctHits,
-      wrongHits: snapshot.wrongHits,
-      missedHits: snapshot.missedHits,
-      accuracy,
-      avgReactionMs,
-      bestReactionMs,
-      difficulty: snapshot.difficulty,
-      durationSec: snapshot.durationSec,
-      playerCount: snapshot.playerCount,
-    };
+    if (pendingResolution.missed) {
+      setMissedHits(resolvedSnapshot.missedHits);
+      setScoreBreakdown(resolvedSnapshot.scoreBreakdown);
+      setFeedback({
+        type: "warn",
+        message: t("missedBell", {
+          fruit: fruitLabel(pendingResolution.missedFruit, settings.language),
+        }),
+      });
+    }
 
     setResultSummary(summary);
-    setScoreBreakdown(snapshot.scoreBreakdown ?? INITIAL_BREAKDOWN);
+    setScoreBreakdown(resolvedSnapshot.scoreBreakdown ?? INITIAL_BREAKDOWN);
     setScore(summary.score);
     setRecentSummary(summary);
     saveJson(RECENT_KEY, summary);
@@ -1037,6 +762,14 @@ function App() {
       setBestSummary(summary);
       saveJson(BEST_KEY, summary);
     }
+
+    bellStateRef.current = {
+      available: false,
+      fruitKey: null,
+      startedAt: 0,
+      handled: true,
+    };
+    gameStateRef.current = resolvedSnapshot;
 
     setScreen("result");
   }
