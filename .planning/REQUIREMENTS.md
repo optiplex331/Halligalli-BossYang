@@ -5,111 +5,99 @@
 
 ## v1 Requirements
 
-### Home
-
-- [ ] **HOME-01**: User can understand within a few seconds that the product is a Halligalli practice trainer from the home screen alone
-- [ ] **HOME-02**: User can start a practice session from the home screen in one primary action
-- [ ] **HOME-03**: User can open beginner teaching from the home screen before starting practice
-- [ ] **HOME-04**: User can review recent and best local results from the home screen
-
 ### Tutorial
 
-- [ ] **TUT-01**: User can complete a short step-by-step tutorial that explains the Halligalli core rule with static examples
-- [ ] **TUT-02**: User can see dynamic tutorial examples that show when to ring and when not to ring
-- [ ] **TUT-03**: User can complete a short tutorial quiz or comprehension check before entering practice
-- [ ] **TUT-04**: User can skip tutorial and go straight to practice if they already know the game
+- [ ] **TUT-01**: User can open a beginner tutorial from the home screen before starting practice
+- [ ] **TUT-02**: User can learn the exact core rule through step-by-step examples that distinguish valid rings from invalid rings
+- [ ] **TUT-03**: User can complete a short tutorial check and either pass it or skip into practice
 
-### Practice Setup
+### Practice
 
-- [ ] **SET-01**: User can configure difficulty before starting a round
-- [ ] **SET-02**: User can configure speed or pace before starting a round
-- [ ] **SET-03**: User can configure round length before starting a round
-- [ ] **SET-04**: User can toggle sound and other core local preferences without breaking the session
+- [ ] **PRAC-01**: User can start a single-player practice round from the home screen in one primary action
+- [ ] **PRAC-02**: User can configure difficulty, pace, round length, sound, and language before starting a round
+- [ ] **PRAC-03**: User can trigger the bell by tap/click and by keyboard on desktop during practice
+- [ ] **PRAC-04**: User can play through a Halligalli round where correct rings, wrong rings, and missed rings are judged according to the current visible table state
 
-### Practice Loop
+### Feedback
 
-- [ ] **PLAY-01**: User can play a single-player Halligalli round where the system reveals cards and continuously evaluates whether a valid bell condition exists
-- [ ] **PLAY-02**: User can ring by a fixed, easy-to-reach control on mobile and by keyboard or click on desktop
-- [ ] **PLAY-03**: User receives correct judgment when the ring is valid, invalid, or missed
-- [ ] **PLAY-04**: User receives round feedback quickly enough that success or failure feels immediate during play
-- [ ] **PLAY-05**: User can finish a round cleanly and transition to results without losing the final bell-state outcome
+- [ ] **FDBK-01**: User receives perceptible feedback within the round after a correct ring, wrong ring, or missed ring
+- [ ] **FDBK-02**: User can see which fruit or rule condition caused a correct ring to be valid
+- [ ] **FDBK-03**: User can see why a wrong ring was wrong, including cases where no fruit equaled 5, a total greater than 5 was mistaken for 5, or mixed fruits were counted together
+- [ ] **FDBK-04**: User can see reaction-time feedback for successful rings
 
-### Feedback And Results
+### Results
 
-- [ ] **FDBK-01**: User sees why a wrong ring was wrong, including at least the major error types described in the PRD
-- [ ] **FDBK-02**: User sees when a bell opportunity was missed without the game becoming confusing or unreadable
-- [ ] **RES-01**: User can review end-of-round stats including score, correct rings, wrong rings, missed rings, accuracy, average reaction time, and best reaction time
-- [ ] **RES-02**: User can compare the current round against stored local best performance
-- [ ] **RES-03**: User can immediately replay, adjust difficulty, review tutorial, or return home from the results screen
+- [ ] **RSLT-01**: User can review a round summary showing score, correct hits, wrong hits, missed hits, accuracy, average reaction time, and best reaction time
+- [ ] **RSLT-02**: User can compare the latest round against at least one locally stored prior benchmark such as recent or best result
+- [ ] **RSLT-03**: User can immediately replay, adjust difficulty, review tutorial, or return home from the result screen
 
-### Local Progress And Accessibility
+### Persistence
 
-- [ ] **DATA-01**: User's recent result, best result, and core settings persist locally between sessions
-- [ ] **A11Y-01**: User can use the core play interaction with keyboard support and non-color-only feedback
-- [ ] **RESP-01**: User can use the app on common desktop and mobile browser sizes without losing access to critical controls or key gameplay information
+- [ ] **PERS-01**: User can have common settings, recent result, and best result saved locally without creating an account
+- [ ] **PERS-02**: User can still use the app safely when local persisted data is malformed or unavailable
+
+### Responsive and Accessible UX
+
+- [ ] **UX-01**: User can use the core practice flow on desktop and mobile browsers with a consistently reachable bell control
+- [ ] **UX-02**: User can read the active table state and feedback clearly during live play on common screen sizes
+- [ ] **UX-03**: User can understand success and failure states through more than color alone, with text or icon reinforcement
 
 ## v2 Requirements
 
-### Extended Progress
+### Progression
 
-- **PROG-01**: User can review multi-session improvement trends beyond only recent and best round summaries
-- **PROG-02**: User can receive more personalized training recommendations based on mistake patterns
+- **PROG-01**: User can access focused drills tailored to specific weaknesses or training goals
+- **PROG-02**: User can see simple progress trends over multiple local sessions
 
-### Social And Account Features
+### Social and Competitive
 
-- **ACCT-01**: User can sign in and sync history across devices
-- **SOC-01**: User can view a leaderboard or daily challenge
-- **SOC-02**: User can challenge friends or play against others online
+- **SOCL-01**: User can sign in and sync history across devices
+- **SOCL-02**: User can compare results on a leaderboard or challenge board
+- **SOCL-03**: User can join friend battles or multiplayer practice
 
-### Advanced Training
+### Advanced Coaching
 
-- **ADV-01**: User can use adaptive difficulty or AI-assisted coaching
-- **ADV-02**: User can choose additional input methods beyond click and keyboard
+- **COACH-01**: User can receive adaptive difficulty or AI-assisted coaching suggestions
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Real-time multiplayer | Not required to validate the solo training loop |
-| Accounts and cloud sync | Local persistence is enough for v1 |
-| Leaderboards and daily challenges | Deferred until the solo product is proven |
-| Achievements meta-system | Secondary to teaching and feedback clarity |
-| Licensed official card replication | Practice fidelity matters more than exact product replication |
+| Real-time multiplayer gameplay | Explicitly deferred until the single-player training loop is validated |
+| Login-required onboarding | Conflicts with the low-friction "open and practice" core value |
+| Cloud sync for v1 | Adds backend and identity scope before local retention value is proven |
+| Leaderboards and daily challenges | Secondary to tutorial quality, trustworthy judgments, and repeat solo practice |
+| Achievements, currencies, or unlock trees | Adds meta-systems without improving first-session learning quality |
+| Official deck-brand reproduction | Practice fidelity matters more than asset replication for the current milestone |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| HOME-01 | Phase 2 | Pending |
-| HOME-02 | Phase 2 | Pending |
-| HOME-03 | Phase 2 | Pending |
-| HOME-04 | Phase 4 | Pending |
-| TUT-01 | Phase 3 | Pending |
-| TUT-02 | Phase 3 | Pending |
-| TUT-03 | Phase 3 | Pending |
-| TUT-04 | Phase 3 | Pending |
-| SET-01 | Phase 2 | Pending |
-| SET-02 | Phase 2 | Pending |
-| SET-03 | Phase 2 | Pending |
-| SET-04 | Phase 2 | Pending |
-| PLAY-01 | Phase 1 | Pending |
-| PLAY-02 | Phase 2 | Pending |
-| PLAY-03 | Phase 1 | Pending |
-| PLAY-04 | Phase 1 | Pending |
-| PLAY-05 | Phase 1 | Pending |
-| FDBK-01 | Phase 3 | Pending |
-| FDBK-02 | Phase 3 | Pending |
-| RES-01 | Phase 4 | Pending |
-| RES-02 | Phase 4 | Pending |
-| RES-03 | Phase 4 | Pending |
-| DATA-01 | Phase 1 | Pending |
-| A11Y-01 | Phase 5 | Pending |
-| RESP-01 | Phase 5 | Pending |
+| TUT-01 | TBD | Pending |
+| TUT-02 | TBD | Pending |
+| TUT-03 | TBD | Pending |
+| PRAC-01 | TBD | Pending |
+| PRAC-02 | TBD | Pending |
+| PRAC-03 | TBD | Pending |
+| PRAC-04 | TBD | Pending |
+| FDBK-01 | TBD | Pending |
+| FDBK-02 | TBD | Pending |
+| FDBK-03 | TBD | Pending |
+| FDBK-04 | TBD | Pending |
+| RSLT-01 | TBD | Pending |
+| RSLT-02 | TBD | Pending |
+| RSLT-03 | TBD | Pending |
+| PERS-01 | TBD | Pending |
+| PERS-02 | TBD | Pending |
+| UX-01 | TBD | Pending |
+| UX-02 | TBD | Pending |
+| UX-03 | TBD | Pending |
 
 **Coverage:**
-- v1 requirements: 25 total
-- Mapped to phases: 25
-- Unmapped: 0
+- v1 requirements: 19 total
+- Mapped to phases: 0
+- Unmapped: 19 ⚠️
 
 ---
 *Requirements defined: 2026-04-06*
