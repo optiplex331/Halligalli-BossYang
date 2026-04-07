@@ -797,8 +797,8 @@ function App() {
       <section className="app-panel">
         <header className="hero">
           <div>
-            <p className="eyebrow">Halligalli Practice</p>
-            <h1>{t("title")}</h1>
+            <p className="eyebrow">{t("title")}</p>
+            <h1>Halligalli</h1>
           </div>
           <div className="hero-rule">{t("heroRule")}</div>
         </header>
