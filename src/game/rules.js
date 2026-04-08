@@ -58,14 +58,14 @@ export function createDeck(fruits, cardCount = 72) {
 export function getSeatLayouts(playerCount) {
   const layouts = {
     3: [
-      { labelZh: "上家", labelEn: "Top", x: 50, y: 16 },
+      { labelZh: "上家", labelEn: "Top", x: 50, y: 22 },
       { labelZh: "右侧玩家", labelEn: "Right", x: 80, y: 50 },
-      { labelZh: "你", labelEn: "You", x: 50, y: 84, isUser: true },
+      { labelZh: "你", labelEn: "You", x: 50, y: 79, isUser: true },
     ],
     4: [
-      { labelZh: "上家", labelEn: "Top", x: 50, y: 14 },
+      { labelZh: "上家", labelEn: "Top", x: 50, y: 20 },
       { labelZh: "右侧玩家", labelEn: "Right", x: 84, y: 50 },
-      { labelZh: "你", labelEn: "You", x: 50, y: 84, isUser: true },
+      { labelZh: "你", labelEn: "You", x: 50, y: 81, isUser: true },
       { labelZh: "左侧玩家", labelEn: "Left", x: 16, y: 50 },
     ],
     5: [
@@ -76,9 +76,9 @@ export function getSeatLayouts(playerCount) {
       { labelZh: "左侧玩家", labelEn: "Left", x: 14, y: 52 },
     ],
     6: [
-      { labelZh: "左上玩家", labelEn: "Upper Left", x: 28, y: 16 },
-      { labelZh: "上家", labelEn: "Top", x: 50, y: 12 },
-      { labelZh: "右上玩家", labelEn: "Upper Right", x: 72, y: 16 },
+      { labelZh: "左上玩家", labelEn: "Upper Left", x: 28, y: 17 },
+      { labelZh: "上家", labelEn: "Top", x: 50, y: 17 },
+      { labelZh: "右上玩家", labelEn: "Upper Right", x: 72, y: 17 },
       { labelZh: "右侧玩家", labelEn: "Right", x: 85, y: 52 },
       { labelZh: "你", labelEn: "You", x: 50, y: 84, isUser: true },
       { labelZh: "左侧玩家", labelEn: "Left", x: 15, y: 52 },
