@@ -465,21 +465,29 @@ function App() {
       return;
     }
 
-    const oscillator = context.createOscillator();
-    const gainNode = context.createGain();
-    const startAt = context.currentTime + delay;
-    const endAt = startAt + duration;
+    const schedule = () => {
+      const oscillator = context.createOscillator();
+      const gainNode = context.createGain();
+      const startAt = context.currentTime + delay;
+      const endAt = startAt + duration;
 
-    oscillator.type = type;
-    oscillator.frequency.setValueAtTime(frequency, startAt);
-    gainNode.gain.setValueAtTime(0.0001, startAt);
-    gainNode.gain.exponentialRampToValueAtTime(gain, startAt + 0.01);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, endAt);
+      oscillator.type = type;
+      oscillator.frequency.setValueAtTime(frequency, startAt);
+      gainNode.gain.setValueAtTime(0.0001, startAt);
+      gainNode.gain.exponentialRampToValueAtTime(gain, startAt + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, endAt);
 
-    oscillator.connect(gainNode);
-    gainNode.connect(context.destination);
-    oscillator.start(startAt);
-    oscillator.stop(endAt);
+      oscillator.connect(gainNode);
+      gainNode.connect(context.destination);
+      oscillator.start(startAt);
+      oscillator.stop(endAt);
+    };
+
+    if (context.state === "running") {
+      schedule();
+    } else {
+      context.resume().then(schedule).catch(() => {});
+    }
   }
 
   function playFeedbackSound(kind) {
@@ -578,6 +586,7 @@ function App() {
   }
 
   function startGame() {
+    ensureAudioContext();
     stopGameLoops();
     gameRunningRef.current = true;
 
@@ -794,7 +803,6 @@ function App() {
       <section className="app-panel">
         <header className="hero">
           <div>
-            <p className="eyebrow">{t("title")}</p>
             <h1>Halligalli</h1>
           </div>
           <div className="hero-rule">{t("heroRule")}</div>
@@ -975,7 +983,7 @@ function App() {
                   );
                 })}
 
-                <div className={activeBellFruit ? "center-bell is-ready" : "center-bell"}>
+                <div className="center-bell">
                   <button className="bell-button" onClick={handleBell}>
                     铃
                   </button>
