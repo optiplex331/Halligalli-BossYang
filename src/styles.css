@@ -471,7 +471,6 @@ h2 {
 /* ── Table Scene ───────────────────────────────────────────── */
 
 .table-scene {
-  --table-min-height: 780px;
   --card-width: 176px;
   --card-height: 232px;
   --pip-size: clamp(1.3rem, 2.4vw, 2.35rem);
@@ -479,32 +478,38 @@ h2 {
 }
 
 .table-scene.players-3 {
-  --table-min-height: 700px;
-  --card-width: 182px;
-  --card-height: 238px;
-  --pip-size: clamp(1.45rem, 2.6vw, 2.5rem);
+  --card-width: 170px;
+  --card-height: 224px;
+  --pip-size: clamp(1.3rem, 2.4vw, 2.35rem);
 }
 
 .table-scene.players-5 {
-  --table-min-height: 820px;
-  --card-width: 162px;
-  --card-height: 214px;
-  --pip-size: clamp(1.15rem, 2vw, 2rem);
+  --card-width: 155px;
+  --card-height: 204px;
+  --pip-size: clamp(1.1rem, 2vw, 2rem);
 }
 
 .table-scene.players-6 {
-  --table-min-height: 840px;
-  --card-width: 148px;
-  --card-height: 198px;
-  --pip-size: clamp(1rem, 1.8vw, 1.8rem);
+  --card-width: 140px;
+  --card-height: 185px;
+  --pip-size: clamp(0.95rem, 1.75vw, 1.75rem);
 }
 
 /* ── Table Felt ────────────────────────────────────────────── */
 
 .table-felt {
   position: relative;
-  min-height: var(--table-min-height);
-  padding: 28px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: auto auto auto;
+  grid-template-areas:
+    ". top ."
+    "left bell right"
+    ". you .";
+  align-items: center;
+  justify-items: center;
+  gap: 20px 12px;
+  padding: 32px 24px;
   border-radius: var(--r-xl);
   background:
     radial-gradient(ellipse at center, var(--felt-1) 0%, var(--felt-0) 100%);
@@ -514,6 +519,27 @@ h2 {
     inset 0 0 80px rgba(0, 0, 0, 0.4),
     0 32px 80px rgba(0, 0, 0, 0.6);
   overflow: hidden;
+}
+
+.table-scene.players-3 .table-felt {
+  grid-template-areas:
+    ". top ."
+    ". bell right"
+    ". you .";
+}
+
+.table-scene.players-5 .table-felt {
+  grid-template-areas:
+    "tl . tr"
+    "left bell right"
+    ". you .";
+}
+
+.table-scene.players-6 .table-felt {
+  grid-template-areas:
+    "tl top tr"
+    "left bell right"
+    ". you .";
 }
 
 /* Subtle grid pattern on felt */
@@ -627,12 +653,10 @@ h2 {
 /* ── Table Seat ────────────────────────────────────────────── */
 
 .table-seat {
-  position: absolute;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  transform: translate(-50%, -50%);
   z-index: 2;
 }
 
@@ -792,15 +816,12 @@ h2 {
 /* ── Center Bell ───────────────────────────────────────────── */
 
 .center-bell {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  grid-area: bell;
   z-index: 2;
   display: grid;
   place-items: center;
-  width: min(220px, 28vw);
-  height: min(220px, 28vw);
+  width: min(200px, 26vw);
+  height: min(200px, 26vw);
   border-radius: var(--r-pill);
   background: rgba(5, 8, 15, 0.38);
   border: 1px solid rgba(255, 255, 255, 0.08);
