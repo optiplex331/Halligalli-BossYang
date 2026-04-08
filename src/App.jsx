@@ -268,10 +268,7 @@ function TableSeat({ player, seat, isActive, isCurrentTurn, language, compactCar
   return (
     <article
       className={isCurrentTurn ? "table-seat current-turn" : "table-seat"}
-      style={{
-        left: `${seat.x}%`,
-        top: `${seat.y}%`,
-      }}
+      style={{ gridArea: seat.gridArea }}
     >
       <div className="seat-header">
         <span className="seat-label">{label}</span>
