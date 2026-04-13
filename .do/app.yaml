@@ -3,7 +3,7 @@ region: ams
 services:
   - name: web
     github:
-      repo: optiplex331/Halligalli
+      repo: optiplex331/Halligalli-BossYang
       branch: master
       deploy_on_push: true
     build_command: npm install && npm run build
