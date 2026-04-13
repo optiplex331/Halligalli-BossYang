@@ -31,6 +31,7 @@ import {
   visibleTotals,
 } from "./game/rules";
 import { clearGameLoopHandles } from "./game/lifecycle";
+import { connectSocket, disconnectSocket, getSocket } from "./multiplayer/socket";
 
 const FRUITS = [
   { key: "banana", label: "香蕉", labelEn: "banana", icon: "🍌" },
@@ -91,7 +92,7 @@ const COPY = {
     title: "更接近线下桌面的抢铃练习",
     heroRule: "顺时针翻牌，只看桌面最上层，出现刚好 5 个同类水果就抢铃",
     startIntro:
-      "开局前先选人数、难度和局时。开局后页面会保持尽量简洁，只保留桌面、铃和必要提示。",
+      "单人训练：调好设置直接开打，边练手速边磨判断力。多人对局：创建房间分享匹配码，和朋友同桌抢铃。",
     start: "开始练习",
     settings: "开局设置",
     players: "参加人数",
@@ -137,7 +138,7 @@ const COPY = {
     sound: "音效",
     soundOn: "开启",
     soundOff: "关闭",
-    deckHint: "当前牌组采用平衡分布：小数量更常见，5 个水果最少见。",
+    deckHint: "当前牌组采用优化分布：2 和 3 最常见，更容易凑出 5 的组合。",
     penaltyBanner: "惩罚：罚出 {count} 张牌",
     bossTitle: "Yang哥 Boss",
     bossSubtitle: "桌边的最终裁定者",
@@ -154,13 +155,37 @@ const COPY = {
     scoreMissedPenalty: "漏拍惩罚",
     scoreCardPenalty: "罚牌附加扣分",
     finalScore: "最终得分",
+    createRoom: "创建房间",
+    joinRoom: "加入房间",
+    roomCode: "房间码",
+    enterCode: "输入房间码",
+    waitingPlayers: "等待玩家加入…",
+    ready: "准备",
+    cancelReady: "取消准备",
+    startMatch: "开始对局",
+    leaveLobby: "离开房间",
+    host: "房主",
+    playerSlot: "玩家 {n}",
+    notReady: "未准备",
+    readyStatus: "已准备",
+    roomFull: "房间已满",
+    roomNotFound: "房间不存在",
+    connecting: "连接中…",
+    disconnected: "连接断开",
+    needReady: "还有玩家未准备",
+    multiplayerTitle: "多人对局",
+    multiplayerDesc: "通过匹配码与好友实时对战",
+    orText: "或",
+    rank: "排名",
+    playerName: "玩家",
+    multiResult: "对局结束",
   },
   en: {
     title: "A More Table-Like Halligalli Practice",
     heroRule:
       "Flip cards clockwise, count only the top visible cards, ring when one fruit totals exactly 5",
     startIntro:
-      "Choose player count, difficulty, and round length before starting. During play, the screen stays minimal: table, bell, and essential feedback only.",
+      "Solo training: tweak the settings and jump straight in to sharpen your reflexes and judgment. Multiplayer: create a room, share the code, and race your friends to the bell.",
     start: "Start",
     settings: "Setup",
     players: "Players",
@@ -206,7 +231,7 @@ const COPY = {
     sound: "Sound",
     soundOn: "On",
     soundOff: "Off",
-    deckHint: "The current deck uses a balanced distribution: low counts are more common, 5s are rare.",
+    deckHint: "The deck is optimized: 2s and 3s are most common, making complementary 5-combos more frequent.",
     penaltyBanner: "Penalty: pay {count} cards",
     bossTitle: "Boss Yang",
     bossSubtitle: "The table's final judge",
@@ -223,6 +248,30 @@ const COPY = {
     scoreMissedPenalty: "Missed bell penalty",
     scoreCardPenalty: "Penalty card deduction",
     finalScore: "Final score",
+    createRoom: "Create Room",
+    joinRoom: "Join Room",
+    roomCode: "Room Code",
+    enterCode: "Enter room code",
+    waitingPlayers: "Waiting for players…",
+    ready: "Ready",
+    cancelReady: "Unready",
+    startMatch: "Start Match",
+    leaveLobby: "Leave Room",
+    host: "Host",
+    playerSlot: "Player {n}",
+    notReady: "Not ready",
+    readyStatus: "Ready",
+    roomFull: "Room is full",
+    roomNotFound: "Room not found",
+    connecting: "Connecting…",
+    disconnected: "Disconnected",
+    needReady: "Not all players are ready",
+    multiplayerTitle: "Multiplayer",
+    multiplayerDesc: "Play against friends with a match code",
+    orText: "or",
+    rank: "Rank",
+    playerName: "Player",
+    multiResult: "Match Complete",
   },
 };
 
@@ -241,29 +290,40 @@ function modeLabel(modeKey, language) {
 }
 
 function FruitCardFace({ card, compact }) {
-  if (!card) {
-    return <div className="card-back" />;
-  }
-
-  const fruit = FRUITS.find((item) => item.key === card.fruit);
-  const positions = PIP_LAYOUTS[card.count] ?? PIP_LAYOUTS[1];
+  const fruit = card ? FRUITS.find((item) => item.key === card.fruit) : null;
+  const positions = card ? (PIP_LAYOUTS[card.count] ?? PIP_LAYOUTS[1]) : [];
 
   return (
     <div className="play-card-face">
-      <div className={`play-card-pips count-${card.count} ${compact ? "compact" : ""}`}>
-        {positions.map((slot, index) => (
-          <span key={`${card.id}-${slot}-${index}`} className={`pip slot-${slot}`}>
-            {fruit?.icon}
-          </span>
-        ))}
-      </div>
+      {card && (
+        <div className={`play-card-pips count-${card.count} ${compact ? "compact" : ""}`}>
+          {positions.map((slot, index) => (
+            <span key={`${card.id}-${slot}-${index}`} className={`pip slot-${slot}`}>
+              {fruit?.icon}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function TableSeat({ player, seat, isActive, isCurrentTurn, language, compactCard }) {
+function TableSeat({ player, seat, isActive, isCurrentTurn, language, compactCard, justFlipped }) {
   const topCard = getTopCard(player);
+  const hasCard = Boolean(topCard);
   const label = language === "en" ? player.labelEn : player.labelZh;
+
+  const shellClasses = [
+    "table-card-shell",
+    isActive && "active",
+    isCurrentTurn && "current",
+  ].filter(Boolean).join(" ");
+
+  const innerClasses = [
+    "card-3d-inner",
+    hasCard && "face-up",
+    justFlipped && "just-flipped",
+  ].filter(Boolean).join(" ");
 
   return (
     <article
@@ -273,18 +333,17 @@ function TableSeat({ player, seat, isActive, isCurrentTurn, language, compactCar
       <div className="seat-header">
         <span className="seat-label">{label}</span>
       </div>
-      <div
-        className={
-          isCurrentTurn
-            ? isActive
-              ? "table-card-shell active current"
-              : "table-card-shell current"
-            : isActive
-              ? "table-card-shell active"
-              : "table-card-shell"
-        }
-      >
-        <FruitCardFace card={topCard} compact={compactCard} />
+      <div className={shellClasses}>
+        <div className="card-3d-container">
+          <div className={innerClasses}>
+            <div className="card-3d-back">
+              <div className="card-back" />
+            </div>
+            <div className="card-3d-front">
+              <FruitCardFace card={topCard} compact={compactCard} />
+            </div>
+          </div>
+        </div>
       </div>
     </article>
   );
@@ -316,6 +375,22 @@ function App() {
   const [bossTaunt, setBossTaunt] = useState("");
   const [bossDisrupting, setBossDisrupting] = useState(false);
   const [tauntEchoes, setTauntEchoes] = useState([]);
+  const [justFlippedSeat, setJustFlippedSeat] = useState(-1);
+  const [bellParticles, setBellParticles] = useState([]);
+  const [bellPressed, setBellPressed] = useState(false);
+  const [cardCollecting, setCardCollecting] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+
+  // Multiplayer state
+  const [isMultiplayer, setIsMultiplayer] = useState(false);
+  const [roomCode, setRoomCode] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [roomPlayers, setRoomPlayers] = useState([]);
+  const [myPlayerId, setMyPlayerId] = useState(-1);
+  const [mySeatIndex, setMySeatIndex] = useState(-1);
+  const [lobbyError, setLobbyError] = useState("");
+  const [multiResults, setMultiResults] = useState(null);
+  const [seatMap, setSeatMap] = useState([]);
 
   const revealIntervalRef = useRef(null);
   const countdownIntervalRef = useRef(null);
@@ -332,6 +407,11 @@ function App() {
     startedAt: 0,
     handled: true,
   });
+  const flipTimeoutRef = useRef(null);
+  const particleTimeoutRef = useRef(null);
+  const bellPressTimeoutRef = useRef(null);
+  const collectTimeoutRef = useRef(null);
+  const countdownTimerRef = useRef(null);
 
   const mode = MODES[settings.difficulty];
   const seatLayouts = getSeatLayouts(settings.playerCount);
@@ -394,6 +474,221 @@ function App() {
 
   useEffect(() => () => stopGameLoops(), []);
 
+  useEffect(() => {
+    if (!isMultiplayer) return;
+
+    const socket = getSocket();
+
+    function onRoomCreated({ code, playerId, room }) {
+      setRoomCode(code);
+      setMyPlayerId(playerId);
+      setRoomPlayers(room.players);
+      setLobbyError("");
+      setScreen("lobby");
+    }
+
+    function onRoomJoined({ playerId, room }) {
+      setRoomCode(room.code);
+      setMyPlayerId(playerId);
+      setRoomPlayers(room.players);
+      setLobbyError("");
+      setScreen("lobby");
+    }
+
+    function onPlayerUpdate({ players: updatedPlayers }) {
+      setRoomPlayers(updatedPlayers);
+    }
+
+    function onRoomError({ message, messageZh }) {
+      setLobbyError(settings.language === "zh" ? messageZh : message);
+    }
+
+    function onGameStart({ playerCount, difficulty, duration, topCards, seatMap: sm }) {
+      setSeatMap(sm);
+      const seats = getSeatLayouts(playerCount);
+      const freshPlayers = Array.from({ length: playerCount }, (_, i) => ({
+        id: i,
+        labelZh: sm[i]?.name || seats[i].labelZh,
+        labelEn: sm[i]?.name || seats[i].labelEn,
+        drawPile: [{ id: "hidden", fruit: "banana", count: 0 }],
+        wonPile: [],
+        faceUpPile: topCards[i] ? [topCards[i]] : [],
+      }));
+
+      setPlayers(freshPlayers);
+      setCurrentTurn(0);
+      setActingPlayer(0);
+      setSecondsLeft(duration);
+      setScore(0);
+      setCorrectHits(0);
+      setWrongHits(0);
+      setMissedHits(0);
+      setReactionTimes([]);
+      setStreak(0);
+      setActiveBellFruit(null);
+      setScoreBreakdown(INITIAL_BREAKDOWN);
+      setPenaltyNotice("");
+      setBossTaunt("");
+      setBossDisrupting(false);
+      setTauntEchoes([]);
+      setFeedback({ type: "idle", message: t("startRound") });
+      setScreen("play");
+      gameRunningRef.current = true;
+    }
+
+    function onYourSeat({ seatIndex }) {
+      setMySeatIndex(seatIndex);
+    }
+
+    function onGameFlip({ seatIndex, card, nextTurn, bellAvailable, bellFruitKey, topCards }) {
+      setPlayers((prev) => {
+        const next = prev.map((p, i) => ({
+          ...p,
+          faceUpPile: topCards[i] ? [topCards[i]] : [],
+        }));
+        return next;
+      });
+      setActingPlayer(seatIndex);
+      setCurrentTurn(nextTurn);
+      triggerFlipAnimation(seatIndex);
+
+      if (bellAvailable) {
+        bellStateRef.current = {
+          available: true,
+          fruitKey: bellFruitKey,
+          startedAt: Date.now(),
+          handled: false,
+        };
+        setActiveBellFruit(bellFruitKey);
+      } else {
+        bellStateRef.current = { available: false, fruitKey: null, startedAt: 0, handled: true };
+        setActiveBellFruit(null);
+      }
+    }
+
+    function onGameMissed({ fruitKey }) {
+      setMissedHits((v) => v + 1);
+      setScore((v) => Math.max(0, v - 30));
+      setScoreBreakdown((v) => ({ ...v, missedPenalty: v.missedPenalty + 30 }));
+      setStreak(0);
+      updateFeedback("warn", t("missedBell", { fruit: fruitLabel(fruitKey, settings.language) }));
+      playFeedbackSound("warn");
+    }
+
+    function onBellResult(data) {
+      if (data.type === "correct") {
+        setPlayers((prev) =>
+          prev.map((p, i) => ({
+            ...p,
+            faceUpPile: data.topCards[i] ? [data.topCards[i]] : [],
+          })),
+        );
+        setCurrentTurn(data.winnerId);
+        setActiveBellFruit(null);
+        bellStateRef.current = { available: false, fruitKey: null, startedAt: 0, handled: true };
+
+        if (data.winnerId === mySeatIndex) {
+          const reactionMs = Date.now() - bellStateRef.current.startedAt;
+          setScore((v) => v + data.earned);
+          setCorrectHits((v) => v + 1);
+          setReactionTimes((v) => [...v, reactionMs]);
+          setStreak((v) => v + 1);
+          updateFeedback("success", t("bellSuccess", { count: data.collectedCount }));
+          playFeedbackSound("success");
+          spawnBellParticles();
+        } else {
+          const winnerName = seatMap[data.winnerId]?.name || `Player ${data.winnerId + 1}`;
+          updateFeedback("idle", `${winnerName} ${settings.language === "zh" ? "抢铃成功" : "rang the bell"}`);
+        }
+        triggerBellPress();
+        triggerCollectAnimation();
+      } else if (data.type === "wrong") {
+        setPlayers((prev) =>
+          prev.map((p, i) => ({
+            ...p,
+            faceUpPile: data.topCards[i] ? [data.topCards[i]] : [],
+          })),
+        );
+
+        if (data.bellAvailable) {
+          bellStateRef.current = {
+            available: true,
+            fruitKey: data.bellFruitKey,
+            startedAt: Date.now(),
+            handled: false,
+          };
+          setActiveBellFruit(data.bellFruitKey);
+        }
+
+        if (data.playerId === mySeatIndex) {
+          setWrongHits((v) => v + 1);
+          setScore((v) => Math.max(0, v - 50 - data.penaltyCount * 4));
+          setScoreBreakdown((v) => ({
+            ...v,
+            wrongPenalty: v.wrongPenalty + 50,
+            cardPenalty: v.cardPenalty + data.penaltyCount * 4,
+          }));
+          setStreak(0);
+          updateFeedback(
+            "error",
+            data.penaltyCount ? t("bellPenalty", { count: data.penaltyCount }) : t("bellPenaltyNone"),
+          );
+          if (data.penaltyCount) showPenalty(data.penaltyCount);
+          playFeedbackSound("penalty");
+        } else {
+          const penaltyName = seatMap[data.playerId]?.name || `Player ${data.playerId + 1}`;
+          updateFeedback("idle", `${penaltyName} ${settings.language === "zh" ? "错拍了" : "wrong ring"}`);
+        }
+        triggerBellPress();
+      }
+    }
+
+    function onGameTick({ secondsLeft: s }) {
+      setSecondsLeft(s);
+    }
+
+    function onGameEnd({ results }) {
+      gameRunningRef.current = false;
+      setMultiResults(results);
+      setScreen("result");
+    }
+
+    function onRoomDissolved() {
+      setIsMultiplayer(false);
+      setScreen("home");
+      setRoomCode("");
+      setRoomPlayers([]);
+    }
+
+    socket.on("room:created", onRoomCreated);
+    socket.on("room:joined", onRoomJoined);
+    socket.on("room:player-update", onPlayerUpdate);
+    socket.on("room:error", onRoomError);
+    socket.on("game:start", onGameStart);
+    socket.on("game:your-seat", onYourSeat);
+    socket.on("game:flip", onGameFlip);
+    socket.on("game:missed", onGameMissed);
+    socket.on("game:bell-result", onBellResult);
+    socket.on("game:tick", onGameTick);
+    socket.on("game:end", onGameEnd);
+    socket.on("room:dissolved", onRoomDissolved);
+
+    return () => {
+      socket.off("room:created", onRoomCreated);
+      socket.off("room:joined", onRoomJoined);
+      socket.off("room:player-update", onPlayerUpdate);
+      socket.off("room:error", onRoomError);
+      socket.off("game:start", onGameStart);
+      socket.off("game:your-seat", onYourSeat);
+      socket.off("game:flip", onGameFlip);
+      socket.off("game:missed", onGameMissed);
+      socket.off("game:bell-result", onBellResult);
+      socket.off("game:tick", onGameTick);
+      socket.off("game:end", onGameEnd);
+      socket.off("room:dissolved", onRoomDissolved);
+    };
+  }, [isMultiplayer, mySeatIndex, settings.language]);
+
   function stopGameLoops() {
     clearGameLoopHandles({
       revealIntervalRef,
@@ -403,6 +698,11 @@ function App() {
       bossTauntTimeoutRef,
       startupTimeoutRef,
     });
+    window.clearTimeout(flipTimeoutRef.current);
+    window.clearTimeout(particleTimeoutRef.current);
+    window.clearTimeout(bellPressTimeoutRef.current);
+    window.clearTimeout(collectTimeoutRef.current);
+    window.clearInterval(countdownTimerRef.current);
   }
 
   function updateFeedback(type, message) {
@@ -550,6 +850,94 @@ function App() {
     }, 1500);
   }
 
+  function spawnBellParticles() {
+    const count = 16;
+    const seed = Date.now();
+    const particles = Array.from({ length: count }, (_, i) => ({
+      id: `${seed}-${i}`,
+      angle: (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4,
+      dist: 60 + Math.random() * 50,
+      color: i % 3 === 0 ? "white" : "gold",
+      size: 4 + Math.random() * 5,
+    }));
+    setBellParticles(particles);
+    window.clearTimeout(particleTimeoutRef.current);
+    particleTimeoutRef.current = window.setTimeout(() => {
+      setBellParticles([]);
+    }, 700);
+  }
+
+  function triggerBellPress() {
+    setBellPressed(true);
+    window.clearTimeout(bellPressTimeoutRef.current);
+    bellPressTimeoutRef.current = window.setTimeout(() => {
+      setBellPressed(false);
+    }, 250);
+  }
+
+  function triggerFlipAnimation(seatIndex) {
+    setJustFlippedSeat(seatIndex);
+    window.clearTimeout(flipTimeoutRef.current);
+    flipTimeoutRef.current = window.setTimeout(() => {
+      setJustFlippedSeat(-1);
+    }, 500);
+  }
+
+  function triggerCollectAnimation() {
+    setCardCollecting(true);
+    window.clearTimeout(collectTimeoutRef.current);
+    collectTimeoutRef.current = window.setTimeout(() => {
+      setCardCollecting(false);
+    }, 400);
+  }
+
+  function createRoom() {
+    setIsMultiplayer(true);
+    setLobbyError("");
+    const socket = connectSocket();
+    socket.emit("room:create", {
+      playerName: settings.language === "zh" ? "房主" : "Host",
+      maxPlayers: settings.playerCount,
+      difficulty: settings.difficulty,
+      duration: settings.duration,
+      language: settings.language,
+    });
+  }
+
+  function joinRoom() {
+    if (!joinCode.trim()) return;
+    setIsMultiplayer(true);
+    setLobbyError("");
+    const socket = connectSocket();
+    socket.emit("room:join", {
+      code: joinCode.trim(),
+      playerName: settings.language === "zh" ? `玩家` : "Player",
+    });
+  }
+
+  function toggleReady() {
+    const socket = getSocket();
+    const me = roomPlayers.find((p) => p.id === myPlayerId);
+    socket.emit("room:ready", { ready: !me?.ready });
+  }
+
+  function startMatch() {
+    const socket = getSocket();
+    socket.emit("room:start");
+  }
+
+  function leaveLobby() {
+    const socket = getSocket();
+    socket.emit("room:leave");
+    disconnectSocket();
+    setIsMultiplayer(false);
+    setRoomCode("");
+    setRoomPlayers([]);
+    setJoinCode("");
+    setLobbyError("");
+    setScreen("home");
+  }
+
   function advanceTurn(basePlayers = gameStateRef.current.players, baseTurn = gameStateRef.current.currentTurn) {
     if (!gameRunningRef.current) {
       return;
@@ -582,13 +970,13 @@ function App() {
     setActingPlayer(actorIndex);
     setCurrentTurn(nextTurn);
     applyBellAvailability(preparedPlayers);
-
+    triggerFlipAnimation(actorIndex);
   }
 
   function startGame() {
     ensureAudioContext();
     stopGameLoops();
-    gameRunningRef.current = true;
+    window.clearInterval(countdownTimerRef.current);
 
     const freshPlayers = createPlayers(settings.playerCount, FRUITS);
 
@@ -608,36 +996,50 @@ function App() {
     setBossTaunt("");
     setBossDisrupting(false);
     setTauntEchoes([]);
-    setFeedback({
-      type: "idle",
-      message: t("startRound"),
-    });
+    setFeedback({ type: "idle", message: "" });
     bellStateRef.current = {
       available: false,
       fruitKey: null,
       startedAt: 0,
       handled: true,
     };
+    gameRunningRef.current = false;
     setScreen("play");
+    setCountdown(3);
 
-    startupTimeoutRef.current = window.setTimeout(() => {
-      gameStateRef.current = {
-        players: freshPlayers,
-        currentTurn: 0,
-        actingPlayer: 0,
-        score: 0,
-        scoreBreakdown: INITIAL_BREAKDOWN,
-        correctHits: 0,
-        wrongHits: 0,
-        missedHits: 0,
-        reactionTimes: [],
-        difficulty: settings.difficulty,
-        durationSec: settings.duration,
-        playerCount: settings.playerCount,
-        userSeatId,
-      };
-      advanceTurn(freshPlayers, 0);
-    }, 0);
+    let tick = 3;
+    countdownTimerRef.current = window.setInterval(() => {
+      tick--;
+      if (tick > 0) {
+        setCountdown(tick);
+      } else {
+        window.clearInterval(countdownTimerRef.current);
+        setCountdown(0);
+        beginGameLoop(freshPlayers);
+      }
+    }, 1000);
+  }
+
+  function beginGameLoop(freshPlayers) {
+    gameRunningRef.current = true;
+    setFeedback({ type: "idle", message: t("startRound") });
+
+    gameStateRef.current = {
+      players: freshPlayers,
+      currentTurn: 0,
+      actingPlayer: 0,
+      score: 0,
+      scoreBreakdown: INITIAL_BREAKDOWN,
+      correctHits: 0,
+      wrongHits: 0,
+      missedHits: 0,
+      reactionTimes: [],
+      difficulty: settings.difficulty,
+      durationSec: settings.duration,
+      playerCount: settings.playerCount,
+      userSeatId,
+    };
+    advanceTurn(freshPlayers, 0);
 
     revealIntervalRef.current = window.setInterval(() => {
       const snapshot = gameStateRef.current;
@@ -657,6 +1059,13 @@ function App() {
 
   function handleBell() {
     if (screen !== "play" || !gameRunningRef.current) {
+      return;
+    }
+
+    if (isMultiplayer) {
+      const socket = getSocket();
+      socket.emit("game:bell");
+      triggerBellPress();
       return;
     }
 
@@ -701,6 +1110,9 @@ function App() {
       );
       playFeedbackSound("success");
       applyBellAvailability(nextPlayers);
+      triggerBellPress();
+      spawnBellParticles();
+      triggerCollectAnimation();
       return;
     }
 
@@ -731,6 +1143,7 @@ function App() {
     }
     playFeedbackSound("penalty");
     applyBellAvailability(nextPlayers);
+    triggerBellPress();
   }
 
   function finishGame() {
@@ -809,13 +1222,38 @@ function App() {
         </header>
 
         {screen === "home" && (
-          <section className="stack">
+          <section key="home" className="stack screen-enter home-enter">
             <div className="card intro">
               <p>{t("startIntro")}</p>
               <div className="button-row">
-                <button className="primary-button" onClick={startGame}>
+                <button className="primary-button glow-button" onClick={startGame}>
                   {t("start")}
                 </button>
+              </div>
+            </div>
+
+            <div className="card multiplayer-card">
+              <h2>{t("multiplayerTitle")}</h2>
+              <p className="multi-desc">{t("multiplayerDesc")}</p>
+              <div className="multi-actions">
+                <button className="primary-button glow-button" onClick={createRoom}>
+                  {t("createRoom")}
+                </button>
+                <span className="or-divider">{t("orText")}</span>
+                <div className="join-row">
+                  <input
+                    className="code-input"
+                    type="text"
+                    maxLength={4}
+                    placeholder={t("enterCode")}
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => e.key === "Enter" && joinRoom()}
+                  />
+                  <button className="ghost-button" onClick={joinRoom}>
+                    {t("joinRoom")}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -927,8 +1365,69 @@ function App() {
           </section>
         )}
 
+        {screen === "lobby" && (
+          <section key="lobby" className="stack screen-enter">
+            <div className="card lobby-card">
+              <h2>{t("multiplayerTitle")}</h2>
+              <div className="room-code-display">
+                <span className="room-code-label">{t("roomCode")}</span>
+                <span className="room-code-value">{roomCode}</span>
+              </div>
+              {lobbyError && <div className="feedback error">{lobbyError}</div>}
+              <div className="lobby-players">
+                {roomPlayers.map((p) => (
+                  <div
+                    key={p.id}
+                    className={`lobby-player-row ${p.ready ? "ready" : ""}`}
+                  >
+                    <span className="lobby-player-name">
+                      {p.isHost && <span className="host-badge">{t("host")}</span>}
+                      {p.name}
+                    </span>
+                    <span className={p.ready ? "lobby-status ready" : "lobby-status"}>
+                      {p.ready ? t("readyStatus") : t("notReady")}
+                    </span>
+                  </div>
+                ))}
+                {Array.from(
+                  { length: settings.playerCount - roomPlayers.length },
+                  (_, i) => (
+                    <div key={`empty-${i}`} className="lobby-player-row empty">
+                      <span className="lobby-player-name">{t("waitingPlayers")}</span>
+                    </div>
+                  ),
+                )}
+              </div>
+              <div className="button-row lobby-buttons">
+                <button className="primary-button" onClick={toggleReady}>
+                  {roomPlayers.find((p) => p.id === myPlayerId)?.ready
+                    ? t("cancelReady")
+                    : t("ready")}
+                </button>
+                {roomPlayers.find((p) => p.id === myPlayerId)?.isHost && (
+                  <button
+                    className="primary-button"
+                    onClick={startMatch}
+                    disabled={roomPlayers.length < 2 || !roomPlayers.every((p) => p.ready)}
+                  >
+                    {t("startMatch")}
+                  </button>
+                )}
+                <button className="ghost-button" onClick={leaveLobby}>
+                  {t("leaveLobby")}
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+
         {screen === "play" && (
-          <section className="stack">
+          <section key="play" className="stack screen-enter">
+            {countdown > 0 && (
+              <div className="countdown-overlay">
+                <span key={countdown} className="countdown-number">{countdown}</span>
+              </div>
+            )}
             <div className="play-topbar minimal">
               <div className="pill">{t("timeLeft", { seconds: secondsLeft })}</div>
               <button className="ghost-button" onClick={finishGame}>
@@ -979,12 +1478,35 @@ function App() {
                       isCurrentTurn={actingPlayer === index}
                       language={settings.language}
                       compactCard={compactCard}
+                      justFlipped={justFlippedSeat === index}
                     />
                   );
                 })}
 
-                <div className="center-bell">
-                  <button className="bell-button" onClick={handleBell}>
+                <div className={activeBellFruit ? "center-bell is-ready" : "center-bell"}>
+                  {bellParticles.map((p) => (
+                    <span
+                      key={p.id}
+                      className={`bell-particle ${p.color}`}
+                      style={{
+                        "--angle": `${p.angle}rad`,
+                        "--dist": `${p.dist}px`,
+                        width: `${p.size}px`,
+                        height: `${p.size}px`,
+                      }}
+                    />
+                  ))}
+                  {bellPressed && (
+                    <>
+                      <span className="bell-ripple-ring" />
+                      <span className="bell-ripple-ring" />
+                      <span className="bell-ripple-ring" />
+                    </>
+                  )}
+                  <button
+                    className={bellPressed ? "bell-button pressed" : "bell-button"}
+                    onClick={handleBell}
+                  >
                     铃
                   </button>
                 </div>
@@ -994,103 +1516,153 @@ function App() {
         )}
 
         {screen === "result" && (
-          <section className="stack">
-            <div className="card result-hero">
-              <p className="eyebrow">{t("finish")}</p>
-              <h2>
-                {resultSummary.score} {t("scoreUnit")}
-              </h2>
-              <p>
-                {t("resultLine", {
-                  players: resultSummary.playerCount,
-                  accuracy: Math.round(resultSummary.accuracy * 100),
-                  avg: resultSummary.avgReactionMs || "-",
-                })}
-              </p>
-            </div>
-
-            <div className="grid two-up">
-              <div className="card">
-                <h2>{t("roundStats")}</h2>
-                <dl className="stats-list">
-                  <div>
-                    <dt>{t("correctHits")}</dt>
-                    <dd>{resultSummary.correctHits}</dd>
-                  </div>
-                  <div>
-                    <dt>{t("wrongHits")}</dt>
-                    <dd>{resultSummary.wrongHits}</dd>
-                  </div>
-                  <div>
-                    <dt>{t("missedHits")}</dt>
-                    <dd>{resultSummary.missedHits}</dd>
-                  </div>
-                  <div>
-                    <dt>{t("bestReaction")}</dt>
-                    <dd>{resultSummary.bestReactionMs || "-"} ms</dd>
-                  </div>
-                </dl>
-              </div>
-
-              <div className="card">
-                <h2>{t("history")}</h2>
-                <dl className="stats-list">
-                  <div>
-                    <dt>{t("best")}</dt>
-                    <dd>{bestSummary.score}</dd>
-                  </div>
-                  <div>
-                    <dt>{t("currentDifficulty")}</dt>
-                    <dd>{modeLabel(resultSummary.difficulty, settings.language)}</dd>
-                  </div>
-                  <div>
-                    <dt>{t("duration")}</dt>
-                    <dd>
-                      {resultSummary.durationSec} {t("seconds")}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{t("recent")}</dt>
-                    <dd>{recentSummary.score}</dd>
-                  </div>
-                </dl>
-              </div>
-            </div>
-
-            <div className="button-row">
-              <button className="primary-button" onClick={startGame}>
-                {t("playAgain")}
-              </button>
-              <button className="ghost-button" onClick={() => setScreen("home")}>
-                {t("backHome")}
-              </button>
-            </div>
-
-            <section className="score-reel">
-              <div className="score-reel-head">
-                <h2>{t("breakdownTitle")}</h2>
-                <p>{t("breakdownDesc")}</p>
-              </div>
-              <div className="score-reel-list">
-                {breakdownRows.map((item, index) => (
-                  <div
-                    key={item.key}
-                    className={item.positive ? "score-row positive" : "score-row negative"}
-                    style={{ animationDelay: `${index * 120}ms` }}
-                  >
-                    <span>{item.label}</span>
-                    <strong>
-                      {item.positive ? t("plusUnit") : t("minusUnit")}
-                      {item.value}
-                    </strong>
-                  </div>
-                ))}
-                <div className="score-row total" style={{ animationDelay: `${breakdownRows.length * 120}ms` }}>
-                  <span>{t("finalScore")}</span>
-                  <strong>{resultSummary.score}</strong>
+          <section key="result" className="stack screen-enter">
+            {isMultiplayer && multiResults ? (
+              <>
+                <div className="card result-hero">
+                  <p className="eyebrow">{t("multiResult")}</p>
+                  <h2>
+                    {multiResults[mySeatIndex]?.score ?? 0} {t("scoreUnit")}
+                  </h2>
                 </div>
-              </div>
-            </section>
+
+                <div className="card">
+                  <h2>{t("rank")}</h2>
+                  <div className="multi-scoreboard">
+                    {Object.values(multiResults)
+                      .sort((a, b) => b.score - a.score)
+                      .map((r, rank) => (
+                        <div
+                          key={r.seatIndex}
+                          className={`scoreboard-row ${r.seatIndex === mySeatIndex ? "is-me" : ""}`}
+                        >
+                          <span className="scoreboard-rank">#{rank + 1}</span>
+                          <span className="scoreboard-name">
+                            {seatMap[r.seatIndex]?.name || `Player ${r.seatIndex + 1}`}
+                          </span>
+                          <span className="scoreboard-score">
+                            {r.score} {t("scoreUnit")}
+                          </span>
+                          <span className="scoreboard-detail">
+                            {t("correctHits")}: {r.correctHits}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+
+                <div className="button-row">
+                  <button
+                    className="ghost-button"
+                    onClick={() => {
+                      leaveLobby();
+                      setMultiResults(null);
+                    }}
+                  >
+                    {t("backHome")}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="card result-hero">
+                  <p className="eyebrow">{t("finish")}</p>
+                  <h2>
+                    {resultSummary.score} {t("scoreUnit")}
+                  </h2>
+                  <p>
+                    {t("resultLine", {
+                      players: resultSummary.playerCount,
+                      accuracy: Math.round(resultSummary.accuracy * 100),
+                      avg: resultSummary.avgReactionMs || "-",
+                    })}
+                  </p>
+                </div>
+
+                <div className="grid two-up">
+                  <div className="card">
+                    <h2>{t("roundStats")}</h2>
+                    <dl className="stats-list">
+                      <div>
+                        <dt>{t("correctHits")}</dt>
+                        <dd>{resultSummary.correctHits}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("wrongHits")}</dt>
+                        <dd>{resultSummary.wrongHits}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("missedHits")}</dt>
+                        <dd>{resultSummary.missedHits}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("bestReaction")}</dt>
+                        <dd>{resultSummary.bestReactionMs || "-"} ms</dd>
+                      </div>
+                    </dl>
+                  </div>
+
+                  <div className="card">
+                    <h2>{t("history")}</h2>
+                    <dl className="stats-list">
+                      <div>
+                        <dt>{t("best")}</dt>
+                        <dd>{bestSummary.score}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("currentDifficulty")}</dt>
+                        <dd>{modeLabel(resultSummary.difficulty, settings.language)}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("duration")}</dt>
+                        <dd>
+                          {resultSummary.durationSec} {t("seconds")}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{t("recent")}</dt>
+                        <dd>{recentSummary.score}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                </div>
+
+                <div className="button-row">
+                  <button className="primary-button" onClick={startGame}>
+                    {t("playAgain")}
+                  </button>
+                  <button className="ghost-button" onClick={() => setScreen("home")}>
+                    {t("backHome")}
+                  </button>
+                </div>
+
+                <section className="score-reel">
+                  <div className="score-reel-head">
+                    <h2>{t("breakdownTitle")}</h2>
+                    <p>{t("breakdownDesc")}</p>
+                  </div>
+                  <div className="score-reel-list">
+                    {breakdownRows.map((item, index) => (
+                      <div
+                        key={item.key}
+                        className={item.positive ? "score-row positive" : "score-row negative"}
+                        style={{ animationDelay: `${index * 120}ms` }}
+                      >
+                        <span>{item.label}</span>
+                        <strong>
+                          {item.positive ? t("plusUnit") : t("minusUnit")}
+                          {item.value}
+                        </strong>
+                      </div>
+                    ))}
+                    <div className="score-row total" style={{ animationDelay: `${breakdownRows.length * 120}ms` }}>
+                      <span>{t("finalScore")}</span>
+                      <strong>{resultSummary.score}</strong>
+                    </div>
+                  </div>
+                </section>
+              </>
+            )}
           </section>
         )}
       </section>
