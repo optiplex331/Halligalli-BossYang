@@ -1,5 +1,13 @@
 export const FRUIT_KEYS = ["banana", "strawberry", "lemon", "grape"];
 
+export const COUNT_DISTRIBUTION = [
+  [1, 3],
+  [2, 5],
+  [3, 5],
+  [4, 3],
+  [5, 2],
+];
+
 export const SETTINGS_KEY = "halligalli_settings";
 export const BEST_KEY = "halligalli_best";
 export const RECENT_KEY = "halligalli_recent";

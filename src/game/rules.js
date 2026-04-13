@@ -1,9 +1,10 @@
 import {
+  COUNT_DISTRIBUTION,
   DEFAULT_SETTINGS,
   FRUIT_KEYS,
   INITIAL_BREAKDOWN,
   INITIAL_SUMMARY,
-} from "./constants";
+} from "./constants.js";
 
 export function shuffle(cards) {
   const next = [...cards];
@@ -25,18 +26,11 @@ export function createCard(serial, fruitKey, count) {
 }
 
 export function createDeck(fruits, cardCount = 72) {
-  const countDistribution = [
-    [1, 5],
-    [2, 4],
-    [3, 3],
-    [4, 4],
-    [5, 2],
-  ];
   const cards = [];
   let serial = 0;
 
   fruits.forEach((fruit) => {
-    countDistribution.forEach(([count, repeat]) => {
+    COUNT_DISTRIBUTION.forEach(([count, repeat]) => {
       for (let index = 0; index < repeat; index += 1) {
         cards.push(createCard(serial, fruit.key, count));
         serial += 1;

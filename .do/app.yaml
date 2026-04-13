@@ -1,0 +1,17 @@
+name: halligalli
+region: ams
+services:
+  - name: web
+    github:
+      repo: optiplex331/Halligalli
+      branch: master
+      deploy_on_push: true
+    build_command: npm install && npm run build
+    run_command: npm start
+    environment_slug: node-js
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    http_port: 3001
+    envs:
+      - key: NODE_ENV
+        value: production

@@ -4,7 +4,7 @@ import {
   INITIAL_SUMMARY,
   RECENT_KEY,
   SETTINGS_KEY,
-} from "./constants";
+} from "./constants.js";
 
 const VALID_DIFFICULTIES = new Set(["easy", "normal", "hard"]);
 const VALID_DURATIONS = new Set([45, 60, 90]);
