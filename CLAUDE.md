@@ -134,6 +134,8 @@ Host has exclusive `room:start` rights. Disconnects during lobby remove the play
 
 ## Working Efficiency Notes
 
+**Meta rule**: At the end of each milestone or major functional update, add a brief retrospective to this section — one bullet per insight, lead with the rule, end with why. Aim for precision over volume: if a new pattern duplicates an existing one, update rather than append. Keep total Do/Don't lists under ~15 bullets each.
+
 Patterns that kept cost low during M1–M3; carry forward.
 
 ### Do
