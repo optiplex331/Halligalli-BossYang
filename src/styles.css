@@ -1364,8 +1364,9 @@ h2 {
 
 .code-input::placeholder {
   color: var(--text-2);
-  font-size: 0.78rem;
-  letter-spacing: 0.05em;
+  font-family: 'Outfit', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', system-ui, sans-serif;
+  font-size: 0.9rem;
+  letter-spacing: 0;
   font-weight: 400;
 }
 
