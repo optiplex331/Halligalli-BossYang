@@ -77,6 +77,10 @@ button {
   font: inherit;
 }
 
+[tabindex="-1"]:focus {
+  outline: none;
+}
+
 /* ── Shell & Panel ─────────────────────────────────────────── */
 
 .app-shell {
@@ -891,6 +895,7 @@ h2 {
   width: min(170px, 22vw);
   aspect-ratio: 1;
   border-radius: var(--r-pill);
+  touch-action: manipulation;
   background:
     radial-gradient(circle at 35% 30%, #f0c44a 0%, #c9a227 42%, #8a6a0a 100%);
   color: #1a0f00;
@@ -1695,6 +1700,21 @@ h2 {
     opacity: 1;
     transform: none;
   }
+
+  .table-felt.boss-disrupting,
+  .boss-taunt {
+    animation: none;
+  }
+
+  .score-row {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .center-bell.is-ready {
+    animation: none;
+  }
 }
 
 /* ── Keyframes ─────────────────────────────────────────────── */
@@ -1801,7 +1821,7 @@ h2 {
   }
 
   .bell-button {
-    width: 94px;
+    width: min(120px, 28vw);
     font-size: 1.8rem;
   }
 
@@ -1883,5 +1903,11 @@ h2 {
   .play-topbar > * {
     width: 100%;
     justify-content: center;
+  }
+
+  .primary-button,
+  .ghost-button,
+  .chip {
+    min-height: 44px;
   }
 }
