@@ -390,6 +390,12 @@ function TableSeat({ player, seat, isActive, isCurrentTurn, language, compactCar
   const hasCard = Boolean(topCard);
   const label = language === "en" ? player.labelEn : player.labelZh;
 
+  const prevHasCardRef = useRef(false);
+  const wasAlreadyFaceUp = prevHasCardRef.current;
+  useEffect(() => {
+    prevHasCardRef.current = hasCard;
+  });
+
   const shellClasses = [
     "table-card-shell",
     isActive && "active",
@@ -400,6 +406,7 @@ function TableSeat({ player, seat, isActive, isCurrentTurn, language, compactCar
     "card-3d-inner",
     hasCard && "face-up",
     justFlipped && "just-flipped",
+    justFlipped && hasCard && wasAlreadyFaceUp && "card-swap",
   ].filter(Boolean).join(" ");
 
   return (
