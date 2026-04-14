@@ -18,7 +18,7 @@
 - **Runtime**: Browser + Node.js (`^20.19.0 || >=22.12.0`) — Node serves static + WebSocket in production
 - **Frameworks**: React 19, Vite 7, `@vitejs/plugin-react` 5, socket.io 4 (server) + socket.io-client 4 (browser); `vitest` for unit tests
 - **Browser APIs used**: `localStorage`, `addEventListener`, `setTimeout`, `setInterval`, `AudioContext`/`webkitAudioContext`
-- **Config**: No `.env`. `vite.config.js` proxies `/socket.io` → `localhost:3001` for dev. Runtime settings in `localStorage` under `halligalli_settings`, `halligalli_best`, `halligalli_recent`.
+- **Config**: No `.env`. `vite.config.js` proxies `/socket.io` → `localhost:3001` for dev. Runtime data in `localStorage` under `halligalli_settings`, `halligalli_best`, `halligalli_recent`, `halligalli_history` (rolling 100-round log).
 - **Deploy**: DigitalOcean App Platform (ams region). `.do/app.yaml` describes the single web service. Production command: `npm install --include=dev && npm run build && npm start`. Server listens on `PORT` (3001 locally, injected in prod) and serves `dist/` + socket.io from the same origin.
 
 ## Conventions
@@ -53,6 +53,9 @@
 - Default export only for main component; helpers stay file-local or in `src/game/`
 - Multiplayer uses server-authoritative state — client emits intent (`game:bell`), never mutates game state locally in multiplayer mode; single-player path is unchanged
 - Reduced-motion: every new keyframe animation must have a `@media (prefers-reduced-motion: reduce)` override
+- Every new `localStorage` key MUST get a `normalize*` function in `persistence.js` + a test in `src/__tests__/persistence.test.js`
+- Audio goes through `useAudioEngine` — do not instantiate `AudioContext` directly in new code
+- Multiplayer socket events: add handlers inside `useMultiplayerSocket`, not directly in `App.jsx`. Pass new state setters via the `actions` prop
 
 ## Architecture
 
@@ -60,16 +63,21 @@
 ```
 src/
 ├── main.jsx            — mounts App, imports styles
-├── App.jsx             — all state, game loop, audio, 4-screen render (~1670 lines)
-├── styles.css          — all styles including 3D animations (~1770 lines)
+├── App.jsx             — all state, game loop, 4-screen render (~1520 lines, still shrinking)
+├── styles.css          — all styles including 3D animations (~1890 lines)
+├── audio/
+│   └── useAudioEngine.js   — encapsulates AudioContext + tone scheduling; returns {playFeedback, ensureUnlocked}
 ├── game/
-│   ├── constants.js    — FRUIT_KEYS, DEFAULT_SETTINGS, INITIAL_*, COUNT_DISTRIBUTION, storage keys
-│   ├── persistence.js  — loadJson/saveJson, normalize/load settings & summaries
+│   ├── constants.js    — FRUIT_KEYS, DEFAULT_SETTINGS, INITIAL_*, COUNT_DISTRIBUTION, storage keys, HISTORY_KEY, MAX_HISTORY, VALID_MODES
+│   ├── persistence.js  — loadJson/saveJson, normalize/load settings & summaries, loadHistory/appendHistoryEntry/normalizeHistoryEntry
 │   ├── rules.js        — deck creation, card flipping, bell evaluation, scoring math (shared with server)
 │   ├── lifecycle.js    — clearGameLoopHandles
-│   └── __tests__/      — vitest unit tests for rules, persistence, lifecycle
-└── multiplayer/
-    └── socket.js       — singleton socket.io-client wrapper (getSocket/connectSocket/disconnectSocket)
+│   └── __tests__/      — vitest unit tests for rules, lifecycle
+├── multiplayer/
+│   ├── socket.js               — singleton socket.io-client wrapper (getSocket/connectSocket/disconnectSocket)
+│   └── useMultiplayerSocket.js — subscribes to all room/game socket events; hoisted out of App.jsx
+└── __tests__/
+    └── persistence.test.js     — settings/summary/history normalization and rolling-log persistence
 
 server/
 ├── index.js            — HTTP server (serves dist/ + SPA fallback + /health) + socket.io event router
@@ -87,7 +95,7 @@ Screen-driven: `home → play → result` for single-player; `home → lobby →
 
 ### Key State in App
 - Navigation: `screen`
-- Settings/history: `settings`, `bestSummary`, `recentSummary`
+- Settings/history: `settings`, `bestSummary`, `recentSummary`, `history` (rolling round log, newest-first, capped at `MAX_HISTORY`)
 - Simulation: `players`, `currentTurn`, `actingPlayer`, `secondsLeft`
 - Scoring: `score`, `correctHits`, `wrongHits`, `missedHits`, `reactionTimes`, `streak`, `scoreBreakdown`
 - Feedback: `feedback`, `activeBellFruit`, `penaltyNotice`, `bossTaunt`, `bossDisrupting`, `tauntEchoes`
