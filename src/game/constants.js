@@ -14,6 +14,10 @@ export const RECENT_KEY = "halligalli_recent";
 export const HISTORY_KEY = "halligalli_history";
 export const MAX_HISTORY = 100;
 export const VALID_MODES = ["solo", "multi"];
+export const DAILY_GOAL_KEY = "halligalli_daily";
+export const ACHIEVEMENTS_KEY = "halligalli_achievements";
+export const DAILY_TARGET_ROUNDS = 5;
+export const ACHIEVEMENT_KEYS = ["first_win", "streak_5", "perfect_round", "sub_200ms", "daily_3"];
 
 export const DEFAULT_SETTINGS = {
   difficulty: "normal",

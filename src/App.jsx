@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  ACHIEVEMENT_KEYS,
+  DAILY_TARGET_ROUNDS,
   DEFAULT_SETTINGS,
   INITIAL_BREAKDOWN,
   INITIAL_SUMMARY,
@@ -9,13 +11,22 @@ import {
   RECENT_KEY,
   SETTINGS_KEY,
   appendHistoryEntry,
+  loadAchievements,
   loadBestSummary,
+  loadDailyGoal,
   loadHistory,
   loadRecentSummary,
   loadSettings,
   normalizeSummary,
   saveJson,
+  saveDailyGoal,
+  unlockAchievement,
 } from "./game/persistence";
+import {
+  computeDailyGoalStreak,
+  computeRollingAccuracy,
+  computeReactionTrend,
+} from "./game/stats.js";
 import {
   calcAccuracy,
   clonePlayers,
@@ -194,6 +205,26 @@ const COPY = {
     multiResult: "对局结束",
     bellReady: "抢铃 — {fruit}已凑齐5个",
     bellWait: "抢铃（等待时机）",
+    tabRecent: "近期",
+    tabTrend: "趋势",
+    tabAchievements: "成就",
+    dailyGoalLabel: "今日目标",
+    dailyProgress: "{done}/{target} 局",
+    dailyDone: "今日目标完成 ✓",
+    trendAccuracyLabel: "准确率（%）",
+    trendReactionLabel: "反应时间（ms）",
+    trendNoData: "连续 3 天有记录后解锁趋势图",
+    achievementFirstWin: "首局完成",
+    achievementFirstWinDesc: "完成一局练习",
+    achievementStreak5: "5 连击",
+    achievementStreak5Desc: "单局连续正确抢铃 5 次",
+    achievementPerfectRound: "完美一局",
+    achievementPerfectRoundDesc: "单局零错误、零漏拍",
+    achievementSub200ms: "极速反应",
+    achievementSub200msDesc: "平均反应时间 ≤ 200ms",
+    achievementDaily3: "三日连击",
+    achievementDaily3Desc: "连续 3 天完成今日目标（{target} 局）",
+    achievementToast: "成就解锁：{name}",
   },
   en: {
     title: "A More Table-Like Halligalli Practice",
@@ -298,6 +329,26 @@ const COPY = {
     multiResult: "Match Complete",
     bellReady: "Ring — {fruit} ×5",
     bellWait: "Ring bell (waiting for condition)",
+    tabRecent: "Recent",
+    tabTrend: "Trend",
+    tabAchievements: "Achievements",
+    dailyGoalLabel: "Daily goal",
+    dailyProgress: "{done}/{target} rounds",
+    dailyDone: "Daily goal reached ✓",
+    trendAccuracyLabel: "Accuracy (%)",
+    trendReactionLabel: "Reaction (ms)",
+    trendNoData: "Play on 3+ different days to unlock trend charts",
+    achievementFirstWin: "First Round",
+    achievementFirstWinDesc: "Complete one round",
+    achievementStreak5: "5-Hit Streak",
+    achievementStreak5Desc: "5 correct rings in a row in a single round",
+    achievementPerfectRound: "Perfect Round",
+    achievementPerfectRoundDesc: "No wrong rings or missed bells",
+    achievementSub200ms: "Lightning Fast",
+    achievementSub200msDesc: "Average reaction ≤ 200ms",
+    achievementDaily3: "3-Day Streak",
+    achievementDaily3Desc: "Hit daily goal ({target} rounds) 3 days in a row",
+    achievementToast: "Achievement unlocked: {name}",
   },
 };
 
@@ -375,6 +426,49 @@ function TableSeat({ player, seat, isActive, isCurrentTurn, language, compactCar
   );
 }
 
+const ACHIEVEMENT_META = {
+  first_win:     { icon: "🎯", nameKey: "achievementFirstWin",    descKey: "achievementFirstWinDesc" },
+  streak_5:      { icon: "🔥", nameKey: "achievementStreak5",     descKey: "achievementStreak5Desc" },
+  perfect_round: { icon: "🌟", nameKey: "achievementPerfectRound",descKey: "achievementPerfectRoundDesc" },
+  sub_200ms:     { icon: "⚡", nameKey: "achievementSub200ms",    descKey: "achievementSub200msDesc" },
+  daily_3:       { icon: "📅", nameKey: "achievementDaily3",      descKey: "achievementDaily3Desc" },
+};
+
+function TrendLine({ points, color }) {
+  const nonNullValues = points.map((p) => p.value).filter((v) => v !== null);
+  if (nonNullValues.length < 2) return null;
+  const W = 260;
+  const H = 56;
+  const PAD = 8;
+  const min = Math.min(...nonNullValues);
+  const max = Math.max(...nonNullValues);
+  const range = max - min || 1;
+  const n = points.length;
+  const cx = (i) => ((i / (n - 1)) * (W - PAD * 2) + PAD).toFixed(1);
+  const cy = (v) => (H - PAD - ((v - min) / range) * (H - PAD * 2)).toFixed(1);
+  const segments = [];
+  let seg = [];
+  for (let i = 0; i < points.length; i++) {
+    if (points[i].value !== null) {
+      seg.push(`${cx(i)},${cy(points[i].value)}`);
+    } else if (seg.length) {
+      segments.push(seg.join(" "));
+      seg = [];
+    }
+  }
+  if (seg.length) segments.push(seg.join(" "));
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="trend-svg" aria-hidden="true">
+      {segments.map((pts, idx) => (
+        <polyline key={idx} points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+      ))}
+      {points.map((p, i) =>
+        p.value !== null ? <circle key={i} cx={cx(i)} cy={cy(p.value)} r="2.5" fill={color} /> : null,
+      )}
+    </svg>
+  );
+}
+
 function App() {
   const [screen, setScreen] = useState("home");
   const [settings, setSettings] = useState(loadSettings);
@@ -391,6 +485,11 @@ function App() {
   const [missedHits, setMissedHits] = useState(0);
   const [reactionTimes, setReactionTimes] = useState([]);
   const [streak, setStreak] = useState(0);
+  const [maxStreak, setMaxStreak] = useState(0);
+  const [dailyGoal, setDailyGoal] = useState(loadDailyGoal);
+  const [achievements, setAchievements] = useState(loadAchievements);
+  const [achievementQueue, setAchievementQueue] = useState([]);
+  const [activeTab, setActiveTab] = useState("recent");
   const [feedback, setFeedback] = useState({
     type: "idle",
     message: "按顺时针依次翻牌，只有每位玩家最上面那张参与判定。",
@@ -489,11 +588,13 @@ function App() {
       durationSec: settings.duration,
       playerCount: settings.playerCount,
       userSeatId,
+      maxStreak,
     };
   }, [
     correctHits,
     actingPlayer,
     currentTurn,
+    maxStreak,
     missedHits,
     players,
     reactionTimes,
@@ -521,6 +622,14 @@ function App() {
   useEffect(() => {
     screenRegionRef.current?.focus();
   }, [screen]);
+
+  useEffect(() => {
+    if (achievementQueue.length === 0) return;
+    const timer = setTimeout(() => {
+      setAchievementQueue((q) => q.slice(1));
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [achievementQueue]);
 
   useMultiplayerSocket({
     isMultiplayer,
@@ -554,6 +663,8 @@ function App() {
       setMultiResults,
       setIsMultiplayer,
       setHistory,
+      dailyGoal,
+      setDailyGoal,
       bellStateRef,
       gameRunningRef,
       matchContextRef,
@@ -798,6 +909,7 @@ function App() {
     setMissedHits(0);
     setReactionTimes([]);
     setStreak(0);
+    setMaxStreak(0);
     setActiveBellFruit(null);
     setScoreBreakdown(INITIAL_BREAKDOWN);
     setPenaltyNotice("");
@@ -912,6 +1024,7 @@ function App() {
       setCorrectHits((value) => value + 1);
       setReactionTimes((value) => [...value, reactionMs]);
       setStreak((value) => value + 1);
+      setMaxStreak((value) => Math.max(value, streak + 1));
       updateFeedback(
         "success",
         t("bellSuccess", { count: collectedCount }),
@@ -997,6 +1110,35 @@ function App() {
     });
     setHistory(updatedHistory);
 
+    // Update daily goal
+    const newCompletedRounds = dailyGoal.completedRounds + 1;
+    const newGoalReached = dailyGoal.goalReached || newCompletedRounds >= DAILY_TARGET_ROUNDS;
+    const newDailyGoal = { ...dailyGoal, completedRounds: newCompletedRounds, goalReached: newGoalReached };
+    saveDailyGoal(newDailyGoal);
+    setDailyGoal(newDailyGoal);
+
+    // Check achievements
+    const snapshotMaxStreak = resolvedSnapshot.maxStreak ?? 0;
+    let currentAchievements = achievements;
+    const newlyUnlocked = [];
+    const achievementChecks = [
+      ["first_win", updatedHistory.length >= 1],
+      ["streak_5", snapshotMaxStreak >= 5],
+      ["perfect_round", summary.correctHits > 0 && summary.wrongHits === 0 && summary.missedHits === 0],
+      ["sub_200ms", summary.avgReactionMs > 0 && summary.avgReactionMs <= 200],
+      ["daily_3", computeDailyGoalStreak(updatedHistory, DAILY_TARGET_ROUNDS) >= 3],
+    ];
+    for (const [key, condition] of achievementChecks) {
+      if (!currentAchievements[key] && condition) {
+        currentAchievements = unlockAchievement(key, currentAchievements);
+        newlyUnlocked.push(key);
+      }
+    }
+    if (newlyUnlocked.length > 0) {
+      setAchievements(currentAchievements);
+      setAchievementQueue((q) => [...q, ...newlyUnlocked]);
+    }
+
     bellStateRef.current = {
       available: false,
       fruitKey: null,
@@ -1077,40 +1219,106 @@ function App() {
             <div className="card history-card">
               <div className="history-head">
                 <h2>{t("historyTitle")}</h2>
-                <p className="history-desc">{t("historyDesc")}</p>
+                <div className="daily-goal-bar">
+                  <span className="daily-goal-label">{t("dailyGoalLabel")}</span>
+                  <span className={`daily-goal-progress${dailyGoal.goalReached ? " reached" : ""}`}>
+                    {dailyGoal.goalReached
+                      ? t("dailyDone")
+                      : t("dailyProgress", { done: dailyGoal.completedRounds, target: DAILY_TARGET_ROUNDS })}
+                  </span>
+                </div>
               </div>
-              {history.length === 0 ? (
-                <p className="history-empty">{t("historyEmpty")}</p>
-              ) : (
-                <ul className="history-list">
-                  {history.slice(0, 5).map((entry) => (
-                    <li key={entry.ts} className="history-row">
-                      <div className="history-meta">
-                        <span className={`history-mode mode-${entry.mode}`}>
-                          {entry.mode === "multi" ? t("historyModeMulti") : t("historyModeSolo")}
-                        </span>
-                        <span className="history-time">{formatRelativeTime(entry.ts)}</span>
-                      </div>
-                      <div className="history-stats">
-                        <div className="history-stat">
-                          <span className="history-stat-label">{t("historyHeaderScore")}</span>
-                          <span className="history-stat-value">{entry.score}</span>
+              <div className="history-tabs" role="tablist" aria-label={t("historyTitle")}>
+                {(["recent", "trend", "achievements"]).map((tab) => (
+                  <button
+                    key={tab}
+                    role="tab"
+                    aria-selected={activeTab === tab}
+                    className={`tab-btn${activeTab === tab ? " active" : ""}`}
+                    onClick={() => setActiveTab(tab)}
+                  >
+                    {tab === "recent" ? t("tabRecent") : tab === "trend" ? t("tabTrend") : t("tabAchievements")}
+                  </button>
+                ))}
+              </div>
+
+              {activeTab === "recent" && (
+                history.length === 0 ? (
+                  <p className="history-empty">{t("historyEmpty")}</p>
+                ) : (
+                  <ul className="history-list">
+                    {history.slice(0, 5).map((entry) => (
+                      <li key={entry.ts} className="history-row">
+                        <div className="history-meta">
+                          <span className={`history-mode mode-${entry.mode}`}>
+                            {entry.mode === "multi" ? t("historyModeMulti") : t("historyModeSolo")}
+                          </span>
+                          <span className="history-time">{formatRelativeTime(entry.ts)}</span>
                         </div>
-                        <div className="history-stat">
-                          <span className="history-stat-label">{t("historyHeaderAccuracy")}</span>
-                          <span className="history-stat-value">
-                            {Math.round(entry.accuracy * 100)}%
+                        <div className="history-stats">
+                          <div className="history-stat">
+                            <span className="history-stat-label">{t("historyHeaderScore")}</span>
+                            <span className="history-stat-value">{entry.score}</span>
+                          </div>
+                          <div className="history-stat">
+                            <span className="history-stat-label">{t("historyHeaderAccuracy")}</span>
+                            <span className="history-stat-value">
+                              {Math.round(entry.accuracy * 100)}%
+                            </span>
+                          </div>
+                          <div className="history-stat">
+                            <span className="history-stat-label">{t("historyHeaderReaction")}</span>
+                            <span className="history-stat-value">
+                              {entry.avgReactionMs ? `${entry.avgReactionMs}ms` : "-"}
+                            </span>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )
+              )}
+
+              {activeTab === "trend" && (() => {
+                const accData = computeRollingAccuracy(history, 14);
+                const rxData = computeReactionTrend(history, 14);
+                const filledDays = accData.filter((p) => p.value !== null).length;
+                if (filledDays < 3) {
+                  return <p className="history-empty">{t("trendNoData")}</p>;
+                }
+                return (
+                  <div className="trend-section">
+                    <div className="trend-group">
+                      <span className="trend-label">{t("trendAccuracyLabel")}</span>
+                      <TrendLine points={accData} color="var(--gold-light)" />
+                    </div>
+                    <div className="trend-group">
+                      <span className="trend-label">{t("trendReactionLabel")}</span>
+                      <TrendLine points={rxData} color="#6fcf97" />
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {activeTab === "achievements" && (
+                <ul className="achievement-grid">
+                  {ACHIEVEMENT_KEYS.map((key) => {
+                    const meta = ACHIEVEMENT_META[key];
+                    const unlockedTs = achievements[key];
+                    return (
+                      <li key={key} className={`achievement-tile${unlockedTs ? " unlocked" : ""}`}>
+                        <span className="achievement-icon" aria-hidden="true">{meta.icon}</span>
+                        <div className="achievement-info">
+                          <span className="achievement-name">{t(meta.nameKey)}</span>
+                          <span className="achievement-desc">
+                            {unlockedTs
+                              ? formatRelativeTime(unlockedTs)
+                              : t(meta.descKey, { target: DAILY_TARGET_ROUNDS })}
                           </span>
                         </div>
-                        <div className="history-stat">
-                          <span className="history-stat-label">{t("historyHeaderReaction")}</span>
-                          <span className="history-stat-value">
-                            {entry.avgReactionMs ? `${entry.avgReactionMs}ms` : "-"}
-                          </span>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
@@ -1528,6 +1736,12 @@ function App() {
           </section>
         )}
       </section>
+      {achievementQueue.length > 0 && (
+        <div className="achievement-toast" role="status" aria-live="assertive" aria-atomic="true">
+          <span aria-hidden="true">{ACHIEVEMENT_META[achievementQueue[0]].icon}</span>
+          {" "}{t("achievementToast", { name: t(ACHIEVEMENT_META[achievementQueue[0]].nameKey) })}
+        </div>
+      )}
     </main>
   );
 }

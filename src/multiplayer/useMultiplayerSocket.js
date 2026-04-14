@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 import { getSocket } from "./socket.js";
-import { INITIAL_BREAKDOWN } from "../game/constants.js";
+import { DAILY_TARGET_ROUNDS, INITIAL_BREAKDOWN } from "../game/constants.js";
 import { getSeatLayouts } from "../game/rules.js";
-import { appendHistoryEntry } from "../game/persistence.js";
+import { appendHistoryEntry, saveDailyGoal } from "../game/persistence.js";
 
 export function useMultiplayerSocket({ isMultiplayer, mySeatIndex, language, actions }) {
   const actionsRef = useRef(actions);
@@ -218,6 +218,14 @@ export function useMultiplayerSocket({ isMultiplayer, mySeatIndex, language, act
           playerCount: ctx.playerCount,
         });
         a().setHistory(updated);
+
+        const dg = a().dailyGoal;
+        if (dg) {
+          const nr = dg.completedRounds + 1;
+          const newDg = { ...dg, completedRounds: nr, goalReached: dg.goalReached || nr >= DAILY_TARGET_ROUNDS };
+          saveDailyGoal(newDg);
+          a().setDailyGoal(newDg);
+        }
       }
     }
 
