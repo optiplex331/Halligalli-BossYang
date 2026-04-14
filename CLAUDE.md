@@ -136,7 +136,7 @@ Host has exclusive `room:start` rights. Disconnects during lobby remove the play
 
 **Meta rule**: At the end of each milestone or major functional update, add a brief retrospective to this section — one bullet per insight, lead with the rule, end with why. Aim for precision over volume: if a new pattern duplicates an existing one, update rather than append. Keep total Do/Don't lists under ~15 bullets each.
 
-Patterns that kept cost low during M1–M3; carry forward.
+Patterns that kept cost low during M1–M4; carry forward.
 
 ### Do
 - **Parallel read burst first** — run Grep + multiple Read calls in one message to map all touch points before writing anything; one round-trip gives the full picture.
@@ -146,11 +146,13 @@ Patterns that kept cost low during M1–M3; carry forward.
 - **Trust the session summary / plan line anchors** — when the previous session's summary names an exact file + offset, go there directly; don't re-grep what's already been located.
 - **All edits in one pass, then verify once** — make every planned edit across a file before running any check; no redundant intermediate verification rounds.
 - **COPY table edits: always touch zh + en in one Edit pair** — App.jsx:94–300; never add a zh key without the en counterpart in the same message.
+- **Fix test data format bugs before running tests a second time** — if a new test generates date strings, verify they're zero-padded (`2025-06-08` not `2025-06-8`); one read of the failing assertion is enough to diagnose this class of error.
 
 ### Don't
 - **Don't create tasks without checking TaskList across session boundaries** — duplicate tasks (M3 created #24–28 while #19–23 still existed) waste 10+ tool calls on cleanup.
 - **Don't load skills speculatively** — skill docs cost 2–4 k context tokens; only load when the plan is genuinely ambiguous and you need the framework's guidance.
 - **Don't re-grep what the session summary already resolved** — if the compacted summary says "L445 `ensureAudioContext`", go to offset 445; searching again is pure waste.
+- **Don't use template-literal date arithmetic in tests** — `` `2025-06-${8 + d}` `` skips zero-padding; always use an explicit string array or `.padStart(2, "0")` when building ISO date strings in tests.
 
 ---
 
