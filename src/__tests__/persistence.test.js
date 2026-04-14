@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   appendHistoryEntry,
   HISTORY_KEY,
@@ -6,9 +6,16 @@ import {
   normalizeHistoryEntry,
   normalizeSettings,
   normalizeSummary,
+  normalizeDailyGoal,
+  loadDailyGoal,
+  saveDailyGoal,
+  normalizeAchievements,
+  loadAchievements,
+  unlockAchievement,
+  DAILY_GOAL_KEY,
   saveJson,
 } from "../game/persistence";
-import { MAX_HISTORY } from "../game/constants";
+import { MAX_HISTORY, ACHIEVEMENTS_KEY } from "../game/constants";
 
 describe("persistence normalization", () => {
   it("clamps malformed settings back to supported values", () => {
@@ -156,5 +163,104 @@ describe("history persistence", () => {
     appendHistoryEntry(makeEntry({ ts: 1 }));
     appendHistoryEntry(null);
     expect(loadHistory()).toHaveLength(1);
+  });
+});
+
+describe("daily goal persistence", () => {
+  const originalWindow = globalThis.window;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2025-06-10T12:00:00"));
+    const store = new Map();
+    globalThis.window = {
+      localStorage: {
+        getItem: (k) => (store.has(k) ? store.get(k) : null),
+        setItem: (k, v) => store.set(k, String(v)),
+        removeItem: (k) => store.delete(k),
+      },
+    };
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    globalThis.window = originalWindow;
+  });
+
+  it("normalizeDailyGoal clamps invalid fields", () => {
+    expect(normalizeDailyGoal({ date: "bad", completedRounds: -3, goalReached: "yes" })).toEqual({
+      date: "2025-06-10",
+      completedRounds: 0,
+      goalReached: false,
+    });
+  });
+
+  it("loadDailyGoal returns fresh goal when stored date is different", () => {
+    saveDailyGoal({ date: "2025-06-09", completedRounds: 5, goalReached: true });
+    const goal = loadDailyGoal();
+    expect(goal.date).toBe("2025-06-10");
+    expect(goal.completedRounds).toBe(0);
+    expect(goal.goalReached).toBe(false);
+  });
+
+  it("loadDailyGoal returns stored goal when date matches today", () => {
+    saveDailyGoal({ date: "2025-06-10", completedRounds: 3, goalReached: false });
+    expect(loadDailyGoal().completedRounds).toBe(3);
+  });
+
+  it("loadDailyGoal returns fresh goal when nothing stored", () => {
+    const goal = loadDailyGoal();
+    expect(goal.date).toBe("2025-06-10");
+    expect(goal.completedRounds).toBe(0);
+  });
+});
+
+describe("achievements persistence", () => {
+  const originalWindow = globalThis.window;
+  let store;
+
+  beforeEach(() => {
+    store = new Map();
+    globalThis.window = {
+      localStorage: {
+        getItem: (k) => (store.has(k) ? store.get(k) : null),
+        setItem: (k, v) => store.set(k, String(v)),
+        removeItem: (k) => store.delete(k),
+      },
+    };
+  });
+
+  afterEach(() => {
+    globalThis.window = originalWindow;
+  });
+
+  it("normalizeAchievements sets all known keys to null by default", () => {
+    const result = normalizeAchievements({});
+    expect(Object.keys(result)).toEqual(["first_win", "streak_5", "perfect_round", "sub_200ms", "daily_3"]);
+    expect(Object.values(result).every((v) => v === null)).toBe(true);
+  });
+
+  it("normalizeAchievements keeps valid timestamps, rejects non-finite values", () => {
+    const result = normalizeAchievements({ first_win: 1700000000000, streak_5: "bad" });
+    expect(result.first_win).toBe(1700000000000);
+    expect(result.streak_5).toBeNull();
+  });
+
+  it("loadAchievements returns normalized structure when nothing stored", () => {
+    const result = loadAchievements();
+    expect(result.first_win).toBeNull();
+  });
+
+  it("unlockAchievement sets a timestamp and persists", () => {
+    const initial = loadAchievements();
+    const updated = unlockAchievement("first_win", initial);
+    expect(updated.first_win).toBeGreaterThan(0);
+    expect(store.has(ACHIEVEMENTS_KEY)).toBe(true);
+  });
+
+  it("unlockAchievement does not overwrite an existing unlock", () => {
+    const initial = { ...loadAchievements(), first_win: 1700000000000 };
+    const result = unlockAchievement("first_win", initial);
+    expect(result.first_win).toBe(1700000000000);
   });
 });

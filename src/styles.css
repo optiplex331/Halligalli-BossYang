@@ -1483,6 +1483,191 @@ h2 {
   }
 }
 
+/* ── History Tabs + Daily Goal ───────────────────────────── */
+
+.daily-goal-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.daily-goal-label {
+  color: var(--text-1);
+  font-size: 0.8rem;
+}
+
+.daily-goal-progress {
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+}
+
+.daily-goal-progress.reached {
+  color: #6fcf97;
+}
+
+.history-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border-1);
+  padding-bottom: 0;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  color: var(--text-1);
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.tab-btn:hover {
+  color: var(--text-0);
+}
+
+.tab-btn.active {
+  color: var(--text-0);
+  font-weight: 700;
+  border-bottom-color: var(--gold-light);
+}
+
+/* ── Trend Chart ─────────────────────────────────────────── */
+
+.trend-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.trend-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.trend-label {
+  color: var(--text-2);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.trend-svg {
+  width: 100%;
+  height: 56px;
+  display: block;
+}
+
+/* ── Achievement Grid ────────────────────────────────────── */
+
+.achievement-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.achievement-tile {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-1);
+}
+
+.achievement-tile.unlocked {
+  background: rgba(212, 175, 55, 0.06);
+  border-color: rgba(212, 175, 55, 0.22);
+}
+
+.achievement-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+  filter: grayscale(1) opacity(0.3);
+  flex-shrink: 0;
+}
+
+.achievement-tile.unlocked .achievement-icon {
+  filter: none;
+}
+
+.achievement-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.achievement-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.achievement-tile.unlocked .achievement-name {
+  color: var(--text-0);
+}
+
+.achievement-desc {
+  font-size: 0.72rem;
+  color: var(--text-2);
+  line-height: 1.35;
+}
+
+.achievement-tile.unlocked .achievement-desc {
+  color: var(--gold-light);
+}
+
+/* ── Achievement Toast ───────────────────────────────────── */
+
+.achievement-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(30, 25, 15, 0.96);
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  border-radius: 12px;
+  padding: 10px 20px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-0);
+  z-index: 200;
+  white-space: nowrap;
+  animation: toast-rise 0.22s ease-out;
+}
+
+@keyframes toast-rise {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .achievement-toast { animation: none; }
+}
+
+@media (max-width: 520px) {
+  .achievement-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tab-btn {
+    font-size: 0.8rem;
+    padding: 6px 10px;
+  }
+}
+
 /* ── Lobby Screen ─────────────────────────────────────────── */
 
 .lobby-card {

@@ -1,5 +1,9 @@
 import {
+  ACHIEVEMENTS_KEY,
+  ACHIEVEMENT_KEYS,
   BEST_KEY,
+  DAILY_GOAL_KEY,
+  DAILY_TARGET_ROUNDS,
   DEFAULT_SETTINGS,
   HISTORY_KEY,
   INITIAL_SUMMARY,
@@ -138,4 +142,59 @@ export function appendHistoryEntry(entry) {
   return next;
 }
 
-export { SETTINGS_KEY, BEST_KEY, RECENT_KEY, HISTORY_KEY };
+function toLocalDateStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export function normalizeDailyGoal(value) {
+  const today = toLocalDateStr();
+  const next = value && typeof value === "object" ? value : {};
+  return {
+    date:
+      typeof next.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(next.date)
+        ? next.date
+        : today,
+    completedRounds: Math.max(0, clampInteger(next.completedRounds, 0)),
+    goalReached: typeof next.goalReached === "boolean" ? next.goalReached : false,
+  };
+}
+
+export function loadDailyGoal() {
+  const today = toLocalDateStr();
+  const raw = loadJson(DAILY_GOAL_KEY, null);
+  const normalized = normalizeDailyGoal(raw);
+  if (normalized.date !== today) {
+    return { date: today, completedRounds: 0, goalReached: false };
+  }
+  return normalized;
+}
+
+export function saveDailyGoal(goal) {
+  saveJson(DAILY_GOAL_KEY, goal);
+}
+
+export function normalizeAchievements(value) {
+  const next = value && typeof value === "object" ? value : {};
+  const result = {};
+  for (const key of ACHIEVEMENT_KEYS) {
+    result[key] = Number.isFinite(next[key]) ? next[key] : null;
+  }
+  return result;
+}
+
+export function loadAchievements() {
+  return normalizeAchievements(loadJson(ACHIEVEMENTS_KEY, {}));
+}
+
+export function unlockAchievement(key, current) {
+  if (current[key]) return current;
+  const next = { ...current, [key]: Date.now() };
+  saveJson(ACHIEVEMENTS_KEY, next);
+  return next;
+}
+
+export { SETTINGS_KEY, BEST_KEY, RECENT_KEY, HISTORY_KEY, DAILY_GOAL_KEY, ACHIEVEMENTS_KEY, DAILY_TARGET_ROUNDS };
