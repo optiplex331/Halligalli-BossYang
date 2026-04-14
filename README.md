@@ -23,13 +23,20 @@ A browser-based Halligalli trainer with single-player practice and real-time mul
 - Ranked per-player scoreboard at the end
 - Same-origin socket.io, zero setup for players
 
+### Training log
+- Last 5 rounds surfaced on the home screen (score, accuracy, avg reaction, timestamp)
+- Rolling 100-round history in localStorage (`halligalli_history`)
+- Mode badge distinguishes solo vs. multiplayer rounds
+
 ### Polish
 - 3D card flip, bell particle burst, screen transitions
 - Homepage entrance animations, glow-sweep buttons
 - 3-2-1 countdown before every round
-- Full `prefers-reduced-motion` fallback
+- Full `prefers-reduced-motion` fallback (all keyframes covered)
 - Chinese / English language switch
-- Sound effects (mobile audio-unlock included)
+- Sound effects with iOS audio-unlock on every game-entry button
+- Screen-reader accessible: `aria-live` on feedback/penalty/boss taunt, `aria-label`/`aria-pressed` on bell, `role="dialog"` on lobby, screen-change focus management
+- WCAG 2.5.5 touch targets (44 px min-height on all buttons at mobile breakpoint)
 
 ## Tech Stack
 
@@ -91,13 +98,16 @@ src/
 ├── App.jsx              — UI + single-player game loop
 ├── main.jsx             — app entry
 ├── styles.css           — all styles
+├── audio/
+│   └── useAudioEngine.js   — AudioContext hook (playFeedback, ensureUnlocked)
 ├── game/                — shared game logic (browser + server)
 │   ├── constants.js
-│   ├── persistence.js
+│   ├── persistence.js   — localStorage helpers incl. history log
 │   ├── rules.js
 │   └── lifecycle.js
 └── multiplayer/
-    └── socket.js        — socket.io-client singleton
+    ├── socket.js        — socket.io-client singleton
+    └── useMultiplayerSocket.js — room/game socket event subscriptions
 
 server/
 ├── index.js             — HTTP server + socket.io router + static dist/ serving

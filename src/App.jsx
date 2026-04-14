@@ -192,6 +192,8 @@ const COPY = {
     rank: "排名",
     playerName: "玩家",
     multiResult: "对局结束",
+    bellReady: "抢铃 — {fruit}已凑齐5个",
+    bellWait: "抢铃（等待时机）",
   },
   en: {
     title: "A More Table-Like Halligalli Practice",
@@ -294,6 +296,8 @@ const COPY = {
     rank: "Rank",
     playerName: "Player",
     multiResult: "Match Complete",
+    bellReady: "Ring — {fruit} ×5",
+    bellWait: "Ring bell (waiting for condition)",
   },
 };
 
@@ -435,6 +439,7 @@ function App() {
   const bellPressTimeoutRef = useRef(null);
   const collectTimeoutRef = useRef(null);
   const countdownTimerRef = useRef(null);
+  const screenRegionRef = useRef(null);
 
   const mode = MODES[settings.difficulty];
   const seatLayouts = getSeatLayouts(settings.playerCount);
@@ -512,6 +517,10 @@ function App() {
   }, [screen, streak, settings.difficulty, settings.playerCount]);
 
   useEffect(() => () => stopGameLoops(), []);
+
+  useEffect(() => {
+    screenRegionRef.current?.focus();
+  }, [screen]);
 
   useMultiplayerSocket({
     isMultiplayer,
@@ -689,6 +698,7 @@ function App() {
   }
 
   function createRoom() {
+    ensureAudioContext();
     setIsMultiplayer(true);
     setLobbyError("");
     const socket = connectSocket();
@@ -703,6 +713,7 @@ function App() {
 
   function joinRoom() {
     if (!joinCode.trim()) return;
+    ensureAudioContext();
     setIsMultiplayer(true);
     setLobbyError("");
     const socket = connectSocket();
@@ -1026,7 +1037,7 @@ function App() {
         </header>
 
         {screen === "home" && (
-          <section key="home" className="stack screen-enter home-enter">
+          <section key="home" ref={screenRegionRef} tabIndex={-1} className="stack screen-enter home-enter">
             <div className="card intro">
               <p>{t("startIntro")}</p>
               <div className="button-row">
@@ -1046,6 +1057,8 @@ function App() {
                 <span className="or-divider">{t("orText")}</span>
                 <div className="join-row">
                   <input
+                    id="join-code-input"
+                    name="joinCode"
                     className="code-input"
                     type="text"
                     maxLength={4}
@@ -1211,9 +1224,9 @@ function App() {
         )}
 
         {screen === "lobby" && (
-          <section key="lobby" className="stack screen-enter">
-            <div className="card lobby-card">
-              <h2>{t("multiplayerTitle")}</h2>
+          <section key="lobby" ref={screenRegionRef} tabIndex={-1} className="stack screen-enter">
+            <div className="card lobby-card" role="dialog" aria-modal="true" aria-labelledby="lobby-title">
+              <h2 id="lobby-title">{t("multiplayerTitle")}</h2>
               <div className="room-code-display">
                 <span className="room-code-label">{t("roomCode")}</span>
                 <span className="room-code-value">{roomCode}</span>
@@ -1267,9 +1280,9 @@ function App() {
         )}
 
         {screen === "play" && (
-          <section key="play" className="stack screen-enter">
+          <section key="play" ref={screenRegionRef} tabIndex={-1} className="stack screen-enter">
             {countdown > 0 && (
-              <div className="countdown-overlay">
+              <div className="countdown-overlay" role="status" aria-live="assertive" aria-atomic="true">
                 <span key={countdown} className="countdown-number">{countdown}</span>
               </div>
             )}
@@ -1280,8 +1293,8 @@ function App() {
               </button>
             </div>
 
-            <div className={`feedback ${feedback.type}`}>{feedback.message}</div>
-            {penaltyNotice && <div className="penalty-banner">{penaltyNotice}</div>}
+            <div className={`feedback ${feedback.type}`} aria-live="polite" aria-atomic="true">{feedback.message}</div>
+            {penaltyNotice && <div className="penalty-banner" aria-live="assertive" aria-atomic="true">{penaltyNotice}</div>}
 
             <div className={`table-scene players-${settings.playerCount}`}>
               <div className={bossDisrupting ? "table-felt boss-disrupting" : "table-felt"}>
@@ -1304,7 +1317,7 @@ function App() {
                   <img className="boss-presence-avatar" src="/yang-boss.png" alt={t("bossTitle")} />
                   <span>{t("bossWatching")}</span>
                 </div>
-                {bossTaunt && <div className="boss-taunt">{bossTaunt}</div>}
+                {bossTaunt && <div className="boss-taunt" aria-live="polite" aria-atomic="true">{bossTaunt}</div>}
                 {seatLayouts.map((seat, index) => {
                   const player = players[index];
                   const topCard = getTopCard(player);
@@ -1351,6 +1364,10 @@ function App() {
                   <button
                     className={bellPressed ? "bell-button pressed" : "bell-button"}
                     onClick={handleBell}
+                    aria-label={activeBellFruit
+                      ? t("bellReady", { fruit: fruitLabel(activeBellFruit, settings.language) })
+                      : t("bellWait")}
+                    aria-pressed={Boolean(bellPressed)}
                   >
                     铃
                   </button>
@@ -1361,7 +1378,7 @@ function App() {
         )}
 
         {screen === "result" && (
-          <section key="result" className="stack screen-enter">
+          <section key="result" ref={screenRegionRef} tabIndex={-1} className="stack screen-enter">
             {isMultiplayer && multiResults ? (
               <>
                 <div className="card result-hero">

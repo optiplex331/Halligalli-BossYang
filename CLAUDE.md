@@ -56,6 +56,9 @@
 - Every new `localStorage` key MUST get a `normalize*` function in `persistence.js` + a test in `src/__tests__/persistence.test.js`
 - Audio goes through `useAudioEngine` — do not instantiate `AudioContext` directly in new code
 - Multiplayer socket events: add handlers inside `useMultiplayerSocket`, not directly in `App.jsx`. Pass new state setters via the `actions` prop
+- ARIA: feedback/penalty/boss-taunt divs must keep `aria-live`; bell button must keep `aria-label`+`aria-pressed`; lobby card keeps `role="dialog"`; screen sections keep `tabIndex={-1}` for focus management
+- Touch targets: all interactive elements must stay ≥ 44px min-height at the 520px breakpoint (enforced in `.primary-button`, `.ghost-button`, `.chip`)
+- iOS audio: call `ensureAudioContext()` at every entry point that leads to gameplay (startGame, createRoom, joinRoom)
 
 ## Architecture
 
