@@ -11,6 +11,9 @@ export const COUNT_DISTRIBUTION = [
 export const SETTINGS_KEY = "halligalli_settings";
 export const BEST_KEY = "halligalli_best";
 export const RECENT_KEY = "halligalli_recent";
+export const HISTORY_KEY = "halligalli_history";
+export const MAX_HISTORY = 100;
+export const VALID_MODES = ["solo", "multi"];
 
 export const DEFAULT_SETTINGS = {
   difficulty: "normal",

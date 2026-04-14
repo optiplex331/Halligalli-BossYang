@@ -32,6 +32,8 @@ import {
 } from "./game/rules";
 import { clearGameLoopHandles } from "./game/lifecycle";
 import { connectSocket, disconnectSocket, getSocket } from "./multiplayer/socket";
+import { useMultiplayerSocket } from "./multiplayer/useMultiplayerSocket";
+import { useAudioEngine } from "./audio/useAudioEngine";
 
 const FRUITS = [
   { key: "banana", label: "香蕉", labelEn: "banana", icon: "🍌" },
@@ -400,7 +402,6 @@ function App() {
   const startupTimeoutRef = useRef(null);
   const gameStateRef = useRef({});
   const gameRunningRef = useRef(false);
-  const audioContextRef = useRef(null);
   const bellStateRef = useRef({
     available: false,
     fruitKey: null,
@@ -418,6 +419,9 @@ function App() {
   const userSeatId = seatLayouts.findIndex((seat) => seat.isUser);
   const copy = COPY[settings.language] ?? COPY.zh;
   const compactCard = settings.playerCount >= 5;
+
+  const { playFeedback: playFeedbackSound, ensureUnlocked: ensureAudioContext } =
+    useAudioEngine(settings.soundEnabled);
 
   function t(key, vars = {}) {
     return Object.entries(vars).reduce(
@@ -474,220 +478,51 @@ function App() {
 
   useEffect(() => () => stopGameLoops(), []);
 
-  useEffect(() => {
-    if (!isMultiplayer) return;
-
-    const socket = getSocket();
-
-    function onRoomCreated({ code, playerId, room }) {
-      setRoomCode(code);
-      setMyPlayerId(playerId);
-      setRoomPlayers(room.players);
-      setLobbyError("");
-      setScreen("lobby");
-    }
-
-    function onRoomJoined({ playerId, room }) {
-      setRoomCode(room.code);
-      setMyPlayerId(playerId);
-      setRoomPlayers(room.players);
-      setLobbyError("");
-      setScreen("lobby");
-    }
-
-    function onPlayerUpdate({ players: updatedPlayers }) {
-      setRoomPlayers(updatedPlayers);
-    }
-
-    function onRoomError({ message, messageZh }) {
-      setLobbyError(settings.language === "zh" ? messageZh : message);
-    }
-
-    function onGameStart({ playerCount, difficulty, duration, topCards, seatMap: sm }) {
-      setSeatMap(sm);
-      const seats = getSeatLayouts(playerCount);
-      const freshPlayers = Array.from({ length: playerCount }, (_, i) => ({
-        id: i,
-        labelZh: sm[i]?.name || seats[i].labelZh,
-        labelEn: sm[i]?.name || seats[i].labelEn,
-        drawPile: [{ id: "hidden", fruit: "banana", count: 0 }],
-        wonPile: [],
-        faceUpPile: topCards[i] ? [topCards[i]] : [],
-      }));
-
-      setPlayers(freshPlayers);
-      setCurrentTurn(0);
-      setActingPlayer(0);
-      setSecondsLeft(duration);
-      setScore(0);
-      setCorrectHits(0);
-      setWrongHits(0);
-      setMissedHits(0);
-      setReactionTimes([]);
-      setStreak(0);
-      setActiveBellFruit(null);
-      setScoreBreakdown(INITIAL_BREAKDOWN);
-      setPenaltyNotice("");
-      setBossTaunt("");
-      setBossDisrupting(false);
-      setTauntEchoes([]);
-      setFeedback({ type: "idle", message: t("startRound") });
-      setScreen("play");
-      gameRunningRef.current = true;
-    }
-
-    function onYourSeat({ seatIndex }) {
-      setMySeatIndex(seatIndex);
-    }
-
-    function onGameFlip({ seatIndex, card, nextTurn, bellAvailable, bellFruitKey, topCards }) {
-      setPlayers((prev) => {
-        const next = prev.map((p, i) => ({
-          ...p,
-          faceUpPile: topCards[i] ? [topCards[i]] : [],
-        }));
-        return next;
-      });
-      setActingPlayer(seatIndex);
-      setCurrentTurn(nextTurn);
-      triggerFlipAnimation(seatIndex);
-
-      if (bellAvailable) {
-        bellStateRef.current = {
-          available: true,
-          fruitKey: bellFruitKey,
-          startedAt: Date.now(),
-          handled: false,
-        };
-        setActiveBellFruit(bellFruitKey);
-      } else {
-        bellStateRef.current = { available: false, fruitKey: null, startedAt: 0, handled: true };
-        setActiveBellFruit(null);
-      }
-    }
-
-    function onGameMissed({ fruitKey }) {
-      setMissedHits((v) => v + 1);
-      setScore((v) => Math.max(0, v - 30));
-      setScoreBreakdown((v) => ({ ...v, missedPenalty: v.missedPenalty + 30 }));
-      setStreak(0);
-      updateFeedback("warn", t("missedBell", { fruit: fruitLabel(fruitKey, settings.language) }));
-      playFeedbackSound("warn");
-    }
-
-    function onBellResult(data) {
-      if (data.type === "correct") {
-        setPlayers((prev) =>
-          prev.map((p, i) => ({
-            ...p,
-            faceUpPile: data.topCards[i] ? [data.topCards[i]] : [],
-          })),
-        );
-        setCurrentTurn(data.winnerId);
-        setActiveBellFruit(null);
-        bellStateRef.current = { available: false, fruitKey: null, startedAt: 0, handled: true };
-
-        if (data.winnerId === mySeatIndex) {
-          const reactionMs = Date.now() - bellStateRef.current.startedAt;
-          setScore((v) => v + data.earned);
-          setCorrectHits((v) => v + 1);
-          setReactionTimes((v) => [...v, reactionMs]);
-          setStreak((v) => v + 1);
-          updateFeedback("success", t("bellSuccess", { count: data.collectedCount }));
-          playFeedbackSound("success");
-          spawnBellParticles();
-        } else {
-          const winnerName = seatMap[data.winnerId]?.name || `Player ${data.winnerId + 1}`;
-          updateFeedback("idle", `${winnerName} ${settings.language === "zh" ? "抢铃成功" : "rang the bell"}`);
-        }
-        triggerBellPress();
-        triggerCollectAnimation();
-      } else if (data.type === "wrong") {
-        setPlayers((prev) =>
-          prev.map((p, i) => ({
-            ...p,
-            faceUpPile: data.topCards[i] ? [data.topCards[i]] : [],
-          })),
-        );
-
-        if (data.bellAvailable) {
-          bellStateRef.current = {
-            available: true,
-            fruitKey: data.bellFruitKey,
-            startedAt: Date.now(),
-            handled: false,
-          };
-          setActiveBellFruit(data.bellFruitKey);
-        }
-
-        if (data.playerId === mySeatIndex) {
-          setWrongHits((v) => v + 1);
-          setScore((v) => Math.max(0, v - 50 - data.penaltyCount * 4));
-          setScoreBreakdown((v) => ({
-            ...v,
-            wrongPenalty: v.wrongPenalty + 50,
-            cardPenalty: v.cardPenalty + data.penaltyCount * 4,
-          }));
-          setStreak(0);
-          updateFeedback(
-            "error",
-            data.penaltyCount ? t("bellPenalty", { count: data.penaltyCount }) : t("bellPenaltyNone"),
-          );
-          if (data.penaltyCount) showPenalty(data.penaltyCount);
-          playFeedbackSound("penalty");
-        } else {
-          const penaltyName = seatMap[data.playerId]?.name || `Player ${data.playerId + 1}`;
-          updateFeedback("idle", `${penaltyName} ${settings.language === "zh" ? "错拍了" : "wrong ring"}`);
-        }
-        triggerBellPress();
-      }
-    }
-
-    function onGameTick({ secondsLeft: s }) {
-      setSecondsLeft(s);
-    }
-
-    function onGameEnd({ results }) {
-      gameRunningRef.current = false;
-      setMultiResults(results);
-      setScreen("result");
-    }
-
-    function onRoomDissolved() {
-      setIsMultiplayer(false);
-      setScreen("home");
-      setRoomCode("");
-      setRoomPlayers([]);
-    }
-
-    socket.on("room:created", onRoomCreated);
-    socket.on("room:joined", onRoomJoined);
-    socket.on("room:player-update", onPlayerUpdate);
-    socket.on("room:error", onRoomError);
-    socket.on("game:start", onGameStart);
-    socket.on("game:your-seat", onYourSeat);
-    socket.on("game:flip", onGameFlip);
-    socket.on("game:missed", onGameMissed);
-    socket.on("game:bell-result", onBellResult);
-    socket.on("game:tick", onGameTick);
-    socket.on("game:end", onGameEnd);
-    socket.on("room:dissolved", onRoomDissolved);
-
-    return () => {
-      socket.off("room:created", onRoomCreated);
-      socket.off("room:joined", onRoomJoined);
-      socket.off("room:player-update", onPlayerUpdate);
-      socket.off("room:error", onRoomError);
-      socket.off("game:start", onGameStart);
-      socket.off("game:your-seat", onYourSeat);
-      socket.off("game:flip", onGameFlip);
-      socket.off("game:missed", onGameMissed);
-      socket.off("game:bell-result", onBellResult);
-      socket.off("game:tick", onGameTick);
-      socket.off("game:end", onGameEnd);
-      socket.off("room:dissolved", onRoomDissolved);
-    };
-  }, [isMultiplayer, mySeatIndex, settings.language]);
+  useMultiplayerSocket({
+    isMultiplayer,
+    mySeatIndex,
+    language: settings.language,
+    actions: {
+      setRoomCode,
+      setMyPlayerId,
+      setRoomPlayers,
+      setLobbyError,
+      setScreen,
+      setSeatMap,
+      setPlayers,
+      setCurrentTurn,
+      setActingPlayer,
+      setSecondsLeft,
+      setScore,
+      setCorrectHits,
+      setWrongHits,
+      setMissedHits,
+      setReactionTimes,
+      setStreak,
+      setActiveBellFruit,
+      setScoreBreakdown,
+      setPenaltyNotice,
+      setBossTaunt,
+      setBossDisrupting,
+      setTauntEchoes,
+      setFeedback,
+      setMySeatIndex,
+      setMultiResults,
+      setIsMultiplayer,
+      bellStateRef,
+      gameRunningRef,
+      seatMap,
+      t,
+      fruitLabel,
+      updateFeedback,
+      playFeedbackSound,
+      triggerFlipAnimation,
+      triggerBellPress,
+      triggerCollectAnimation,
+      spawnBellParticles,
+      showPenalty,
+    },
+  });
 
   function stopGameLoops() {
     clearGameLoopHandles({
@@ -737,81 +572,6 @@ function App() {
       handled: true,
     };
     setActiveBellFruit(null);
-  }
-
-  function ensureAudioContext() {
-    if (typeof window === "undefined" || !settings.soundEnabled) {
-      return null;
-    }
-
-    if (!audioContextRef.current) {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextClass) {
-        return null;
-      }
-      audioContextRef.current = new AudioContextClass();
-    }
-
-    if (audioContextRef.current.state === "suspended") {
-      audioContextRef.current.resume().catch(() => {});
-    }
-
-    return audioContextRef.current;
-  }
-
-  function playTone({ frequency, duration = 0.12, type = "sine", gain = 0.04, delay = 0 }) {
-    const context = ensureAudioContext();
-    if (!context) {
-      return;
-    }
-
-    const schedule = () => {
-      const oscillator = context.createOscillator();
-      const gainNode = context.createGain();
-      const startAt = context.currentTime + delay;
-      const endAt = startAt + duration;
-
-      oscillator.type = type;
-      oscillator.frequency.setValueAtTime(frequency, startAt);
-      gainNode.gain.setValueAtTime(0.0001, startAt);
-      gainNode.gain.exponentialRampToValueAtTime(gain, startAt + 0.01);
-      gainNode.gain.exponentialRampToValueAtTime(0.0001, endAt);
-
-      oscillator.connect(gainNode);
-      gainNode.connect(context.destination);
-      oscillator.start(startAt);
-      oscillator.stop(endAt);
-    };
-
-    if (context.state === "running") {
-      schedule();
-    } else {
-      context.resume().then(schedule).catch(() => {});
-    }
-  }
-
-  function playFeedbackSound(kind) {
-    if (!settings.soundEnabled) {
-      return;
-    }
-
-    if (kind === "success") {
-      playTone({ frequency: 740, duration: 0.08, type: "triangle", gain: 0.035 });
-      playTone({ frequency: 988, duration: 0.12, type: "triangle", gain: 0.04, delay: 0.08 });
-      return;
-    }
-
-    if (kind === "warn") {
-      playTone({ frequency: 360, duration: 0.12, type: "sine", gain: 0.03 });
-      playTone({ frequency: 300, duration: 0.14, type: "sine", gain: 0.028, delay: 0.12 });
-      return;
-    }
-
-    if (kind === "penalty") {
-      playTone({ frequency: 220, duration: 0.12, type: "sawtooth", gain: 0.035 });
-      playTone({ frequency: 180, duration: 0.14, type: "sawtooth", gain: 0.035, delay: 0.1 });
-      playTone({ frequency: 140, duration: 0.18, type: "sawtooth", gain: 0.04, delay: 0.22 });
-    }
   }
 
   function triggerBossTaunt(forceMessage) {
