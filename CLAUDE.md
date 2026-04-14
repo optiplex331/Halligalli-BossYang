@@ -132,6 +132,26 @@ Server → client: `room:created`, `room:joined`, `room:player-update`, `room:er
 
 Host has exclusive `room:start` rights. Disconnects during lobby remove the player; disconnects mid-game mark them offline but keep the game running until all players disconnect.
 
+## Working Efficiency Notes
+
+Patterns that kept cost low during M1–M3; carry forward.
+
+### Do
+- **Parallel read burst first** — run Grep + multiple Read calls in one message to map all touch points before writing anything; one round-trip gives the full picture.
+- **Build before browser** — `npm run build` (< 1s) catches syntax errors at near-zero cost; only spin up the dev server after the build is clean.
+- **Batch `evaluate_script`** — verify multiple DOM attributes (aria-*, computed styles, tabIndex) in a single JS call rather than separate queries.
+- **Lighthouse one-shot for a11y** — a single `lighthouse_audit` call covers all four a11y sub-categories at once and beats manual element inspection every time.
+- **Trust the session summary / plan line anchors** — when the previous session's summary names an exact file + offset, go there directly; don't re-grep what's already been located.
+- **All edits in one pass, then verify once** — make every planned edit across a file before running any check; no redundant intermediate verification rounds.
+- **COPY table edits: always touch zh + en in one Edit pair** — App.jsx:94–300; never add a zh key without the en counterpart in the same message.
+
+### Don't
+- **Don't create tasks without checking TaskList across session boundaries** — duplicate tasks (M3 created #24–28 while #19–23 still existed) waste 10+ tool calls on cleanup.
+- **Don't load skills speculatively** — skill docs cost 2–4 k context tokens; only load when the plan is genuinely ambiguous and you need the framework's guidance.
+- **Don't re-grep what the session summary already resolved** — if the compacted summary says "L445 `ensureAudioContext`", go to offset 445; searching again is pure waste.
+
+---
+
 ## Deployment
 
 - **Target**: DigitalOcean App Platform, Amsterdam (`ams`), `apps-s-1vcpu-0.5gb` instance
