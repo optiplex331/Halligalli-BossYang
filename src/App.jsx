@@ -8,7 +8,9 @@ import {
   BEST_KEY,
   RECENT_KEY,
   SETTINGS_KEY,
+  appendHistoryEntry,
   loadBestSummary,
+  loadHistory,
   loadRecentSummary,
   loadSettings,
   normalizeSummary,
@@ -116,6 +118,15 @@ const COPY = {
     avgReaction: "平均反应",
     recent: "最近一局",
     best: "历史最佳",
+    historyTitle: "训练记录",
+    historyDesc: "最近 5 局的成绩，攒够数据后会出现趋势图。",
+    historyEmpty: "还没有完整对局，开一局把第一条数据填上。",
+    historyHeaderScore: "得分",
+    historyHeaderAccuracy: "正确率",
+    historyHeaderReaction: "平均反应",
+    historyModeSolo: "单人",
+    historyModeMulti: "多人",
+    historyJustNow: "刚刚",
     roundStats: "局内数据",
     history: "历史对比",
     correctHits: "正确拍铃",
@@ -209,6 +220,15 @@ const COPY = {
     avgReaction: "Avg reaction",
     recent: "Recent",
     best: "Best",
+    historyTitle: "Training log",
+    historyDesc: "Your last 5 rounds. Keep going to unlock trend charts.",
+    historyEmpty: "No completed rounds yet — play one to seed your log.",
+    historyHeaderScore: "Score",
+    historyHeaderAccuracy: "Accuracy",
+    historyHeaderReaction: "Avg reaction",
+    historyModeSolo: "Solo",
+    historyModeMulti: "Multi",
+    historyJustNow: "Just now",
     roundStats: "Round Stats",
     history: "History",
     correctHits: "Correct rings",
@@ -356,6 +376,7 @@ function App() {
   const [settings, setSettings] = useState(loadSettings);
   const [bestSummary, setBestSummary] = useState(loadBestSummary);
   const [recentSummary, setRecentSummary] = useState(loadRecentSummary);
+  const [history, setHistory] = useState(loadHistory);
   const [players, setPlayers] = useState(() => createPlayers(DEFAULT_SETTINGS.playerCount, FRUITS));
   const [currentTurn, setCurrentTurn] = useState(0);
   const [actingPlayer, setActingPlayer] = useState(0);
@@ -408,6 +429,7 @@ function App() {
     startedAt: 0,
     handled: true,
   });
+  const matchContextRef = useRef(null);
   const flipTimeoutRef = useRef(null);
   const particleTimeoutRef = useRef(null);
   const bellPressTimeoutRef = useRef(null);
@@ -428,6 +450,19 @@ function App() {
       (message, [name, value]) => message.replaceAll(`{${name}}`, String(value)),
       copy[key],
     );
+  }
+
+  function formatRelativeTime(ts) {
+    const diffMs = Date.now() - ts;
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return t("historyJustNow");
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h`;
+    const date = new Date(ts);
+    const locale = settings.language === "zh" ? "zh-CN" : "en-US";
+    return date.toLocaleDateString(locale, { month: "short", day: "numeric" });
   }
 
   useEffect(() => {
@@ -509,8 +544,10 @@ function App() {
       setMySeatIndex,
       setMultiResults,
       setIsMultiplayer,
+      setHistory,
       bellStateRef,
       gameRunningRef,
+      matchContextRef,
       seatMap,
       t,
       fruitLabel,
@@ -942,6 +979,13 @@ function App() {
       saveJson(BEST_KEY, summary);
     }
 
+    const updatedHistory = appendHistoryEntry({
+      ...summary,
+      ts: Date.now(),
+      mode: "solo",
+    });
+    setHistory(updatedHistory);
+
     bellStateRef.current = {
       available: false,
       fruitKey: null,
@@ -1015,6 +1059,47 @@ function App() {
                   </button>
                 </div>
               </div>
+            </div>
+
+            <div className="card history-card">
+              <div className="history-head">
+                <h2>{t("historyTitle")}</h2>
+                <p className="history-desc">{t("historyDesc")}</p>
+              </div>
+              {history.length === 0 ? (
+                <p className="history-empty">{t("historyEmpty")}</p>
+              ) : (
+                <ul className="history-list">
+                  {history.slice(0, 5).map((entry) => (
+                    <li key={entry.ts} className="history-row">
+                      <div className="history-meta">
+                        <span className={`history-mode mode-${entry.mode}`}>
+                          {entry.mode === "multi" ? t("historyModeMulti") : t("historyModeSolo")}
+                        </span>
+                        <span className="history-time">{formatRelativeTime(entry.ts)}</span>
+                      </div>
+                      <div className="history-stats">
+                        <div className="history-stat">
+                          <span className="history-stat-label">{t("historyHeaderScore")}</span>
+                          <span className="history-stat-value">{entry.score}</span>
+                        </div>
+                        <div className="history-stat">
+                          <span className="history-stat-label">{t("historyHeaderAccuracy")}</span>
+                          <span className="history-stat-value">
+                            {Math.round(entry.accuracy * 100)}%
+                          </span>
+                        </div>
+                        <div className="history-stat">
+                          <span className="history-stat-label">{t("historyHeaderReaction")}</span>
+                          <span className="history-stat-value">
+                            {entry.avgReactionMs ? `${entry.avgReactionMs}ms` : "-"}
+                          </span>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             <div className="boss-card">

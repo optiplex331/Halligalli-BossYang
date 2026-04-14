@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { getSocket } from "./socket.js";
 import { INITIAL_BREAKDOWN } from "../game/constants.js";
 import { getSeatLayouts } from "../game/rules.js";
+import { appendHistoryEntry } from "../game/persistence.js";
 
 export function useMultiplayerSocket({ isMultiplayer, mySeatIndex, language, actions }) {
   const actionsRef = useRef(actions);
@@ -41,6 +42,9 @@ export function useMultiplayerSocket({ isMultiplayer, mySeatIndex, language, act
 
     function onGameStart({ playerCount, difficulty, duration, topCards, seatMap: sm }) {
       a().setSeatMap(sm);
+      if (a().matchContextRef) {
+        a().matchContextRef.current = { playerCount, difficulty, durationSec: duration };
+      }
       const seats = getSeatLayouts(playerCount);
       const freshPlayers = Array.from({ length: playerCount }, (_, i) => ({
         id: i,
@@ -196,6 +200,25 @@ export function useMultiplayerSocket({ isMultiplayer, mySeatIndex, language, act
       a().gameRunningRef.current = false;
       a().setMultiResults(results);
       a().setScreen("result");
+
+      const mine = results && typeof results === "object" ? results[mySeatIndex] : null;
+      if (mine) {
+        const ctx = a().matchContextRef?.current ?? {};
+        const updated = appendHistoryEntry({
+          ts: Date.now(),
+          mode: "multi",
+          score: mine.score,
+          correctHits: mine.correctHits,
+          wrongHits: mine.wrongHits,
+          missedHits: mine.missedHits,
+          avgReactionMs: mine.avgReactionMs ?? 0,
+          bestReactionMs: mine.bestReactionMs ?? 0,
+          difficulty: ctx.difficulty,
+          durationSec: ctx.durationSec,
+          playerCount: ctx.playerCount,
+        });
+        a().setHistory(updated);
+      }
     }
 
     function onRoomDissolved() {
