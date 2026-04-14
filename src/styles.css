@@ -293,6 +293,7 @@ h2 {
   font-size: 0.9rem;
   font-weight: 500;
   letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .primary-button {
@@ -1302,6 +1303,15 @@ h2 {
   }
 }
 
+.card-3d-inner.face-up.card-swap {
+  animation: flip-full 0.42s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+@keyframes flip-full {
+  from { transform: rotateY(180deg); }
+  to   { transform: rotateY(540deg); }
+}
+
 /* ── Multiplayer Card ─────────────────────────────────────── */
 
 .multiplayer-card {
@@ -1337,7 +1347,7 @@ h2 {
 }
 
 .code-input {
-  width: 110px;
+  width: 130px;
   padding: 11px 16px;
   border-radius: var(--r-pill);
   border: 1px solid var(--border-1);
@@ -1877,6 +1887,7 @@ h2 {
   .screen-enter,
   .home-enter > *,
   .card-collected,
+  .card-3d-inner.face-up.card-swap,
   .card-3d-inner.just-flipped .card-3d-front::after,
   .glow-button,
   .glow-button::before,
