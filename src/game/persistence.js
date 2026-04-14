@@ -1,9 +1,12 @@
 import {
   BEST_KEY,
   DEFAULT_SETTINGS,
+  HISTORY_KEY,
   INITIAL_SUMMARY,
+  MAX_HISTORY,
   RECENT_KEY,
   SETTINGS_KEY,
+  VALID_MODES,
 } from "./constants.js";
 
 const VALID_DIFFICULTIES = new Set(["easy", "normal", "hard"]);
@@ -111,4 +114,28 @@ export function loadRecentSummary() {
   return normalizeSummary(loadJson(RECENT_KEY, INITIAL_SUMMARY));
 }
 
-export { SETTINGS_KEY, BEST_KEY, RECENT_KEY };
+export function normalizeHistoryEntry(value) {
+  if (!value || typeof value !== "object") return null;
+  const summary = normalizeSummary(value);
+  const ts = Number.isFinite(value.ts) ? value.ts : Date.now();
+  const mode = VALID_MODES.includes(value.mode) ? value.mode : "solo";
+  return { ts, mode, ...summary };
+}
+
+export function loadHistory() {
+  const raw = loadJson(HISTORY_KEY, []);
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(normalizeHistoryEntry)
+    .filter((entry) => entry !== null);
+}
+
+export function appendHistoryEntry(entry) {
+  const normalized = normalizeHistoryEntry(entry);
+  if (!normalized) return loadHistory();
+  const next = [normalized, ...loadHistory()].slice(0, MAX_HISTORY);
+  saveJson(HISTORY_KEY, next);
+  return next;
+}
+
+export { SETTINGS_KEY, BEST_KEY, RECENT_KEY, HISTORY_KEY };
