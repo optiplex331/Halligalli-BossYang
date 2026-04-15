@@ -12,25 +12,30 @@
 - **Codebase**: Game logic extracted to `src/game/` and shared with `server/` via relative imports; `App.jsx` is still large — new features need incremental decomposition
 - **Shared modules**: `src/game/*.js` runs in both browser (Vite) and Node (native ESM). All intra-module imports MUST use explicit `.js` extensions — Node ESM rejects extensionless specifiers.
 
+## Commands
+
+```bash
+npm run dev          # Vite dev server (port 5173, proxies /socket.io → :3001)
+npm run dev:server   # Game server only (port 3001) — run alongside dev
+npm test             # vitest run (all unit tests, no watch)
+npm run build        # Production build → dist/
+npm start            # Serve dist/ + socket.io (production)
+```
+
 ## Technology Stack
 
 - **Languages**: JavaScript (ES modules), CSS, HTML
 - **Runtime**: Browser + Node.js (`^20.19.0 || >=22.12.0`) — Node serves static + WebSocket in production
 - **Frameworks**: React 19, Vite 7, `@vitejs/plugin-react` 5, socket.io 4 (server) + socket.io-client 4 (browser); `vitest` for unit tests
-- **Browser APIs used**: `localStorage`, `addEventListener`, `setTimeout`, `setInterval`, `AudioContext`/`webkitAudioContext`
 - **Config**: No `.env`. `vite.config.js` proxies `/socket.io` → `localhost:3001` for dev. Runtime data in `localStorage` under `halligalli_settings`, `halligalli_best`, `halligalli_recent`, `halligalli_history` (rolling 100-round log).
-- **Deploy**: DigitalOcean App Platform (ams region). `.do/app.yaml` describes the single web service. Production command: `npm install --include=dev && npm run build && npm start`. Server listens on `PORT` (3001 locally, injected in prod) and serves `dist/` + socket.io from the same origin.
 
 ## Conventions
 
 ### Naming
-- `PascalCase` for React components (`FruitCardFace`, `TableSeat`, `App`) and their files (`App.jsx`)
-- `camelCase` for state, locals, helpers (`bestSummary`, `handleBell`, `loadSettings`)
 - `Ref` suffix for React refs (`revealIntervalRef`, `bellStateRef`, `gameStateRef`)
 - `INITIAL_*` for reusable state shape constants (`INITIAL_SUMMARY`, `INITIAL_BREAKDOWN`)
 - `UPPER_CASE` for static config tables (`FRUITS`, `MODES`, `COPY`, `PIP_LAYOUTS`, `COUNT_DISTRIBUTION`)
 - Verb-first for side-effect functions (`applyBellAvailability`, `playFeedbackSound`, `triggerBossTaunt`)
-- Boolean names read as conditions (`soundEnabled`, `bossDisrupting`, `isActive`, `isMultiplayer`)
 - CSS classes: kebab-case; variants via additive classes (`.chip.active`, `.feedback.success`, `.glow-button`)
 - Socket event names: `namespace:action` (`room:create`, `game:flip`, `game:bell-result`)
 
@@ -66,8 +71,8 @@
 ```
 src/
 ├── main.jsx            — mounts App, imports styles
-├── App.jsx             — all state, game loop, 4-screen render (~1520 lines, still shrinking)
-├── styles.css          — all styles including 3D animations (~1890 lines)
+├── App.jsx             — all state, game loop, 4-screen render (~1756 lines, still shrinking)
+├── styles.css          — all styles including 3D animations (~2110 lines)
 ├── audio/
 │   └── useAudioEngine.js   — encapsulates AudioContext + tone scheduling; returns {playFeedback, ensureUnlocked}
 ├── game/
@@ -75,12 +80,14 @@ src/
 │   ├── persistence.js  — loadJson/saveJson, normalize/load settings & summaries, loadHistory/appendHistoryEntry/normalizeHistoryEntry
 │   ├── rules.js        — deck creation, card flipping, bell evaluation, scoring math (shared with server)
 │   ├── lifecycle.js    — clearGameLoopHandles
-│   └── __tests__/      — vitest unit tests for rules, lifecycle
+│   └── __tests__/      — vitest unit tests for stats (bell simulation)
 ├── multiplayer/
 │   ├── socket.js               — singleton socket.io-client wrapper (getSocket/connectSocket/disconnectSocket)
 │   └── useMultiplayerSocket.js — subscribes to all room/game socket events; hoisted out of App.jsx
 └── __tests__/
-    └── persistence.test.js     — settings/summary/history normalization and rolling-log persistence
+    ├── persistence.test.js     — settings/summary/history normalization and rolling-log persistence
+    ├── rules.test.js           — deck creation, bell evaluation, scoring math
+    └── lifecycle.test.js       — game loop handle cleanup
 
 server/
 ├── index.js            — HTTP server (serves dist/ + SPA fallback + /health) + socket.io event router
@@ -96,15 +103,8 @@ scripts/simulate-bell.mjs — Monte Carlo utility for tuning COUNT_DISTRIBUTION 
 ### State Machine
 Screen-driven: `home → play → result` for single-player; `home → lobby → play → result` for multiplayer. All routing via `screen` useState — no router.
 
-### Key State in App
-- Navigation: `screen`
-- Settings/history: `settings`, `bestSummary`, `recentSummary`, `history` (rolling round log, newest-first, capped at `MAX_HISTORY`)
-- Simulation: `players`, `currentTurn`, `actingPlayer`, `secondsLeft`
-- Scoring: `score`, `correctHits`, `wrongHits`, `missedHits`, `reactionTimes`, `streak`, `scoreBreakdown`
-- Feedback: `feedback`, `activeBellFruit`, `penaltyNotice`, `bossTaunt`, `bossDisrupting`, `tauntEchoes`
-- Animation: `justFlippedSeat`, `bellParticles`, `bellPressed`, `cardCollecting`, `countdown`
-- Multiplayer: `isMultiplayer`, `roomCode`, `joinCode`, `roomPlayers`, `myPlayerId`, `mySeatIndex`, `lobbyError`, `multiResults`, `seatMap`
-- Refs: `gameStateRef` (stale-closure guard), `gameRunningRef` (gate), `bellStateRef` (bell timing), timer refs (`revealIntervalRef`, `flipTimeoutRef`, `particleTimeoutRef`, `bellPressTimeoutRef`, `collectTimeoutRef`, `countdownTimerRef`)
+### Key Refs
+`gameStateRef` (stale-closure guard for async callbacks), `gameRunningRef` (loop gate), `bellStateRef` (bell timing). All state names derivable from App.jsx.
 
 ### Game Loop
 **Single-player**: `revealIntervalRef` fires every `mode.revealMs` (900–1850ms) → `advanceTurn()` → flips card clockwise → `applyBellAvailability()` checks if any fruit totals exactly 5 across top face-up cards → sets `bellStateRef` and `activeBellFruit`.
@@ -135,8 +135,6 @@ Host has exclusive `room:start` rights. Disconnects during lobby remove the play
 ## Working Efficiency Notes
 
 **Meta rule**: At the end of each milestone or major functional update, add a brief retrospective to this section — one bullet per insight, lead with the rule, end with why. Aim for precision over volume: if a new pattern duplicates an existing one, update rather than append. Keep total Do/Don't lists under ~15 bullets each.
-
-Patterns that kept cost low during M1–M4; carry forward.
 
 ### Do
 - **Parallel read burst first** — run Grep + multiple Read calls in one message to map all touch points before writing anything; one round-trip gives the full picture.
