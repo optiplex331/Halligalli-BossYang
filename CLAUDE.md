@@ -22,6 +22,13 @@ npm run build        # Production build → dist/
 npm start            # Serve dist/ + socket.io (production)
 ```
 
+## Git
+
+- Use a task branch for non-trivial work; do not make feature or fix changes directly on `master`.
+- Follow Angular commit messages: `<type>(<scope>): <summary>`, for example `fix(game): clamp penalty score`.
+- Keep code and matching documentation changes in the same branch and commit set.
+- Deployment is push-driven: `git push origin master` triggers DigitalOcean App Platform.
+
 ## Technology Stack
 
 - **Languages**: JavaScript (ES modules), CSS, HTML
