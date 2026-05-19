@@ -69,7 +69,7 @@ async function serveStatic(req, res) {
     res.end(indexHtml);
   } catch {
     res.writeHead(404);
-    res.end("Not found — run `npm run build` first");
+    res.end("Not found — run `pnpm run build` first");
   }
 }
 
