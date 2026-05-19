@@ -6,8 +6,8 @@ services:
       repo: optiplex331/Halligalli-BossYang
       branch: master
       deploy_on_push: true
-    build_command: npm install --include=dev && npm run build
-    run_command: npm start
+    build_command: npm install -g pnpm@11.0.9 && pnpm install --frozen-lockfile && pnpm run build
+    run_command: node server/index.js
     environment_slug: node-js
     instance_count: 1
     instance_size_slug: apps-s-1vcpu-0.5gb

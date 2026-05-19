@@ -121,9 +121,9 @@ Dark felt palette, gold accent (`--gold-light`), tabular-numeral stat displays, 
 ### Dev (both frontend and server)
 
 ```bash
-npm install
-npm run dev         # Vite dev server on :5173
-npm run dev:server  # socket.io server on :3001 (in a second terminal)
+pnpm install
+pnpm run dev         # Vite dev server on :5173
+pnpm run dev:server  # socket.io server on :3001 (in a second terminal)
 ```
 
 Vite proxies `/socket.io` to the server automatically. Open http://localhost:5173.
@@ -133,21 +133,21 @@ Vite proxies `/socket.io` to the server automatically. Open http://localhost:517
 Multiplayer features will not work without the server, but single-player does:
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 ### Tests
 
 ```bash
-npm test
+pnpm run test
 ```
 
 ### Production build + run
 
 ```bash
-npm install --include=dev
-npm run build   # outputs dist/
-npm start       # server serves dist/ + socket.io on port 3001
+pnpm install
+pnpm run build   # outputs dist/
+pnpm start       # server serves dist/ + socket.io on port 3001
 ```
 
 Open http://localhost:3001.
@@ -187,7 +187,7 @@ public/yang-boss.png     — Boss portrait
 
 ## Deployment
 
-Deployed as a single Node service on DigitalOcean App Platform. The server serves the Vite-built static frontend from `dist/` and accepts WebSocket connections on the same origin — no CORS config, no separate CDN.
+Deployed as a single Node.js service on DigitalOcean App Platform. The server serves the Vite-built static frontend from `dist/` and accepts WebSocket connections on the same origin — no CORS config, no separate CDN.
 
 - Config: `.do/app.yaml`
 - Trigger: `git push origin master` (auto-deploys)

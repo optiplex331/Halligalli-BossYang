@@ -15,11 +15,11 @@
 ## Commands
 
 ```bash
-npm run dev          # Vite dev server (port 5173, proxies /socket.io → :3001)
-npm run dev:server   # Game server only (port 3001) — run alongside dev
-npm test             # vitest run (all unit tests, no watch)
-npm run build        # Production build → dist/
-npm start            # Serve dist/ + socket.io (production)
+pnpm run dev          # Vite dev server (port 5173, proxies /socket.io → :3001)
+pnpm run dev:server   # Game server only (port 3001) — run alongside dev
+pnpm run test         # vitest run (all unit tests, no watch)
+pnpm run build        # Production build → dist/
+pnpm start            # Serve dist/ + socket.io (production)
 ```
 
 ## Git
@@ -145,7 +145,7 @@ Host has exclusive `room:start` rights. Disconnects during lobby remove the play
 
 ### Do
 - **Parallel read burst first** — run Grep + multiple Read calls in one message to map all touch points before writing anything; one round-trip gives the full picture.
-- **Build before browser** — `npm run build` (< 1s) catches syntax errors at near-zero cost; only spin up the dev server after the build is clean.
+- **Build before browser** — `pnpm run build` (< 1s) catches syntax errors at near-zero cost; only spin up the dev server after the build is clean.
 - **Batch `evaluate_script`** — verify multiple DOM attributes (aria-*, computed styles, tabIndex) in a single JS call rather than separate queries.
 - **Lighthouse one-shot for a11y** — a single `lighthouse_audit` call covers all four a11y sub-categories at once and beats manual element inspection every time.
 - **Trust the session summary / plan line anchors** — when the previous session's summary names an exact file + offset, go there directly; don't re-grep what's already been located.
@@ -170,13 +170,4 @@ Host has exclusive `room:start` rights. Disconnects during lobby remove the play
 - **Manual redeploy**: `doctl apps create-deployment <app-id>`
 - **Spec updates**: `doctl apps update <app-id> --spec .do/app.yaml`
 - **Logs**: `doctl apps logs <app-id> --deployment <deployment-id> --type build|run`
-- **Gotcha**: `build_command` must include `--include=dev` because Vite lives in devDependencies and App Platform's Node buildpack skips dev deps by default.
-
-
-<claude-mem-context>
-# Memory Context
-
-# [Halligalli] recent context, 2026-04-24 1:39pm GMT+2
-
-No previous sessions found.
-</claude-mem-context>
+- **Gotcha**: `.do/app.yaml` installs pnpm in the build command before `pnpm install --frozen-lockfile`, keeping the runtime on Node.js only.

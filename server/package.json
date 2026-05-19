@@ -2,10 +2,15 @@
   "name": "halligalli-server",
   "private": true,
   "version": "0.1.0",
+  "packageManager": "pnpm@11.0.9",
   "type": "module",
   "scripts": {
     "dev": "node index.js",
     "start": "node index.js"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0",
+    "pnpm": ">=11.0.9"
   },
   "dependencies": {
     "socket.io": "^4.8.0"
