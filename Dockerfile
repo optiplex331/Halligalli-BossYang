@@ -27,6 +27,17 @@ FROM node:22.13.0-alpine AS runtime
 ARG APP_VERSION=local
 ARG COMMIT_SHA=unknown
 
+RUN apk upgrade --no-cache \
+  && rm -rf \
+    /opt/yarn-v* \
+    /usr/local/bin/corepack \
+    /usr/local/bin/npm \
+    /usr/local/bin/npx \
+    /usr/local/bin/yarn \
+    /usr/local/bin/yarnpkg \
+    /usr/local/lib/node_modules/corepack \
+    /usr/local/lib/node_modules/npm
+
 ENV NODE_ENV=production
 ENV PORT=3001
 ENV APP_VERSION=$APP_VERSION
