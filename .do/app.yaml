@@ -6,7 +6,7 @@ services:
       repo: optiplex331/Halligalli-BossYang
       branch: master
       deploy_on_push: false
-    build_command: npm install -g pnpm@11.0.9 && pnpm install --frozen-lockfile && pnpm run build
+    build_command: CI=true pnpm install --frozen-lockfile && pnpm run build
     run_command: node server/index.js
     environment_slug: node-js
     instance_count: 1
