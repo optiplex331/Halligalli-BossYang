@@ -32,13 +32,13 @@ jobs:
 
     steps:
       - name: Check out released commit
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ github.event.workflow_run.head_sha || 'master' }}
           fetch-depth: 0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 22.13.0
 
@@ -84,7 +84,7 @@ jobs:
           : "${DO_PRODUCTION_URL:?Set repository variable DO_PRODUCTION_URL to the live production URL.}"
 
       - name: Set up doctl
-        uses: digitalocean/action-doctl@v2
+        uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2
         with:
           token: ${{ secrets.DO_API_TOKEN }}
 
