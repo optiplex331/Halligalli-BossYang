@@ -27,12 +27,12 @@ pnpm start            # Serve dist/ + socket.io (production)
 - Use a task branch for non-trivial work; do not make feature or fix changes directly on `master`.
 - Follow Angular commit messages: `<type>(<scope>): <summary>`, for example `fix(game): clamp penalty score`.
 - Keep code and matching documentation changes in the same branch and commit set.
-- Deployment is push-driven: `git push origin master` triggers DigitalOcean App Platform.
+- Deployment is GitHub Actions-controlled in Stage 1: PR checks gate `master`, the container workflow publishes GHCR images, and `Release DO Production` triggers DigitalOcean after `master` container validation succeeds.
 
 ## Technology Stack
 
 - **Languages**: JavaScript (ES modules), CSS, HTML
-- **Runtime**: Browser + Node.js (`^20.19.0 || >=22.12.0`) — Node serves static + WebSocket in production
+- **Runtime**: Browser + Node.js (`^20.19.0 || >=22.13.0`) — Node serves static + WebSocket in production
 - **Frameworks**: React 19, Vite 7, `@vitejs/plugin-react` 5, socket.io 4 (server) + socket.io-client 4 (browser); `vitest` for unit tests
 - **Config**: No `.env`. `vite.config.js` proxies `/socket.io` → `localhost:3001` for dev. Runtime data in `localStorage` under `halligalli_settings`, `halligalli_best`, `halligalli_recent`, `halligalli_history` (rolling 100-round log).
 
@@ -166,8 +166,8 @@ Host has exclusive `room:start` rights. Disconnects during lobby remove the play
 - **Target**: DigitalOcean App Platform, Amsterdam (`ams`), `apps-s-1vcpu-0.5gb` instance
 - **URL**: https://halligalli-8xko3.ondigitalocean.app/
 - **App ID**: `a28fcbb5-7581-41f7-8bd6-6c9d0ded0994`
-- **Trigger**: `git push origin master` (spec has `deploy_on_push: true`)
-- **Manual redeploy**: `doctl apps create-deployment <app-id>`
+- **Trigger**: GitHub Actions `Release DO Production` after the `Container` workflow succeeds on `master`
+- **Manual redeploy**: dispatch the `Release DO Production` workflow from GitHub Actions
 - **Spec updates**: `doctl apps update <app-id> --spec .do/app.yaml`
 - **Logs**: `doctl apps logs <app-id> --deployment <deployment-id> --type build|run`
 - **Gotcha**: `.do/app.yaml` installs pnpm in the build command before `pnpm install --frozen-lockfile`, keeping the runtime on Node.js only.

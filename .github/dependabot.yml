@@ -1,0 +1,43 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    target-branch: master
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Europe/Amsterdam
+    open-pull-requests-limit: 3
+    groups:
+      product-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: npm
+    directory: /server
+    target-branch: master
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:30"
+      timezone: Europe/Amsterdam
+    open-pull-requests-limit: 2
+    groups:
+      server-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: master
+    schedule:
+      interval: weekly
+      day: monday
+      time: "10:00"
+      timezone: Europe/Amsterdam
+    open-pull-requests-limit: 2
+    groups:
+      actions:
+        patterns:
+          - "*"

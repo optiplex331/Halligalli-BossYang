@@ -142,6 +142,12 @@ pnpm run dev
 pnpm run test
 ```
 
+### Container check
+
+```bash
+docker build -t halligalli:local .
+```
+
 ### Production build + run
 
 ```bash
@@ -185,15 +191,21 @@ public/yang-boss.png     — Boss portrait
 
 ---
 
-## Deployment
+## Deployment and Operations
 
 Deployed as a single Node.js service on DigitalOcean App Platform. The server serves the Vite-built static frontend from `dist/` and accepts WebSocket connections on the same origin — no CORS config, no separate CDN.
 
 - Config: `.do/app.yaml`
-- Trigger: `git push origin master` (auto-deploys)
-- Manual: `doctl apps create-deployment <app-id>`
+- Release branch: `master`
+- Trigger: GitHub Actions `Release DO Production` after the container workflow succeeds on `master`
+- Health check: `/health` reports status, active rooms, release version, and commit SHA
+- Container registry: GHCR publishes traceable Stage 1 images for `master`
 
-See `CLAUDE.md` → Deployment for full ops notes.
+Operations docs:
+
+- [CI/CD](docs/operations/ci-cd.md)
+- [DigitalOcean release](docs/operations/digitalocean-release.md)
+- [Rollback](docs/operations/rollback.md)
 
 ---
 
