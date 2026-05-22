@@ -2,13 +2,11 @@ name: halligalli
 region: ams
 services:
   - name: web
-    github:
-      repo: optiplex331/Halligalli-BossYang
-      branch: master
-      deploy_on_push: false
-    build_command: CI=true pnpm install --frozen-lockfile && pnpm run build
-    run_command: node server/index.js
-    environment_slug: node-js
+    image:
+      registry_type: GHCR
+      registry: optiplex331
+      repository: halligalli-bossyang
+      tag: latest # production_halligalli-web
     instance_count: 1
     instance_size_slug: apps-s-1vcpu-0.5gb
     http_port: 3001

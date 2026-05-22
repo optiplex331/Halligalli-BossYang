@@ -193,13 +193,13 @@ public/yang-boss.png     — Boss portrait
 
 ## Deployment and Operations
 
-Deployed as a single Node.js service on DigitalOcean App Platform. The server serves the Vite-built static frontend from `dist/` and accepts WebSocket connections on the same origin — no CORS config, no separate CDN.
+Deployed as a single GHCR-backed Node.js service on DigitalOcean App Platform. The server serves the Vite-built static frontend from `dist/` and accepts WebSocket connections on the same origin — no CORS config, no separate CDN.
 
 - Config: `.do/app.yaml`
 - Release branch: `master`
 - Trigger: GitHub Actions `Release DO Production` after the container workflow succeeds on `master`
 - Health check: `/health` reports status, active rooms, release version, and commit SHA
-- Container registry: GHCR publishes traceable Stage 1 images for `master`
+- Container registry: GHCR publishes and DigitalOcean runs traceable Stage 1 images for `master`
 
 Operations docs:
 

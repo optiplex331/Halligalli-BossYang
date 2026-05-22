@@ -1,0 +1,145 @@
+version: "3"
+
+vars:
+  REPO_ROOT:
+    sh: git -C "{{.TASKFILE_DIR}}/../.." rev-parse --show-toplevel
+  RELEASE_TAG_PATTERN: "v[0-9]*.[0-9]*.[0-9]*"
+  PRODUCTION_IMAGE_COMMENT: "# production_halligalli-web"
+
+tasks:
+  image-repo:
+    desc: "Emit the lowercase GHCR image repository for this GitHub repository"
+    dir: "{{.REPO_ROOT}}"
+    cmds:
+      - |
+        set -euo pipefail
+
+        if [[ -z "${IMAGE_REPO:-}" && -z "${GITHUB_REPOSITORY:-}" ]]; then
+          echo "Set IMAGE_REPO or run inside GitHub Actions with GITHUB_REPOSITORY." >&2
+          exit 1
+        fi
+
+        image="${IMAGE_REPO:-ghcr.io/${GITHUB_REPOSITORY}}"
+        echo "${image}" | tr '[:upper:]' '[:lower:]'
+    silent: true
+
+  generate-version:
+    desc: "Use git describe to generate a version from the nearest vX.Y.Z tag"
+    dir: "{{.REPO_ROOT}}"
+    cmds:
+      - |
+        set -euo pipefail
+
+        tag="$(git describe --tags --first-parent --match '{{.RELEASE_TAG_PATTERN}}' 2>/dev/null || true)"
+        if [[ -z "${tag}" ]]; then
+          echo "No release tag found. Create an initial tag such as v0.1.0 before building release metadata." >&2
+          exit 1
+        fi
+
+        echo "${tag#v}"
+    silent: true
+
+  generate-version-tag:
+    desc: "Combine the image repo with the git-derived version"
+    dir: "{{.REPO_ROOT}}"
+    vars:
+      IMAGE_REPO:
+        sh: task -s -t "{{.TASKFILE_DIR}}/Taskfile.yaml" image-repo
+      VERSION:
+        sh: task -s -t "{{.TASKFILE_DIR}}/Taskfile.yaml" generate-version
+    cmds:
+      - |
+        echo "{{.IMAGE_REPO}}:{{.VERSION}}"
+    silent: true
+
+  generate-extended-version:
+    desc: "Emit X.Y.Z-000N-g<SHA> from the nearest vX.Y.Z tag"
+    dir: "{{.REPO_ROOT}}"
+    cmds:
+      - |
+        set -euo pipefail
+
+        git_version="$(git describe --tags --first-parent --long --abbrev=7 --match '{{.RELEASE_TAG_PATTERN}}' 2>/dev/null || true)"
+        if [[ -z "${git_version}" ]]; then
+          echo "No release tag found. Create an initial tag such as v0.1.0 before building release metadata." >&2
+          exit 1
+        fi
+
+        git_version="${git_version#v}"
+        IFS='-' read -r base_version count git_ref <<<"${git_version}"
+        printf "%s-%04d-%s\n" "${base_version}" "${count}" "${git_ref}"
+    silent: true
+
+  generate-extended-version-tag:
+    desc: "Combine the image repo with the extended git-derived version"
+    dir: "{{.REPO_ROOT}}"
+    vars:
+      IMAGE_REPO:
+        sh: task -s -t "{{.TASKFILE_DIR}}/Taskfile.yaml" image-repo
+      VERSION:
+        sh: task -s -t "{{.TASKFILE_DIR}}/Taskfile.yaml" generate-extended-version
+    cmds:
+      - |
+        echo "{{.IMAGE_REPO}}:{{.VERSION}}"
+    silent: true
+
+  update-image-tags:
+    desc: "Recursively update YAML image tag values with the specified marker comment"
+    dir: "{{.REPO_ROOT}}"
+    cmds:
+      - |
+        set -euo pipefail
+
+        if [[ -z "{{.NEW_TAG}}" || -z "{{.IDENTIFIER_COMMENT}}" || -z "{{.STARTING_PATH}}" ]]; then
+          echo "Usage: task update-image-tags NEW_TAG=new-tag IDENTIFIER_COMMENT='# marker' STARTING_PATH=/path/to/start" >&2
+          exit 1
+        fi
+
+        find "{{.STARTING_PATH}}" -type f \( -name "*.yaml" -o -name "*.yml" \) -exec grep -l "{{.IDENTIFIER_COMMENT}}" {} \; | while read -r file; do
+          echo "Updating: ${file}"
+          NEW_TAG="{{.NEW_TAG}}" IDENTIFIER_COMMENT="{{.IDENTIFIER_COMMENT}}" perl -0pi -e '
+            my $tag = $ENV{"NEW_TAG"};
+            my $marker = quotemeta($ENV{"IDENTIFIER_COMMENT"});
+            s|(^[ \t]*[^:\n]+:\s*).*?(\s*$marker)|$1$tag$2|m;
+          ' "${file}"
+        done
+
+  update-production-image-tag:
+    desc: "Update the DigitalOcean production image tag marker"
+    dir: "{{.REPO_ROOT}}"
+    cmds:
+      - task: update-image-tags
+        vars:
+          IDENTIFIER_COMMENT: "{{.PRODUCTION_IMAGE_COMMENT}}"
+          STARTING_PATH: "{{.STARTING_PATH}}"
+          NEW_TAG: "{{.NEW_TAG}}"
+
+  render-do-app-spec:
+    desc: "Render a DigitalOcean image-based app spec for a release"
+    dir: "{{.REPO_ROOT}}"
+    cmds:
+      - |
+        set -euo pipefail
+
+        if [[ -z "{{.OUTPUT_PATH}}" || -z "{{.IMAGE_TAG}}" || -z "{{.APP_VERSION}}" || -z "{{.COMMIT_SHA}}" ]]; then
+          echo "Usage: task render-do-app-spec OUTPUT_PATH=/tmp/app.yaml IMAGE_TAG=tag APP_VERSION=version COMMIT_SHA=sha" >&2
+          exit 1
+        fi
+
+        cp .do/app.yaml "{{.OUTPUT_PATH}}"
+
+        task -s -t "{{.TASKFILE_DIR}}/Taskfile.yaml" update-production-image-tag \
+          STARTING_PATH="$(dirname "{{.OUTPUT_PATH}}")" \
+          NEW_TAG="{{.IMAGE_TAG}}"
+
+        perl -0pi -e 's/(key: APP_VERSION\s*\n\s*value:\s*).*/${1}"{{.APP_VERSION}}"/' "{{.OUTPUT_PATH}}"
+        perl -0pi -e 's/(key: COMMIT_SHA\s*\n\s*value:\s*).*/${1}"{{.COMMIT_SHA}}"/' "{{.OUTPUT_PATH}}"
+
+        if [[ -n "${GHCR_REGISTRY_CREDENTIALS:-}" ]]; then
+          perl -0pi -e 's/(^(\s*)tag:\s*[^\n]+# production_halligalli-web\n)/$1$2registry_credentials: "$ENV{GHCR_REGISTRY_CREDENTIALS}"\n/m' "{{.OUTPUT_PATH}}"
+        fi
+
+        grep -q "{{.PRODUCTION_IMAGE_COMMENT}}" "{{.OUTPUT_PATH}}"
+        grep -q 'key: APP_VERSION' "{{.OUTPUT_PATH}}"
+        grep -q 'key: COMMIT_SHA' "{{.OUTPUT_PATH}}"
+    silent: true
