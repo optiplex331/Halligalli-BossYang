@@ -5,7 +5,7 @@ services:
     github:
       repo: optiplex331/Halligalli-BossYang
       branch: master
-      deploy_on_push: true
+      deploy_on_push: false
     build_command: npm install -g pnpm@11.0.9 && pnpm install --frozen-lockfile && pnpm run build
     run_command: node server/index.js
     environment_slug: node-js
@@ -15,3 +15,7 @@ services:
     envs:
       - key: NODE_ENV
         value: production
+      - key: APP_VERSION
+        value: local
+      - key: COMMIT_SHA
+        value: unknown

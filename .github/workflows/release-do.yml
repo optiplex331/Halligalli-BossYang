@@ -1,0 +1,194 @@
+name: Release DO Production
+
+on:
+  workflow_run:
+    workflows:
+      - Container
+    types:
+      - completed
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: do-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy DO Production
+    if: (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master') || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: do-production
+      url: ${{ vars.DO_PRODUCTION_URL }}
+
+    env:
+      DO_APP_ID: ${{ vars.DO_APP_ID }}
+      DO_PRODUCTION_URL: ${{ vars.DO_PRODUCTION_URL }}
+
+    steps:
+      - name: Check out released commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || 'master' }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+
+      - name: Resolve release metadata
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          image="$(echo "ghcr.io/${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+
+          if describe="$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' --long --abbrev=7 2>/dev/null)"; then
+            base="${describe%%-*}"
+            rest="${describe#*-}"
+            distance="${rest%%-*}"
+            short_sha="${describe##*-g}"
+            base="${base#v}"
+          else
+            base="$(node -p "require('./package.json').version")"
+            distance="$(git rev-list --count HEAD)"
+            short_sha="$(git rev-parse --short=7 HEAD)"
+          fi
+
+          version_tag="${base}-$(printf "%04d" "${distance}")-g${short_sha}"
+          commit_sha="$(git rev-parse HEAD)"
+
+          {
+            echo "image=${image}"
+            echo "version_tag=${version_tag}"
+            echo "commit_sha=${commit_sha}"
+          } >> "${GITHUB_OUTPUT}"
+
+          echo "Release commit: ${commit_sha}"
+          echo "App version: ${version_tag}"
+          echo "GHCR image: ${image}:${version_tag}"
+
+      - name: Validate release configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          : "${DO_APP_ID:?Set repository variable DO_APP_ID to the DigitalOcean App Platform app ID.}"
+          : "${DO_PRODUCTION_URL:?Set repository variable DO_PRODUCTION_URL to the live production URL.}"
+
+      - name: Set up doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DO_API_TOKEN }}
+
+      - name: Render release app spec
+        shell: bash
+        env:
+          APP_VERSION: ${{ steps.release.outputs.version_tag }}
+          COMMIT_SHA: ${{ steps.release.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+
+          spec_path="${RUNNER_TEMP}/app.release.yaml"
+          cp .do/app.yaml "${spec_path}"
+
+          perl -0pi -e 's/(deploy_on_push:\s*)true/${1}false/g' "${spec_path}"
+          perl -0pi -e 's/(key: APP_VERSION\s*\n\s*value:\s*).*/${1}"$ENV{APP_VERSION}"/' "${spec_path}"
+          perl -0pi -e 's/(key: COMMIT_SHA\s*\n\s*value:\s*).*/${1}"$ENV{COMMIT_SHA}"/' "${spec_path}"
+
+          grep -q 'deploy_on_push: false' "${spec_path}"
+          grep -q 'key: APP_VERSION' "${spec_path}"
+          grep -q 'key: COMMIT_SHA' "${spec_path}"
+
+          echo "spec_path=${spec_path}" >> "${GITHUB_ENV}"
+
+      - name: Deploy via DigitalOcean
+        id: deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Deploying DO app ${DO_APP_ID}"
+          echo "Release commit ${{ steps.release.outputs.commit_sha }}"
+          echo "GHCR image ${{ steps.release.outputs.image }}:${{ steps.release.outputs.version_tag }}"
+
+          deployment_id="$(doctl apps update "${DO_APP_ID}" \
+            --spec "${spec_path}" \
+            --update-sources \
+            --wait \
+            --format ActiveDeployment.ID \
+            --no-header | tail -n 1 | tr -d '[:space:]')"
+
+          if [[ -z "${deployment_id}" ]]; then
+            deployment_id="$(doctl apps list-deployments "${DO_APP_ID}" --format ID --no-header | head -n 1 | awk '{print $1}')"
+          fi
+
+          if [[ -z "${deployment_id}" ]]; then
+            echo "DigitalOcean deployment finished but no deployment ID was returned." >&2
+            exit 1
+          fi
+
+          echo "deployment_id=${deployment_id}" >> "${GITHUB_OUTPUT}"
+          echo "DO deployment ID: ${deployment_id}"
+
+      - name: Smoke test /health
+        shell: bash
+        env:
+          EXPECTED_VERSION: ${{ steps.release.outputs.version_tag }}
+          EXPECTED_COMMIT: ${{ steps.release.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+
+          health_url="${DO_PRODUCTION_URL%/}/health"
+          echo "Smoke testing ${health_url}"
+
+          for attempt in {1..12}; do
+            response="$(curl --fail --silent --show-error "${health_url}" || true)"
+
+            if HEALTH_RESPONSE="${response}" node <<'NODE'
+            const body = process.env.HEALTH_RESPONSE;
+            let health;
+
+            try {
+              health = JSON.parse(body);
+            } catch {
+              console.error("Health response is not valid JSON:", body);
+              process.exit(1);
+            }
+
+            const expectedVersion = process.env.EXPECTED_VERSION;
+            const expectedCommit = process.env.EXPECTED_COMMIT;
+
+            if (health.status !== "ok") {
+              console.error("Unexpected health status:", health);
+              process.exit(1);
+            }
+
+            if (health.version !== expectedVersion || health.commit !== expectedCommit) {
+              console.error("Release identity mismatch:", {
+                expectedVersion,
+                actualVersion: health.version,
+                expectedCommit,
+                actualCommit: health.commit,
+              });
+              process.exit(1);
+            }
+          NODE
+            then
+              echo "Smoke test passed for deployment ${{ steps.deployment.outputs.deployment_id }}"
+              exit 0
+            fi
+
+            echo "Health check attempt ${attempt} did not match the release yet."
+            sleep 10
+          done
+
+          echo "Production /health did not report the expected release metadata." >&2
+          exit 1
