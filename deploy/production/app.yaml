@@ -1,19 +1,19 @@
 name: halligalli
 region: ams
 services:
-  - name: web
-    image:
-      registry_type: GHCR
-      registry: optiplex331
-      repository: halligalli-bossyang
-      digest: sha256:7487de8666c7ab8cd342b90ee55863f96f51211cc796be9c2173df3cc3e2dfc1
-    instance_count: 1
-    instance_size_slug: apps-s-1vcpu-0.5gb
-    http_port: 3001
-    envs:
-      - key: NODE_ENV
-        value: production
-      - key: APP_VERSION
-        value: 0.1.0-0002-gb051852
-      - key: COMMIT_SHA
-        value: b051852b28e1f2bd2f8e5f64d0d142a3d5abe63c
+- name: web
+  image:
+    registry_type: GHCR
+    registry: optiplex331
+    repository: halligalli-bossyang
+    digest: sha256:f6adeabd5007292b4785e80b145d3ee512ff54b84cde19144cb81ffb73ae1766
+  instance_count: 1
+  instance_size_slug: apps-s-1vcpu-0.5gb
+  http_port: 3001
+  envs:
+  - key: NODE_ENV
+    value: production
+  - key: APP_VERSION
+    value: 0.2.0
+  - key: COMMIT_SHA
+    value: 8ac2bdf60ee386bd78346e8cfea01071f95f16ad
