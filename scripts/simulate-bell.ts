@@ -5,19 +5,35 @@
  * Usage: node scripts/simulate-bell.mjs
  */
 
-const FRUIT_KEYS = ["banana", "strawberry", "lemon", "grape"];
+const FRUIT_KEYS = ["banana", "strawberry", "lemon", "grape"] as const;
 
-function shuffle(cards) {
+type SimFruitKey = (typeof FRUIT_KEYS)[number];
+type Distribution = readonly (readonly [count: number, repeat: number])[];
+
+interface SimCard {
+  id: number;
+  fruit: SimFruitKey;
+  count: number;
+}
+
+interface SimPlayer {
+  drawPile: SimCard[];
+  faceUpPile: SimCard[];
+}
+
+function shuffle<T>(cards: readonly T[]): T[] {
   const next = [...cards];
   for (let i = next.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [next[i], next[j]] = [next[j], next[i]];
+    const current = next[i]!;
+    next[i] = next[j]!;
+    next[j] = current;
   }
   return next;
 }
 
-function createDeck(distribution) {
-  const cards = [];
+function createDeck(distribution: Distribution): SimCard[] {
+  const cards: SimCard[] = [];
   let serial = 0;
   for (const fruitKey of FRUIT_KEYS) {
     for (const [count, repeat] of distribution) {
@@ -29,15 +45,15 @@ function createDeck(distribution) {
   return shuffle(cards);
 }
 
-function simulateGame(distribution, playerCount, maxFlips = 200) {
+function simulateGame(distribution: Distribution, playerCount: number, maxFlips = 200) {
   const deck = createDeck(distribution);
-  const players = Array.from({ length: playerCount }, () => ({
+  const players: SimPlayer[] = Array.from({ length: playerCount }, () => ({
     drawPile: [],
     faceUpPile: [],
   }));
 
   deck.forEach((card, i) => {
-    players[i % playerCount].drawPile.push(card);
+    players[i % playerCount]?.drawPile.push(card);
   });
 
   let flipsSinceBell = 0;
@@ -48,18 +64,25 @@ function simulateGame(distribution, playerCount, maxFlips = 200) {
 
   for (let flip = 0; flip < maxFlips; flip++) {
     const player = players[turn % playerCount];
-    if (!player.drawPile.length) {
+    if (!player || !player.drawPile.length) {
       turn++;
       continue;
     }
 
     const card = player.drawPile.pop();
+    if (!card) {
+      turn++;
+      continue;
+    }
     player.faceUpPile.push(card);
     totalFlips++;
     flipsSinceBell++;
 
     // Check bell: sum top cards
-    const totals = {};
+    const totals = Object.fromEntries(FRUIT_KEYS.map((key) => [key, 0])) as Record<
+      SimFruitKey,
+      number
+    >;
     for (const key of FRUIT_KEYS) totals[key] = 0;
     for (const p of players) {
       const top = p.faceUpPile[p.faceUpPile.length - 1];
@@ -83,7 +106,7 @@ function simulateGame(distribution, playerCount, maxFlips = 200) {
   return { totalBells, totalFlips, avgFlipsPerBell: totalBells > 0 ? totalFlipsBetweenBells / totalBells : Infinity };
 }
 
-function runSimulation(label, distribution, trials = 10000) {
+function runSimulation(label: string, distribution: Distribution, trials = 10000) {
   const deckSize = distribution.reduce((sum, [, repeat]) => sum + repeat, 0) * 4;
   console.log(`\n=== ${label} (${deckSize} cards) ===`);
   console.log(`  Distribution: ${distribution.map(([c, r]) => `${c}×${r}`).join(", ")}`);

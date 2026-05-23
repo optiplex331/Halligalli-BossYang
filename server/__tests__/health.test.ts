@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
+import type { AddressInfo } from "net";
 import { createHalligalliServer } from "../index.js";
 import { createHealthPayload } from "../health.js";
+import { Room } from "../Room.js";
 
 const ORIGINAL_ENV = {
   APP_VERSION: process.env.APP_VERSION,
@@ -9,7 +11,7 @@ const ORIGINAL_ENV = {
 };
 
 afterEach(() => {
-  for (const key of Object.keys(ORIGINAL_ENV)) {
+  for (const key of Object.keys(ORIGINAL_ENV) as Array<keyof typeof ORIGINAL_ENV>) {
     if (ORIGINAL_ENV[key] === undefined) {
       delete process.env[key];
     } else {
@@ -24,16 +26,22 @@ function clearReleaseEnv() {
   delete process.env.GITHUB_SHA;
 }
 
-function listen(server) {
+type HalligalliServer = ReturnType<typeof createHalligalliServer>;
+
+function listen(server: HalligalliServer): Promise<string> {
   return new Promise((resolve) => {
     server.httpServer.listen(0, "127.0.0.1", () => {
-      const { port } = server.httpServer.address();
+      const address = server.httpServer.address();
+      if (!address || typeof address === "string") {
+        throw new Error("Expected test server to listen on a TCP port");
+      }
+      const { port } = address as AddressInfo;
       resolve(`http://127.0.0.1:${port}`);
     });
   });
 }
 
-function stop(server) {
+function stop(server: HalligalliServer): Promise<void> {
   return new Promise((resolve) => {
     server.stop(resolve);
   });
@@ -73,7 +81,7 @@ describe("/health", () => {
     process.env.COMMIT_SHA = "7654321fedcba";
 
     const server = createHalligalliServer();
-    server.rooms.set("ROOM", {});
+    server.rooms.set("ROOM", new Room("ROOM", 0, 4, "normal", 60, "zh"));
 
     try {
       const baseUrl = await listen(server);

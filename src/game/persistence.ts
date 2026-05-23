@@ -12,21 +12,58 @@ import {
   SETTINGS_KEY,
   VALID_MODES,
 } from "./constants.js";
+import type {
+  AchievementKey,
+  Achievements,
+  DailyGoal,
+  Difficulty,
+  GameMode,
+  GameSettings,
+  HistoryEntry,
+  Language,
+  RoundSummary,
+} from "./types.js";
 
-const VALID_DIFFICULTIES = new Set(["easy", "normal", "hard"]);
+type JsonRecord = Record<string, unknown>;
+
+const VALID_DIFFICULTIES = new Set<Difficulty>(["easy", "normal", "hard"]);
 const VALID_DURATIONS = new Set([45, 60, 90]);
 const VALID_PLAYER_COUNTS = new Set([3, 4, 5, 6]);
-const VALID_LANGUAGES = new Set(["zh", "en"]);
+const VALID_LANGUAGES = new Set<Language>(["zh", "en"]);
 
-function clampNumber(value, fallback) {
-  return Number.isFinite(value) ? value : fallback;
+function asRecord(value: unknown): JsonRecord {
+  return value && typeof value === "object" ? (value as JsonRecord) : {};
 }
 
-function clampInteger(value, fallback) {
-  return Number.isInteger(value) ? value : fallback;
+function clampNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
-export function loadJson(key, fallback) {
+function clampInteger(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isInteger(value) ? value : fallback;
+}
+
+function isDifficulty(value: unknown): value is Difficulty {
+  return typeof value === "string" && VALID_DIFFICULTIES.has(value as Difficulty);
+}
+
+function isLanguage(value: unknown): value is Language {
+  return typeof value === "string" && VALID_LANGUAGES.has(value as Language);
+}
+
+function isDuration(value: unknown): value is number {
+  return typeof value === "number" && VALID_DURATIONS.has(value);
+}
+
+function isPlayerCount(value: unknown): value is number {
+  return typeof value === "number" && VALID_PLAYER_COUNTS.has(value);
+}
+
+function isGameMode(value: unknown): value is GameMode {
+  return typeof value === "string" && VALID_MODES.includes(value as GameMode);
+}
+
+export function loadJson<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") {
     return fallback;
   }
@@ -39,7 +76,7 @@ export function loadJson(key, fallback) {
   }
 }
 
-export function saveJson(key, value) {
+export function saveJson(key: string, value: unknown): boolean {
   if (typeof window === "undefined") {
     return false;
   }
@@ -52,20 +89,20 @@ export function saveJson(key, value) {
   }
 }
 
-export function normalizeSettings(value) {
-  const next = value && typeof value === "object" ? value : {};
+export function normalizeSettings(value: unknown): GameSettings {
+  const next = asRecord(value);
 
   return {
-    difficulty: VALID_DIFFICULTIES.has(next.difficulty)
+    difficulty: isDifficulty(next.difficulty)
       ? next.difficulty
       : DEFAULT_SETTINGS.difficulty,
-    duration: VALID_DURATIONS.has(next.duration)
+    duration: isDuration(next.duration)
       ? next.duration
       : DEFAULT_SETTINGS.duration,
-    playerCount: VALID_PLAYER_COUNTS.has(next.playerCount)
+    playerCount: isPlayerCount(next.playerCount)
       ? next.playerCount
       : DEFAULT_SETTINGS.playerCount,
-    language: VALID_LANGUAGES.has(next.language)
+    language: isLanguage(next.language)
       ? next.language
       : DEFAULT_SETTINGS.language,
     soundEnabled:
@@ -75,8 +112,8 @@ export function normalizeSettings(value) {
   };
 }
 
-export function normalizeSummary(value) {
-  const next = value && typeof value === "object" ? value : {};
+export function normalizeSummary(value: unknown): RoundSummary {
+  const next = asRecord(value);
   const correctHits = Math.max(0, clampInteger(next.correctHits, INITIAL_SUMMARY.correctHits));
   const wrongHits = Math.max(0, clampInteger(next.wrongHits, INITIAL_SUMMARY.wrongHits));
   const missedHits = Math.max(0, clampInteger(next.missedHits, INITIAL_SUMMARY.missedHits));
@@ -94,47 +131,48 @@ export function normalizeSummary(value) {
     accuracy,
     avgReactionMs: Math.max(0, clampNumber(next.avgReactionMs, INITIAL_SUMMARY.avgReactionMs)),
     bestReactionMs: Math.max(0, clampNumber(next.bestReactionMs, INITIAL_SUMMARY.bestReactionMs)),
-    difficulty: VALID_DIFFICULTIES.has(next.difficulty)
+    difficulty: isDifficulty(next.difficulty)
       ? next.difficulty
       : INITIAL_SUMMARY.difficulty,
-    durationSec: VALID_DURATIONS.has(next.durationSec)
+    durationSec: isDuration(next.durationSec)
       ? next.durationSec
       : INITIAL_SUMMARY.durationSec,
-    playerCount: VALID_PLAYER_COUNTS.has(next.playerCount)
+    playerCount: isPlayerCount(next.playerCount)
       ? next.playerCount
       : INITIAL_SUMMARY.playerCount,
   };
 }
 
-export function loadSettings() {
+export function loadSettings(): GameSettings {
   return normalizeSettings(loadJson(SETTINGS_KEY, DEFAULT_SETTINGS));
 }
 
-export function loadBestSummary() {
+export function loadBestSummary(): RoundSummary {
   return normalizeSummary(loadJson(BEST_KEY, INITIAL_SUMMARY));
 }
 
-export function loadRecentSummary() {
+export function loadRecentSummary(): RoundSummary {
   return normalizeSummary(loadJson(RECENT_KEY, INITIAL_SUMMARY));
 }
 
-export function normalizeHistoryEntry(value) {
+export function normalizeHistoryEntry(value: unknown): HistoryEntry | null {
   if (!value || typeof value !== "object") return null;
+  const next = asRecord(value);
   const summary = normalizeSummary(value);
-  const ts = Number.isFinite(value.ts) ? value.ts : Date.now();
-  const mode = VALID_MODES.includes(value.mode) ? value.mode : "solo";
+  const ts = clampNumber(next.ts, Date.now());
+  const mode = isGameMode(next.mode) ? next.mode : "solo";
   return { ts, mode, ...summary };
 }
 
-export function loadHistory() {
+export function loadHistory(): HistoryEntry[] {
   const raw = loadJson(HISTORY_KEY, []);
   if (!Array.isArray(raw)) return [];
   return raw
     .map(normalizeHistoryEntry)
-    .filter((entry) => entry !== null);
+    .filter((entry): entry is HistoryEntry => entry !== null);
 }
 
-export function appendHistoryEntry(entry) {
+export function appendHistoryEntry(entry: unknown): HistoryEntry[] {
   const normalized = normalizeHistoryEntry(entry);
   if (!normalized) return loadHistory();
   const next = [normalized, ...loadHistory()].slice(0, MAX_HISTORY);
@@ -150,9 +188,9 @@ function toLocalDateStr() {
   return `${y}-${m}-${day}`;
 }
 
-export function normalizeDailyGoal(value) {
+export function normalizeDailyGoal(value: unknown): DailyGoal {
   const today = toLocalDateStr();
-  const next = value && typeof value === "object" ? value : {};
+  const next = asRecord(value);
   return {
     date:
       typeof next.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(next.date)
@@ -163,7 +201,7 @@ export function normalizeDailyGoal(value) {
   };
 }
 
-export function loadDailyGoal() {
+export function loadDailyGoal(): DailyGoal {
   const today = toLocalDateStr();
   const raw = loadJson(DAILY_GOAL_KEY, null);
   const normalized = normalizeDailyGoal(raw);
@@ -173,24 +211,26 @@ export function loadDailyGoal() {
   return normalized;
 }
 
-export function saveDailyGoal(goal) {
+export function saveDailyGoal(goal: DailyGoal): void {
   saveJson(DAILY_GOAL_KEY, goal);
 }
 
-export function normalizeAchievements(value) {
-  const next = value && typeof value === "object" ? value : {};
-  const result = {};
+export function normalizeAchievements(value: unknown): Achievements {
+  const next = asRecord(value);
+  const result = {} as Achievements;
   for (const key of ACHIEVEMENT_KEYS) {
-    result[key] = Number.isFinite(next[key]) ? next[key] : null;
+    const unlockedAt = next[key];
+    result[key] =
+      typeof unlockedAt === "number" && Number.isFinite(unlockedAt) ? unlockedAt : null;
   }
   return result;
 }
 
-export function loadAchievements() {
+export function loadAchievements(): Achievements {
   return normalizeAchievements(loadJson(ACHIEVEMENTS_KEY, {}));
 }
 
-export function unlockAchievement(key, current) {
+export function unlockAchievement(key: AchievementKey, current: Achievements): Achievements {
   if (current[key]) return current;
   const next = { ...current, [key]: Date.now() };
   saveJson(ACHIEVEMENTS_KEY, next);

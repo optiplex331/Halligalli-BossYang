@@ -6,10 +6,11 @@ import {
   reconcilePendingBellWindow,
   takePenaltyCards,
   visibleTotals,
-} from "../game/rules";
-import { INITIAL_BREAKDOWN } from "../game/constants";
+} from "../game/rules.js";
+import { INITIAL_BREAKDOWN } from "../game/constants.js";
+import type { PlayerState, RoundSnapshot } from "../game/types.js";
 
-function makePlayer(id, overrides = {}) {
+function makePlayer(id: number, overrides: Partial<PlayerState> = {}): PlayerState {
   return {
     id,
     labelZh: `P${id}`,
@@ -64,7 +65,7 @@ describe("game rules", () => {
 
     expect(result.penaltyCount).toBe(3);
     expect(result.player.faceUpPile).toHaveLength(4);
-    expect(result.player.faceUpPile[3]).toEqual({
+    expect(result.player.faceUpPile.at(3)).toEqual({
       id: "face-up",
       fruit: "strawberry",
       count: 1,
@@ -83,15 +84,19 @@ describe("game rules", () => {
     ];
 
     const result = collectFaceUpCards(players, 0);
+    const winner = result.players[0];
+    const loser = result.players[1];
 
     expect(result.collectedCount).toBe(2);
-    expect(result.players[0].wonPile).toHaveLength(3);
-    expect(result.players[0].faceUpPile).toEqual([]);
-    expect(result.players[1].faceUpPile).toEqual([]);
+    expect(winner).toBeDefined();
+    expect(loser).toBeDefined();
+    expect(winner?.wonPile).toHaveLength(3);
+    expect(winner?.faceUpPile).toEqual([]);
+    expect(loser?.faceUpPile).toEqual([]);
   });
 
   it("reconciles an unresolved final bell window as a missed hit", () => {
-    const snapshot = {
+    const snapshot: RoundSnapshot = {
       correctHits: 2,
       wrongHits: 1,
       missedHits: 0,
@@ -115,7 +120,7 @@ describe("game rules", () => {
 
     expect(resolved.missed).toBe(true);
     expect(resolved.snapshot.missedHits).toBe(1);
-    expect(resolved.snapshot.scoreBreakdown.missedPenalty).toBe(30);
+    expect(resolved.snapshot.scoreBreakdown?.missedPenalty).toBe(30);
   });
 
   it("creates the expected round summary from score breakdown and reactions", () => {

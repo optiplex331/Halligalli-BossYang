@@ -1,7 +1,22 @@
 import { useCallback, useEffect, useRef } from "react";
 
-export function useAudioEngine(soundEnabled) {
-  const contextRef = useRef(null);
+type FeedbackKind = "success" | "warn" | "penalty";
+
+interface ToneOptions {
+  frequency: number;
+  duration?: number;
+  type?: OscillatorType;
+  gain?: number;
+  delay?: number;
+}
+
+type WebkitAudioWindow = Window &
+  typeof globalThis & {
+    webkitAudioContext?: typeof AudioContext;
+  };
+
+export function useAudioEngine(soundEnabled: boolean) {
+  const contextRef = useRef<AudioContext | null>(null);
   const enabledRef = useRef(soundEnabled);
 
   useEffect(() => {
@@ -14,7 +29,8 @@ export function useAudioEngine(soundEnabled) {
     }
 
     if (!contextRef.current) {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      const AudioContextClass =
+        window.AudioContext || (window as WebkitAudioWindow).webkitAudioContext;
       if (!AudioContextClass) {
         return null;
       }
@@ -29,7 +45,7 @@ export function useAudioEngine(soundEnabled) {
   }, []);
 
   const playTone = useCallback(
-    ({ frequency, duration = 0.12, type = "sine", gain = 0.04, delay = 0 }) => {
+    ({ frequency, duration = 0.12, type = "sine", gain = 0.04, delay = 0 }: ToneOptions) => {
       const context = ensureUnlocked();
       if (!context) {
         return;
@@ -63,7 +79,7 @@ export function useAudioEngine(soundEnabled) {
   );
 
   const playFeedback = useCallback(
-    (kind) => {
+    (kind: FeedbackKind) => {
       if (!enabledRef.current) {
         return;
       }

@@ -7,53 +7,98 @@ import {
   totalTableCards,
   clonePlayers,
   getTopCard,
-  reconcilePendingBellWindow,
-  createRoundSummary,
   calcAccuracy,
 } from "../src/game/rules.js";
-import { FRUIT_KEYS } from "../src/game/constants.js";
+import type {
+  BellState,
+  Difficulty,
+  FruitDefinition,
+  PlayerState,
+  ScoreBreakdown,
+} from "../src/game/types.js";
+import type {
+  CorrectBellResultPayload,
+  GameBellResultPayload,
+  GameEndPayload,
+  GameFlipPayload,
+  GameMissedPayload,
+  GameStartPayload,
+  GameTickPayload,
+  MultiplayerResults,
+  WrongBellResultPayload,
+} from "../src/multiplayer/protocol.js";
 
-const FRUITS = [
+const FRUITS: readonly FruitDefinition[] = [
   { key: "banana", label: "香蕉", labelEn: "banana", icon: "🍌" },
   { key: "strawberry", label: "草莓", labelEn: "strawberry", icon: "🍓" },
   { key: "lemon", label: "柠檬", labelEn: "lemon", icon: "🍋" },
   { key: "grape", label: "葡萄", labelEn: "grape", icon: "🍇" },
 ];
 
-const MODES = {
+interface ModeConfig {
+  revealMs: number;
+  scoreBonusWindow: number;
+  isBoss: boolean;
+}
+
+interface PlayerStats {
+  score: number;
+  correctHits: number;
+  wrongHits: number;
+  missedHits: number;
+  reactionTimes: number[];
+  streak: number;
+  scoreBreakdown: ScoreBreakdown;
+}
+
+type GameEngineStartPayload = Omit<GameStartPayload, "seatMap">;
+
+interface GameEngineEventMap {
+  "game:tick": GameTickPayload;
+  "game:missed": GameMissedPayload;
+  "game:flip": GameFlipPayload;
+  "game:bell-result": GameBellResultPayload;
+  "game:end": GameEndPayload;
+}
+
+type GameEngineEmitter = <EventName extends keyof GameEngineEventMap>(
+  event: EventName,
+  data: GameEngineEventMap[EventName],
+) => void;
+
+const MODES: Record<Difficulty, ModeConfig> = {
   easy: { revealMs: 1850, scoreBonusWindow: 1900, isBoss: false },
   normal: { revealMs: 1400, scoreBonusWindow: 1500, isBoss: false },
   hard: { revealMs: 900, scoreBonusWindow: 1000, isBoss: true },
 };
 
 export class GameEngine {
-  constructor(playerCount, difficulty, duration, onEvent) {
-    this.playerCount = playerCount;
-    this.difficulty = difficulty;
-    this.duration = duration;
+  private mode: ModeConfig;
+  private players: PlayerState[] = [];
+  private currentTurn = 0;
+  private secondsLeft: number;
+  private running = false;
+  private bellState: BellState = {
+    available: false,
+    fruitKey: null,
+    startedAt: 0,
+    handled: true,
+  };
+  private playerStats: Record<number, PlayerStats> = {};
+  private _revealInterval: ReturnType<typeof setInterval> | null = null;
+  private _countdownInterval: ReturnType<typeof setInterval> | null = null;
+
+  constructor(
+    private playerCount: number,
+    private difficulty: Difficulty,
+    private duration: number,
+    private onEvent: GameEngineEmitter,
+  ) {
     this.mode = MODES[difficulty] ?? MODES.normal;
-    this.onEvent = onEvent;
-
-    this.players = null;
-    this.currentTurn = 0;
     this.secondsLeft = duration;
-    this.running = false;
-
-    this.bellState = {
-      available: false,
-      fruitKey: null,
-      startedAt: 0,
-      handled: true,
-    };
-
-    // Per-player stats keyed by seatIndex
-    this.playerStats = {};
-
-    this._revealInterval = null;
-    this._countdownInterval = null;
   }
 
-  start() {
+  start(): GameEngineStartPayload {
     this.players = createPlayers(this.playerCount, FRUITS);
     this.currentTurn = 0;
     this.secondsLeft = this.duration;
@@ -104,7 +149,7 @@ export class GameEngine {
     return this._getStartPayload();
   }
 
-  _advanceTurn() {
+  private _advanceTurn(): void {
     if (!this.running) return;
 
     // Check missed bell from previous turn
@@ -122,10 +167,13 @@ export class GameEngine {
 
     const preparedPlayers = clonePlayers(this.players);
     const actorIndex = this.currentTurn;
-    const { player, card } = flipCardForPlayer(preparedPlayers[actorIndex]);
+    const actor = preparedPlayers[actorIndex];
+    if (!actor) return;
+
+    const { player, card } = flipCardForPlayer(actor);
     preparedPlayers[actorIndex] = player;
 
-    const nextTurn = (actorIndex + 1) % preparedPlayers.length;
+    const nextTurn = preparedPlayers.length ? (actorIndex + 1) % preparedPlayers.length : 0;
     this.players = preparedPlayers;
     this.currentTurn = nextTurn;
 
@@ -157,7 +205,7 @@ export class GameEngine {
     });
   }
 
-  handleBellPress(seatIndex) {
+  handleBellPress(seatIndex: number): GameBellResultPayload | null {
     if (!this.running) return null;
 
     const stats = this.playerStats[seatIndex];
@@ -191,7 +239,7 @@ export class GameEngine {
       stats.scoreBreakdown.speedBonus += speedBonus;
       stats.scoreBreakdown.streakBonus += streakBonus;
 
-      const result = {
+      const result: CorrectBellResultPayload = {
         type: "correct",
         winnerId: seatIndex,
         collectedCount,
@@ -207,7 +255,10 @@ export class GameEngine {
     const tableCount = totalTableCards(this.players);
     const penaltyTarget = Math.ceil(tableCount / 2);
     const nextPlayers = clonePlayers(this.players);
-    const penaltyResult = takePenaltyCards(nextPlayers[seatIndex], penaltyTarget);
+    const penaltyPlayer = nextPlayers[seatIndex];
+    if (!penaltyPlayer) return null;
+
+    const penaltyResult = takePenaltyCards(penaltyPlayer, penaltyTarget);
     nextPlayers[seatIndex] = penaltyResult.player;
     this.players = nextPlayers;
 
@@ -236,7 +287,7 @@ export class GameEngine {
       };
     }
 
-    const result = {
+    const result: WrongBellResultPayload = {
       type: "wrong",
       playerId: seatIndex,
       penaltyCount: penaltyResult.penaltyCount,
@@ -248,11 +299,10 @@ export class GameEngine {
     return result;
   }
 
-  finish() {
+  finish(): MultiplayerResults | null {
     if (!this.running) return null;
     this.running = false;
-    clearInterval(this._revealInterval);
-    clearInterval(this._countdownInterval);
+    this.clearTimers();
 
     // Reconcile pending bell
     if (this.bellState.available && !this.bellState.handled) {
@@ -263,7 +313,7 @@ export class GameEngine {
       }
     }
 
-    const results = {};
+    const results: MultiplayerResults = {};
     for (const [seatIndex, stats] of Object.entries(this.playerStats)) {
       const accuracy = calcAccuracy(stats.correctHits, stats.wrongHits, stats.missedHits);
       const avgReactionMs = stats.reactionTimes.length
@@ -290,17 +340,27 @@ export class GameEngine {
     return results;
   }
 
-  destroy() {
+  destroy(): void {
     this.running = false;
-    clearInterval(this._revealInterval);
-    clearInterval(this._countdownInterval);
+    this.clearTimers();
   }
 
-  _getTopCards() {
+  private clearTimers(): void {
+    if (this._revealInterval) {
+      clearInterval(this._revealInterval);
+      this._revealInterval = null;
+    }
+    if (this._countdownInterval) {
+      clearInterval(this._countdownInterval);
+      this._countdownInterval = null;
+    }
+  }
+
+  private _getTopCards(): GameStartPayload["topCards"] {
     return this.players.map((p) => getTopCard(p));
   }
 
-  _getStartPayload() {
+  private _getStartPayload(): GameEngineStartPayload {
     return {
       playerCount: this.playerCount,
       difficulty: this.difficulty,

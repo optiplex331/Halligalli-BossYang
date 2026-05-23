@@ -1,17 +1,28 @@
 import { createServer } from "http";
+import type { IncomingMessage, ServerResponse } from "http";
 import { readFile, stat } from "fs/promises";
-import { join, extname } from "path";
+import { basename, dirname, extname, join } from "path";
 import { fileURLToPath } from "url";
 import { Server } from "socket.io";
-import { Room, generateCode } from "./Room.js";
+import type { Socket } from "socket.io";
+import { Player, Room, generateCode } from "./Room.js";
 import { GameEngine } from "./GameEngine.js";
 import { createHealthPayload } from "./health.js";
+import type {
+  ClientToServerEvents,
+  SeatMap,
+  ServerToClientEvents,
+} from "../src/multiplayer/protocol.js";
 
 const PORT = process.env.PORT || 3001;
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
-const DIST_DIR = join(__dirname, "..", "dist");
+const DIST_DIR =
+  process.env.HALLIGALLI_DIST_DIR ||
+  (basename(dirname(__dirname)) === "dist"
+    ? dirname(__dirname)
+    : join(__dirname, "..", "dist"));
 
-const MIME_TYPES = {
+const MIME_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -27,9 +38,9 @@ const MIME_TYPES = {
 };
 
 export function createHalligalliServer() {
-  const rooms = new Map();
+  const rooms = new Map<string, Room>();
 
-  async function serveStatic(req, res) {
+  async function serveStatic(req: IncomingMessage, res: ServerResponse) {
     // Health check
     if (req.url === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -38,7 +49,7 @@ export function createHalligalliServer() {
     }
 
     // Parse URL without query string
-    const urlPath = req.url.split("?")[0];
+    const urlPath = (req.url ?? "/").split("?")[0] ?? "/";
     const filePath = join(DIST_DIR, urlPath === "/" ? "index.html" : urlPath);
 
     // Prevent directory traversal
@@ -78,7 +89,7 @@ export function createHalligalliServer() {
   }
 
   const httpServer = createServer(serveStatic);
-  const io = new Server(httpServer);
+  const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer);
 
   const staleRoomInterval = setInterval(() => {
     for (const [code, room] of rooms) {
@@ -92,7 +103,7 @@ export function createHalligalliServer() {
   }, 120_000);
   staleRoomInterval.unref?.();
 
-  function findRoomBySocket(socketId) {
+  function findRoomBySocket(socketId: string): { room: Room | null; player: Player | null } {
     for (const room of rooms.values()) {
       const player = room.getPlayerBySocketId(socketId);
       if (player) return { room, player };
@@ -107,6 +118,13 @@ export function createHalligalliServer() {
       const code = generateCode(new Set(rooms.keys()));
       const room = new Room(code, 0, maxPlayers || 4, difficulty || "normal", duration || 60, language || "zh");
       const player = room.addPlayer(playerName || "Player 1", socket.id);
+      if (!player) {
+        socket.emit("room:error", {
+          message: "Could not create room",
+          messageZh: "无法创建房间",
+        });
+        return;
+      }
 
       rooms.set(code, room);
       socket.join(code);
@@ -198,7 +216,7 @@ export function createHalligalliServer() {
         room.difficulty,
         room.duration,
         (event, data) => {
-          io.to(room.code).emit(event, data);
+          (io.to(room.code).emit as any)(event, data);
         },
       );
 
@@ -206,7 +224,7 @@ export function createHalligalliServer() {
       const startPayload = engine.start();
 
       // Map seat indices to player info
-      const seatMap = [];
+      const seatMap: SeatMap = [];
       for (const p of room.players.values()) {
         seatMap[p.seatIndex] = { id: p.id, name: p.name };
       }
@@ -244,7 +262,7 @@ export function createHalligalliServer() {
     });
   });
 
-  function handleDisconnect(socket) {
+  function handleDisconnect(socket: Socket<ClientToServerEvents, ServerToClientEvents>) {
     const { room, player } = findRoomBySocket(socket.id);
     if (!room || !player) return;
 
@@ -279,7 +297,7 @@ export function createHalligalliServer() {
     httpServer,
     io,
     rooms,
-    stop(callback) {
+    stop(callback?: () => void) {
       clearInterval(staleRoomInterval);
       io.close(() => {
         if (httpServer.listening) {
@@ -292,7 +310,7 @@ export function createHalligalliServer() {
   };
 }
 
-export function startServer(port = PORT) {
+export function startServer(port: number | string = PORT) {
   const server = createHalligalliServer();
   server.httpServer.listen(port, () => {
     console.log(`Halligalli server listening on port ${port}`);

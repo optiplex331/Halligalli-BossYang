@@ -6,14 +6,15 @@ import {
   computeRollingAccuracy,
   computeStreak,
 } from "../stats.js";
+import type { HistoryEntry } from "../types.js";
 
 const DAY_MS = 86_400_000;
 
-function daysAgo(n) {
+function daysAgo(n: number) {
   return Date.now() - n * DAY_MS;
 }
 
-function makeEntry(overrides = {}) {
+function makeEntry(overrides: Partial<HistoryEntry> = {}): HistoryEntry {
   return {
     ts: daysAgo(0),
     mode: "solo",
@@ -99,7 +100,7 @@ describe("computeDailyGoalStreak", () => {
   });
 
   it("counts consecutive qualifying days", () => {
-    const entries = [];
+    const entries: HistoryEntry[] = [];
     const days = ["2025-06-08", "2025-06-09", "2025-06-10"];
     for (const day of days) {
       for (let r = 0; r < 5; r++) {
@@ -110,7 +111,7 @@ describe("computeDailyGoalStreak", () => {
   });
 
   it("stops at gap between qualifying days", () => {
-    const entries = [];
+    const entries: HistoryEntry[] = [];
     // June 10: 5 entries, June 8: 5 entries (no June 9)
     for (let r = 0; r < 5; r++) {
       entries.push(makeEntry({ ts: new Date(`2025-06-10T${10 + r}:00:00`).getTime() }));
@@ -139,8 +140,8 @@ describe("computeRollingAccuracy", () => {
       makeEntry({ ts: new Date("2025-06-10T11:00:00").getTime(), accuracy: 0.6 }),
     ];
     const result = computeRollingAccuracy(history, 3);
-    const today = result[result.length - 1];
-    expect(today.value).toBe(70); // avg of 80% and 60% = 70%
+    const today = result.at(-1);
+    expect(today?.value).toBe(70); // avg of 80% and 60% = 70%
   });
 
   it("newest day is last in the array", () => {
@@ -150,7 +151,7 @@ describe("computeRollingAccuracy", () => {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
-    expect(result[result.length - 1].date).toBe(`${y}-${m}-${day}`);
+    expect(result.at(-1)?.date).toBe(`${y}-${m}-${day}`);
   });
 });
 
@@ -167,13 +168,13 @@ describe("computeReactionTrend", () => {
       makeEntry({ ts: new Date("2025-06-10T11:00:00").getTime(), avgReactionMs: 400 }),
     ];
     const result = computeReactionTrend(history, 3);
-    const today = result[result.length - 1];
-    expect(today.value).toBe(400);
+    const today = result.at(-1);
+    expect(today?.value).toBe(400);
   });
 
   it("returns null for days with no valid entries", () => {
     const history = [makeEntry({ ts: new Date("2025-06-10T10:00:00").getTime(), avgReactionMs: 0 })];
     const result = computeReactionTrend(history, 3);
-    expect(result[result.length - 1].value).toBeNull();
+    expect(result.at(-1)?.value).toBeNull();
   });
 });

@@ -5,19 +5,34 @@ import {
   INITIAL_BREAKDOWN,
   INITIAL_SUMMARY,
 } from "./constants.js";
+import type {
+  BellEvaluation,
+  BellState,
+  Card,
+  FruitDefinition,
+  FruitKey,
+  PlayerState,
+  RoundSnapshot,
+  RoundSummary,
+  ScoreBreakdown,
+  SeatLayout,
+  VisibleTotals,
+} from "./types.js";
 
-export function shuffle(cards) {
+export function shuffle<T>(cards: readonly T[]): T[] {
   const next = [...cards];
 
   for (let index = next.length - 1; index > 0; index -= 1) {
     const swapIndex = Math.floor(Math.random() * (index + 1));
-    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+    const current = next[index]!;
+    next[index] = next[swapIndex]!;
+    next[swapIndex] = current;
   }
 
   return next;
 }
 
-export function createCard(serial, fruitKey, count) {
+export function createCard(serial: number, fruitKey: FruitKey, count: number): Card {
   return {
     id: `card-${serial}-${Math.random().toString(36).slice(2, 8)}`,
     fruit: fruitKey,
@@ -25,8 +40,12 @@ export function createCard(serial, fruitKey, count) {
   };
 }
 
-export function createDeck(fruits, cardCount = 72) {
-  const cards = [];
+export function createDeck(fruits: readonly FruitDefinition[], cardCount = 72): Card[] {
+  if (!fruits.length) {
+    return [];
+  }
+
+  const cards: Card[] = [];
   let serial = 0;
 
   fruits.forEach((fruit) => {
@@ -39,9 +58,9 @@ export function createDeck(fruits, cardCount = 72) {
   });
 
   while (cards.length < cardCount) {
-    const fruit = fruits[cards.length % fruits.length];
+    const fruit = fruits[cards.length % fruits.length]!;
     const extraCounts = [1, 2, 3, 4];
-    const count = extraCounts[cards.length % extraCounts.length];
+    const count = extraCounts[cards.length % extraCounts.length]!;
     cards.push(createCard(serial, fruit.key, count));
     serial += 1;
   }
@@ -49,8 +68,8 @@ export function createDeck(fruits, cardCount = 72) {
   return shuffle(cards.slice(0, cardCount));
 }
 
-export function getSeatLayouts(playerCount) {
-  const layouts = {
+export function getSeatLayouts(playerCount: number): SeatLayout[] | undefined {
+  const layouts: Record<number, SeatLayout[]> = {
     3: [
       { labelZh: "上家", labelEn: "Top", gridArea: "top" },
       { labelZh: "右侧玩家", labelEn: "Right", gridArea: "right" },
@@ -82,34 +101,45 @@ export function getSeatLayouts(playerCount) {
   return layouts[playerCount];
 }
 
-export function createPlayers(playerCount, fruits) {
+export function createPlayers(playerCount: number, fruits: readonly FruitDefinition[]): PlayerState[] {
+  if (playerCount <= 0) {
+    return [];
+  }
+
   const deck = createDeck(fruits);
   const seats = getSeatLayouts(playerCount);
-  const players = Array.from({ length: playerCount }, (_, index) => ({
-    id: index,
-    labelZh: seats[index].labelZh,
-    labelEn: seats[index].labelEn,
-    drawPile: [],
-    wonPile: [],
-    faceUpPile: [],
-  }));
+  if (!seats || seats.length < playerCount) {
+    throw new Error(`Unsupported player count: ${playerCount}`);
+  }
+
+  const players: PlayerState[] = Array.from({ length: playerCount }, (_, index) => {
+    const seat = seats[index]!;
+    return {
+      id: index,
+      labelZh: seat.labelZh,
+      labelEn: seat.labelEn,
+      drawPile: [],
+      wonPile: [],
+      faceUpPile: [],
+    };
+  });
 
   deck.forEach((card, index) => {
-    players[index % playerCount].drawPile.push(card);
+    players[index % playerCount]?.drawPile.push(card);
   });
 
   return players;
 }
 
-export function getTopCard(player) {
+export function getTopCard(player: PlayerState): Card | null {
   return player.faceUpPile[player.faceUpPile.length - 1] ?? null;
 }
 
-export function sumVisible(cards) {
-  const totals = Object.fromEntries(FRUIT_KEYS.map((fruitKey) => [fruitKey, 0]));
+export function sumVisible(cards: readonly (Card | null | undefined)[]): VisibleTotals {
+  const totals = Object.fromEntries(FRUIT_KEYS.map((fruitKey) => [fruitKey, 0])) as VisibleTotals;
 
   cards.forEach((card) => {
-    if (card && Object.hasOwn(totals, card.fruit)) {
+    if (card) {
       totals[card.fruit] += card.count;
     }
   });
@@ -117,26 +147,26 @@ export function sumVisible(cards) {
   return totals;
 }
 
-export function visibleTotals(players) {
+export function visibleTotals(players: readonly PlayerState[]): VisibleTotals {
   return sumVisible(players.map(getTopCard));
 }
 
-export function evaluateBellAvailability(players) {
+export function evaluateBellAvailability(players: readonly PlayerState[]): BellEvaluation {
   const totals = visibleTotals(players);
-  const matchedFruit = Object.entries(totals).find(([, total]) => total === 5);
+  const matchedFruit = FRUIT_KEYS.find((fruitKey) => totals[fruitKey] === 5) ?? null;
 
   return {
-    available: Boolean(matchedFruit),
-    fruitKey: matchedFruit?.[0] ?? null,
+    available: matchedFruit !== null,
+    fruitKey: matchedFruit,
     totals,
   };
 }
 
-export function totalTableCards(players) {
+export function totalTableCards(players: readonly PlayerState[]): number {
   return players.reduce((total, player) => total + player.faceUpPile.length, 0);
 }
 
-export function recycleDrawPile(player) {
+export function recycleDrawPile(player: PlayerState): PlayerState {
   if (player.drawPile.length || !player.wonPile.length) {
     return player;
   }
@@ -148,14 +178,14 @@ export function recycleDrawPile(player) {
   };
 }
 
-export function flipCardForPlayer(player) {
+export function flipCardForPlayer(player: PlayerState): { player: PlayerState; card: Card | null } {
   const ready = recycleDrawPile(player);
 
   if (!ready.drawPile.length) {
     return { player: ready, card: null };
   }
 
-  const card = ready.drawPile[ready.drawPile.length - 1];
+  const card = ready.drawPile[ready.drawPile.length - 1]!;
 
   return {
     player: {
@@ -167,9 +197,12 @@ export function flipCardForPlayer(player) {
   };
 }
 
-export function takePenaltyCards(player, count) {
+export function takePenaltyCards(
+  player: PlayerState,
+  count: number,
+): { player: PlayerState; penaltyCount: number } {
   let nextPlayer = { ...player };
-  const takenCards = [];
+  const takenCards: Card[] = [];
 
   while (takenCards.length < count) {
     nextPlayer = recycleDrawPile(nextPlayer);
@@ -177,7 +210,7 @@ export function takePenaltyCards(player, count) {
       break;
     }
 
-    const card = nextPlayer.drawPile[nextPlayer.drawPile.length - 1];
+    const card = nextPlayer.drawPile[nextPlayer.drawPile.length - 1]!;
     nextPlayer = {
       ...nextPlayer,
       drawPile: nextPlayer.drawPile.slice(0, -1),
@@ -194,7 +227,10 @@ export function takePenaltyCards(player, count) {
   };
 }
 
-export function collectFaceUpCards(players, winnerId) {
+export function collectFaceUpCards(
+  players: readonly PlayerState[],
+  winnerId: number,
+): { players: PlayerState[]; collectedCount: number } {
   const collectedCards = players.flatMap((player) => player.faceUpPile);
 
   return {
@@ -214,12 +250,12 @@ export function collectFaceUpCards(players, winnerId) {
   };
 }
 
-export function calcAccuracy(correctHits, wrongHits, missedHits) {
+export function calcAccuracy(correctHits: number, wrongHits: number, missedHits: number): number {
   const total = correctHits + wrongHits + missedHits;
   return total ? correctHits / total : 0;
 }
 
-export function clonePlayers(players) {
+export function clonePlayers(players: readonly PlayerState[]): PlayerState[] {
   return players.map((player) => ({
     ...player,
     drawPile: [...player.drawPile],
@@ -228,7 +264,7 @@ export function clonePlayers(players) {
   }));
 }
 
-export function sumBreakdown(breakdown) {
+export function sumBreakdown(breakdown: ScoreBreakdown): number {
   return (
     breakdown.correctBase +
     breakdown.collectionBonus +
@@ -240,7 +276,10 @@ export function sumBreakdown(breakdown) {
   );
 }
 
-export function reconcilePendingBellWindow(snapshot, bellState) {
+export function reconcilePendingBellWindow(
+  snapshot: RoundSnapshot,
+  bellState: BellState,
+): { snapshot: RoundSnapshot; missed: boolean; missedFruit: FruitKey | null } {
   if (!bellState.available || bellState.handled || !bellState.fruitKey) {
     return {
       snapshot,
@@ -264,37 +303,34 @@ export function reconcilePendingBellWindow(snapshot, bellState) {
   };
 }
 
-export function createRoundSummary(snapshot) {
-  const safeSnapshot = {
-    ...snapshot,
-    scoreBreakdown: snapshot.scoreBreakdown ?? INITIAL_BREAKDOWN,
-    reactionTimes: snapshot.reactionTimes ?? [],
-  };
+export function createRoundSummary(snapshot: RoundSnapshot): RoundSummary {
+  const scoreBreakdown = snapshot.scoreBreakdown ?? INITIAL_BREAKDOWN;
+  const reactionTimes = snapshot.reactionTimes ?? [];
   const accuracy = calcAccuracy(
-    safeSnapshot.correctHits,
-    safeSnapshot.wrongHits,
-    safeSnapshot.missedHits,
+    snapshot.correctHits,
+    snapshot.wrongHits,
+    snapshot.missedHits,
   );
-  const avgReactionMs = safeSnapshot.reactionTimes.length
+  const avgReactionMs = reactionTimes.length
     ? Math.round(
-        safeSnapshot.reactionTimes.reduce((total, time) => total + time, 0) /
-          safeSnapshot.reactionTimes.length,
+        reactionTimes.reduce((total, time) => total + time, 0) /
+          reactionTimes.length,
       )
     : 0;
-  const bestReactionMs = safeSnapshot.reactionTimes.length
-    ? Math.min(...safeSnapshot.reactionTimes)
+  const bestReactionMs = reactionTimes.length
+    ? Math.min(...reactionTimes)
     : 0;
 
   return {
-    score: Math.max(0, sumBreakdown(safeSnapshot.scoreBreakdown)),
-    correctHits: safeSnapshot.correctHits,
-    wrongHits: safeSnapshot.wrongHits,
-    missedHits: safeSnapshot.missedHits,
+    score: Math.max(0, sumBreakdown(scoreBreakdown)),
+    correctHits: snapshot.correctHits,
+    wrongHits: snapshot.wrongHits,
+    missedHits: snapshot.missedHits,
     accuracy,
     avgReactionMs,
     bestReactionMs,
-    difficulty: safeSnapshot.difficulty ?? DEFAULT_SETTINGS.difficulty,
-    durationSec: safeSnapshot.durationSec ?? DEFAULT_SETTINGS.duration,
-    playerCount: safeSnapshot.playerCount ?? INITIAL_SUMMARY.playerCount,
+    difficulty: snapshot.difficulty ?? DEFAULT_SETTINGS.difficulty,
+    durationSec: snapshot.durationSec ?? DEFAULT_SETTINGS.duration,
+    playerCount: snapshot.playerCount ?? INITIAL_SUMMARY.playerCount,
   };
 }

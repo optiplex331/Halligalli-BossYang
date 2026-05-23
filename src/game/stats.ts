@@ -1,4 +1,6 @@
-function toLocalDateStr(ts) {
+import type { HistoryEntry, TrendPoint } from "./types.js";
+
+function toLocalDateStr(ts?: number) {
   const d = ts !== undefined ? new Date(ts) : new Date();
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -6,24 +8,27 @@ function toLocalDateStr(ts) {
   return `${y}-${m}-${day}`;
 }
 
-function prevDayStr(dateStr) {
+function prevDayStr(dateStr: string) {
   const [y, m, d] = dateStr.split("-").map(Number);
+  if (y === undefined || m === undefined || d === undefined) {
+    return dateStr;
+  }
   const dt = new Date(y, m - 1, d);
   dt.setDate(dt.getDate() - 1);
   return toLocalDateStr(dt.getTime());
 }
 
-export function bucketByDay(history) {
-  const result = {};
+export function bucketByDay(history: readonly HistoryEntry[]): Record<string, HistoryEntry[]> {
+  const result: Record<string, HistoryEntry[]> = {};
   for (const entry of history) {
     const day = toLocalDateStr(entry.ts);
-    if (!result[day]) result[day] = [];
+    result[day] ??= [];
     result[day].push(entry);
   }
   return result;
 }
 
-export function computeStreak(history) {
+export function computeStreak(history: readonly HistoryEntry[]) {
   const bucketed = bucketByDay(history);
   const today = toLocalDateStr();
   let streak = 0;
@@ -35,7 +40,7 @@ export function computeStreak(history) {
   return streak;
 }
 
-export function computeDailyGoalStreak(history, targetRounds) {
+export function computeDailyGoalStreak(history: readonly HistoryEntry[], targetRounds: number) {
   const bucketed = bucketByDay(history);
   const qualifyingDays = Object.entries(bucketed)
     .filter(([, entries]) => entries.length >= targetRounds)
@@ -44,7 +49,9 @@ export function computeDailyGoalStreak(history, targetRounds) {
   if (qualifyingDays.length === 0) return 0;
   let streak = 1;
   for (let i = qualifyingDays.length - 1; i > 0; i--) {
-    if (prevDayStr(qualifyingDays[i]) === qualifyingDays[i - 1]) {
+    const current = qualifyingDays[i];
+    const previous = qualifyingDays[i - 1];
+    if (current !== undefined && previous !== undefined && prevDayStr(current) === previous) {
       streak++;
     } else {
       break;
@@ -53,9 +60,12 @@ export function computeDailyGoalStreak(history, targetRounds) {
   return streak;
 }
 
-export function computeRollingAccuracy(history, days) {
+export function computeRollingAccuracy(
+  history: readonly HistoryEntry[],
+  days: number,
+): TrendPoint[] {
   const bucketed = bucketByDay(history);
-  const result = [];
+  const result: TrendPoint[] = [];
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
@@ -71,9 +81,12 @@ export function computeRollingAccuracy(history, days) {
   return result;
 }
 
-export function computeReactionTrend(history, days) {
+export function computeReactionTrend(
+  history: readonly HistoryEntry[],
+  days: number,
+): TrendPoint[] {
   const bucketed = bucketByDay(history);
-  const result = [];
+  const result: TrendPoint[] = [];
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
