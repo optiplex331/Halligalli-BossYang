@@ -1,6 +1,6 @@
-# CI/CD
+# CI/CD and GitOps
 
-Halligalli Stage 1 uses GitHub Actions as the delivery control plane for the single-service DigitalOcean Production app. GitHub Actions builds the Docker image, publishes it to GHCR, and updates DigitalOcean to run that immutable image tag.
+Halligalli uses GitHub Actions as the delivery control plane and GitOps reconciler for the single-service DigitalOcean Production app. Production desired state lives in `deploy/production/app.yaml`; DigitalOcean is updated only from that Git-tracked manifest.
 
 ## Pull Request Gates
 
@@ -8,62 +8,78 @@ Pull requests targeting `master` run these required checks:
 
 | Check | Workflow | Job | What it proves |
 |---|---|---|---|
-| Product checks | `CI` | `Product checks` | Release metadata resolves from a `vX.Y.Z` git tag, `pnpm install --frozen-lockfile`, Vitest, and `pnpm run build` pass. |
+| Product checks | `CI` | `Product checks` | Release config, `pnpm install --frozen-lockfile`, Vitest, TypeScript, and the production build pass. |
 | Container build and scan | `Container` | `Container build and scan` | The production Docker image builds and Trivy finds no unfixed HIGH or CRITICAL vulnerabilities. |
 
-These checks do not deploy, publish images, or change DigitalOcean state on pull requests.
+PR checks do not publish images or change DigitalOcean state.
 
-## Container Images
+## Release PR
 
-The `Container` workflow builds the single-service image from `Dockerfile`. Version and image-tag commands live in `.github/utils/Taskfile.yaml` and run through the official `go-task/setup-task` GitHub Action.
+Pushes to `master` run Release Please. It opens or updates a human-reviewed Release PR that maintains:
 
-That Taskfile is intentionally narrow. It owns release metadata, GHCR image-name generation, and DigitalOcean app-spec rendering. It is not the product build system: product checks still run direct `pnpm install --frozen-lockfile`, `pnpm run test`, and `pnpm run build`.
+- `CHANGELOG.md`
+- `.github/utils/.release-please-manifest.json`
 
-On pull requests, it only builds and scans the image locally.
+The Release PR does not make `package.json` a version source. Merging it creates a `vX.Y.Z` Release Tag and GitHub Release.
 
-On `master`, it builds, scans, and publishes to GHCR:
+Release Please uses `HALLIGALLI_RELEASE_BOT_TOKEN` so the generated PR can run follow-on checks and workflows.
 
-```text
-ghcr.io/<owner>/<repo>:<base-version>-<distance>-g<short-sha>
-ghcr.io/<owner>/<repo>:latest
-```
+## Release Image
 
-Version tags come from the nearest `vX.Y.Z` git tag. The workflow fails if no matching git tag exists; `package.json` is not a release-version source.
-
-The initial release anchor is `v0.1.0`. Commits after that tag produce extended image tags such as:
+The `Container` workflow builds and scans images on PRs. On a `vX.Y.Z` tag it also publishes:
 
 ```text
-0.1.0-0004-gabc1234
+ghcr.io/<owner>/<repo>:X.Y.Z
 ```
 
-## Production Release Flow
+It does not publish `latest`. Production promotion uses the pushed image digest, not a mutable tag.
 
-The `Release DO Production` workflow starts after the `Container` workflow succeeds on `master`, or by manual dispatch. It:
+## Production Promotion
 
-1. Resolves the same version tag and commit SHA used for the GHCR image.
-2. Renders a temporary DigitalOcean app spec with the GHCR image tag, `APP_VERSION`, and `COMMIT_SHA`.
-3. Runs `doctl apps update --wait` for the DO Production app.
-4. Logs the commit SHA, version tag, GHCR image tag, DO app ID, and DO deployment ID.
-5. Smoke tests the live `/health` endpoint and fails unless `status`, `version`, and `commit` match the release.
+After a release image is published, the container workflow opens a human-reviewed Production Promotion PR. That PR updates:
 
-The release workflow is serialized by the `do-production` concurrency group, so only one production deployment runs at a time.
+```text
+deploy/production/app.yaml
+```
 
-Manual production dispatches must be run from `master`. Dispatches from other branches are skipped so release metadata cannot describe a feature-branch image as production.
+The manifest records:
 
-The release app spec is rendered into the GitHub Actions runner temp directory. The committed `.do/app.yaml` keeps a marked `latest` placeholder, while production receives the immutable version tag for the released commit.
+- GHCR registry and repository
+- image digest
+- `APP_VERSION`
+- `COMMIT_SHA`
 
-## Platform Boundary
+Merging the Production Promotion PR is the production approval point.
 
-Stage 1 production is DigitalOcean App Platform running the GHCR image produced by the `Container` workflow. AWS Staging/Portfolio, Kubernetes, GitOps, PostgreSQL, and Redis are deferred work and are not part of the implemented Stage 1 release loop.
+## GitOps Reconciler
+
+`Reconcile DO Production` runs when `deploy/production/app.yaml` changes on `master`, or by manual dispatch. It:
+
+1. Validates the Production Manifest.
+2. Applies it with `doctl apps update --wait`.
+3. Smoke tests `/health`.
+4. Fails unless `/health.status`, `/health.version`, and `/health.commit` match the manifest.
+
+The workflow is serialized by the `do-production` concurrency group.
+
+## Drift Check
+
+`Production Drift Check` runs every 30 minutes and by manual dispatch. It compares:
+
+- `deploy/production/app.yaml`
+- the live DigitalOcean app spec
+- live `/health`
+
+It fails if the live image digest, release version, or commit no longer match Git.
 
 ## Branch Protection
 
-Configure the protected `master` rule to require:
+Configure the protected `master` ruleset to require:
 
 - `Product checks`
 - `Container build and scan`
 
-Do not require `Deploy DO Production` as a PR check. Production release happens only after changes land on `master`.
+Do not require production deployment as a PR check. Production release happens only after a Production Promotion PR changes the manifest on `master`.
 
 ## Dependency Updates
 
@@ -73,4 +89,4 @@ Dependabot opens weekly PRs against `master` for:
 - `server/` pnpm dependencies
 - GitHub Actions
 
-Dependabot does not auto-merge and does not bypass the Stage 1 PR checks.
+Dependabot does not auto-merge and does not bypass PR checks.

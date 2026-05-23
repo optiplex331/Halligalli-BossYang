@@ -1,0 +1,133 @@
+name: Production Drift Check
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift-check:
+    name: Production drift check
+    runs-on: ubuntu-latest
+    environment:
+      name: do-production
+      url: ${{ vars.DO_PRODUCTION_URL }}
+
+    env:
+      DO_APP_ID: ${{ vars.DO_APP_ID }}
+      DO_PRODUCTION_URL: ${{ vars.DO_PRODUCTION_URL }}
+      SPEC_PATH: deploy/production/app.yaml
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Validate release configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          : "${DO_APP_ID:?Set environment variable DO_APP_ID to the DigitalOcean App Platform app ID.}"
+          : "${DO_PRODUCTION_URL:?Set environment variable DO_PRODUCTION_URL to the live production URL.}"
+
+      - name: Set up doctl
+        uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2
+        with:
+          token: ${{ secrets.DO_API_TOKEN }}
+
+      - name: Fetch live DO app spec
+        shell: bash
+        run: |
+          set -euo pipefail
+          doctl apps spec get "${DO_APP_ID}" --format json > live-app-spec.json
+
+      - name: Compare Production Manifest with DO app spec
+        id: manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ruby <<'RUBY' >> "${GITHUB_OUTPUT}"
+          require "json"
+          require "yaml"
+
+          desired = YAML.load_file(ENV.fetch("SPEC_PATH"))
+          live = JSON.parse(File.read("live-app-spec.json"))
+
+          def web_service(spec)
+            spec.fetch("services").find { |service| service.fetch("name") == "web" }
+          end
+
+          def env_map(service)
+            service.fetch("envs").to_h { |env| [env.fetch("key"), env.fetch("value").to_s] }
+          end
+
+          desired_web = web_service(desired)
+          live_web = web_service(live)
+          desired_image = desired_web.fetch("image")
+          live_image = live_web.fetch("image")
+          desired_env = env_map(desired_web)
+          live_env = env_map(live_web)
+
+          comparisons = {
+            "image.registry_type" => [desired_image.fetch("registry_type"), live_image.fetch("registry_type")],
+            "image.registry" => [desired_image.fetch("registry"), live_image.fetch("registry")],
+            "image.repository" => [desired_image.fetch("repository"), live_image.fetch("repository")],
+            "image.digest" => [desired_image.fetch("digest"), live_image["digest"]],
+            "APP_VERSION" => [desired_env.fetch("APP_VERSION"), live_env.fetch("APP_VERSION")],
+            "COMMIT_SHA" => [desired_env.fetch("COMMIT_SHA"), live_env.fetch("COMMIT_SHA")],
+          }
+
+          drift = comparisons.filter_map do |field, (expected, actual)|
+            next if expected == actual
+            "#{field}: expected #{expected.inspect}, got #{actual.inspect}"
+          end
+
+          unless drift.empty?
+            warn "Production drift detected:"
+            drift.each { |line| warn "- #{line}" }
+            exit 1
+          end
+
+          puts "app_version=#{desired_env.fetch("APP_VERSION")}"
+          puts "commit_sha=#{desired_env.fetch("COMMIT_SHA")}"
+          puts "image_digest=#{desired_image.fetch("digest")}"
+          RUBY
+
+      - name: Compare /health with Production Manifest
+        shell: bash
+        env:
+          EXPECTED_VERSION: ${{ steps.manifest.outputs.app_version }}
+          EXPECTED_COMMIT: ${{ steps.manifest.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+
+          health_url="${DO_PRODUCTION_URL%/}/health"
+          response="$(curl --fail --silent --show-error "${health_url}")"
+
+          HEALTH_RESPONSE="${response}" node <<'NODE'
+          const body = process.env.HEALTH_RESPONSE;
+          const health = JSON.parse(body);
+          const expectedVersion = process.env.EXPECTED_VERSION;
+          const expectedCommit = process.env.EXPECTED_COMMIT;
+
+          if (health.status !== "ok") {
+            console.error("Unexpected health status:", health);
+            process.exit(1);
+          }
+
+          if (health.version !== expectedVersion || health.commit !== expectedCommit) {
+            console.error("Health release identity drift:", {
+              expectedVersion,
+              actualVersion: health.version,
+              expectedCommit,
+              actualCommit: health.commit,
+            });
+            process.exit(1);
+          }
+
+          console.log("Production /health matches the Production Manifest.");
+          NODE

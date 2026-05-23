@@ -3,8 +3,6 @@ version: "3"
 vars:
   REPO_ROOT:
     sh: git -C "{{.TASKFILE_DIR}}/../.." rev-parse --show-toplevel
-  RELEASE_TAG_PATTERN: "v[0-9]*.[0-9]*.[0-9]*"
-  PRODUCTION_IMAGE_COMMENT: "# production_halligalli-web"
 
 tasks:
   image-repo:
@@ -23,123 +21,36 @@ tasks:
         echo "${image}" | tr '[:upper:]' '[:lower:]'
     silent: true
 
-  generate-version:
-    desc: "Use git describe to generate a version from the nearest vX.Y.Z tag"
+  validate-release-config:
+    desc: "Validate Release Please config and the production GitOps manifest shape"
     dir: "{{.REPO_ROOT}}"
     cmds:
       - |
         set -euo pipefail
 
-        tag="$(git describe --tags --first-parent --match '{{.RELEASE_TAG_PATTERN}}' 2>/dev/null || true)"
-        if [[ -z "${tag}" ]]; then
-          echo "No release tag found. Create an initial tag such as v0.1.0 before building release metadata." >&2
-          exit 1
-        fi
+        ruby <<'RUBY'
+        require "json"
+        require "yaml"
 
-        echo "${tag#v}"
-    silent: true
+        release_config = JSON.parse(File.read(".github/utils/release-please-config.json"))
+        release_manifest = JSON.parse(File.read(".github/utils/.release-please-manifest.json"))
+        production_manifest = YAML.load_file("deploy/production/app.yaml")
+        package_json = JSON.parse(File.read("package.json"))
 
-  generate-version-tag:
-    desc: "Combine the image repo with the git-derived version"
-    dir: "{{.REPO_ROOT}}"
-    vars:
-      IMAGE_REPO:
-        sh: task -s -t "{{.TASKFILE_DIR}}/Taskfile.yaml" image-repo
-      VERSION:
-        sh: task -s -t "{{.TASKFILE_DIR}}/Taskfile.yaml" generate-version
-    cmds:
-      - |
-        echo "{{.IMAGE_REPO}}:{{.VERSION}}"
-    silent: true
+        abort("Release Please must include v in tags") unless release_config["include-v-in-tag"] == true
+        abort("Release Please must not include component names in tags") unless release_config["include-component-in-tag"] == false
+        abort("Release Please manifest must track the root package") unless release_manifest.key?(".")
+        abort("package.json must not be a release version source") if package_json.key?("version")
 
-  generate-extended-version:
-    desc: "Emit X.Y.Z-000N-g<SHA> from the nearest vX.Y.Z tag"
-    dir: "{{.REPO_ROOT}}"
-    cmds:
-      - |
-        set -euo pipefail
+        web = production_manifest.fetch("services").find { |service| service.fetch("name") == "web" }
+        abort("Production Manifest must define the web service") unless web
 
-        git_version="$(git describe --tags --first-parent --long --abbrev=7 --match '{{.RELEASE_TAG_PATTERN}}' 2>/dev/null || true)"
-        if [[ -z "${git_version}" ]]; then
-          echo "No release tag found. Create an initial tag such as v0.1.0 before building release metadata." >&2
-          exit 1
-        fi
+        image = web.fetch("image")
+        abort("Production Manifest must reference GHCR") unless image.fetch("registry_type") == "GHCR"
+        abort("Production Manifest must use image.digest") unless image["digest"].to_s.start_with?("sha256:")
+        abort("Production Manifest must not use image.tag") if image.key?("tag")
 
-        git_version="${git_version#v}"
-        IFS='-' read -r base_version count git_ref <<<"${git_version}"
-        printf "%s-%04d-%s\n" "${base_version}" "${count}" "${git_ref}"
-    silent: true
-
-  generate-extended-version-tag:
-    desc: "Combine the image repo with the extended git-derived version"
-    dir: "{{.REPO_ROOT}}"
-    vars:
-      IMAGE_REPO:
-        sh: task -s -t "{{.TASKFILE_DIR}}/Taskfile.yaml" image-repo
-      VERSION:
-        sh: task -s -t "{{.TASKFILE_DIR}}/Taskfile.yaml" generate-extended-version
-    cmds:
-      - |
-        echo "{{.IMAGE_REPO}}:{{.VERSION}}"
-    silent: true
-
-  update-image-tags:
-    desc: "Recursively update YAML image tag values with the specified marker comment"
-    dir: "{{.REPO_ROOT}}"
-    cmds:
-      - |
-        set -euo pipefail
-
-        if [[ -z "{{.NEW_TAG}}" || -z "{{.IDENTIFIER_COMMENT}}" || -z "{{.STARTING_PATH}}" ]]; then
-          echo "Usage: task update-image-tags NEW_TAG=new-tag IDENTIFIER_COMMENT='# marker' STARTING_PATH=/path/to/start" >&2
-          exit 1
-        fi
-
-        find "{{.STARTING_PATH}}" -type f \( -name "*.yaml" -o -name "*.yml" \) -exec grep -l "{{.IDENTIFIER_COMMENT}}" {} \; | while read -r file; do
-          echo "Updating: ${file}"
-          NEW_TAG="{{.NEW_TAG}}" IDENTIFIER_COMMENT="{{.IDENTIFIER_COMMENT}}" perl -0pi -e '
-            my $tag = $ENV{"NEW_TAG"};
-            my $marker = quotemeta($ENV{"IDENTIFIER_COMMENT"});
-            s|(^[ \t]*[^:\n]+:\s*).*?(\s*$marker)|$1$tag$2|m;
-          ' "${file}"
-        done
-
-  update-production-image-tag:
-    desc: "Update the DigitalOcean production image tag marker"
-    dir: "{{.REPO_ROOT}}"
-    cmds:
-      - task: update-image-tags
-        vars:
-          IDENTIFIER_COMMENT: "{{.PRODUCTION_IMAGE_COMMENT}}"
-          STARTING_PATH: "{{.STARTING_PATH}}"
-          NEW_TAG: "{{.NEW_TAG}}"
-
-  render-do-app-spec:
-    desc: "Render a DigitalOcean image-based app spec for a release"
-    dir: "{{.REPO_ROOT}}"
-    cmds:
-      - |
-        set -euo pipefail
-
-        if [[ -z "{{.OUTPUT_PATH}}" || -z "{{.IMAGE_TAG}}" || -z "{{.APP_VERSION}}" || -z "{{.COMMIT_SHA}}" ]]; then
-          echo "Usage: task render-do-app-spec OUTPUT_PATH=/tmp/app.yaml IMAGE_TAG=tag APP_VERSION=version COMMIT_SHA=sha" >&2
-          exit 1
-        fi
-
-        cp .do/app.yaml "{{.OUTPUT_PATH}}"
-
-        task -s -t "{{.TASKFILE_DIR}}/Taskfile.yaml" update-production-image-tag \
-          STARTING_PATH="$(dirname "{{.OUTPUT_PATH}}")" \
-          NEW_TAG="{{.IMAGE_TAG}}"
-
-        perl -0pi -e 's/(key: APP_VERSION\s*\n\s*value:\s*).*/${1}"{{.APP_VERSION}}"/' "{{.OUTPUT_PATH}}"
-        perl -0pi -e 's/(key: COMMIT_SHA\s*\n\s*value:\s*).*/${1}"{{.COMMIT_SHA}}"/' "{{.OUTPUT_PATH}}"
-
-        if [[ -n "${GHCR_REGISTRY_CREDENTIALS:-}" ]]; then
-          perl -0pi -e 's/(^(\s*)tag:\s*[^\n]+# production_halligalli-web\n)/$1$2registry_credentials: "$ENV{GHCR_REGISTRY_CREDENTIALS}"\n/m' "{{.OUTPUT_PATH}}"
-        fi
-
-        grep -q "{{.PRODUCTION_IMAGE_COMMENT}}" "{{.OUTPUT_PATH}}"
-        grep -q 'key: APP_VERSION' "{{.OUTPUT_PATH}}"
-        grep -q 'key: COMMIT_SHA' "{{.OUTPUT_PATH}}"
-    silent: true
+        envs = web.fetch("envs").to_h { |env| [env.fetch("key"), env.fetch("value").to_s] }
+        abort("Production Manifest must set APP_VERSION") if envs["APP_VERSION"].to_s.empty?
+        abort("Production Manifest must set COMMIT_SHA") if envs["COMMIT_SHA"].to_s.empty?
+        RUBY
