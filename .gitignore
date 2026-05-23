@@ -1,4 +1,33 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# OS
 .DS_Store
-tmp-yang-boss.png
+Thumbs.db
+
+# Editor & IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Test & coverage
+coverage/
+
+# Temp
+*.tmp
+*.temp

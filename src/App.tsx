@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import {
   ACHIEVEMENT_KEYS,
   DAILY_TARGET_ROUNDS,
   DEFAULT_SETTINGS,
   INITIAL_BREAKDOWN,
   INITIAL_SUMMARY,
-} from "./game/constants";
+} from "./game/constants.js";
 import {
   BEST_KEY,
   RECENT_KEY,
@@ -21,7 +22,7 @@ import {
   saveJson,
   saveDailyGoal,
   unlockAchievement,
-} from "./game/persistence";
+} from "./game/persistence.js";
 import {
   computeDailyGoalStreak,
   computeRollingAccuracy,
@@ -42,18 +43,91 @@ import {
   takePenaltyCards,
   totalTableCards,
   visibleTotals,
-} from "./game/rules";
-import { clearGameLoopHandles } from "./game/lifecycle";
-import { connectSocket, disconnectSocket, getSocket } from "./multiplayer/socket";
-import { useMultiplayerSocket } from "./multiplayer/useMultiplayerSocket";
-import { useAudioEngine } from "./audio/useAudioEngine";
+} from "./game/rules.js";
+import { clearGameLoopHandles } from "./game/lifecycle.js";
+import { connectSocket, disconnectSocket, getSocket } from "./multiplayer/socket.js";
+import { useMultiplayerSocket } from "./multiplayer/useMultiplayerSocket.js";
+import { useAudioEngine } from "./audio/useAudioEngine.js";
+import type {
+  AchievementKey,
+  Achievements,
+  BellState,
+  Card,
+  DailyGoal,
+  Difficulty,
+  FruitDefinition,
+  FruitKey,
+  GameSettings,
+  HistoryEntry,
+  Language,
+  PlayerState,
+  RoundSnapshot,
+  RoundSummary,
+  ScoreBreakdown,
+  SeatLayout,
+  TrendPoint,
+} from "./game/types.js";
+import type {
+  MultiplayerResults,
+  RoomPlayerProjection,
+  SeatMap,
+} from "./multiplayer/protocol.js";
+
+type Screen = "home" | "lobby" | "play" | "result";
+type ActiveTab = "recent" | "trend" | "achievements";
+type FeedbackType = "idle" | "success" | "warn" | "error";
+type TimerRef = { current: number | null };
+
+interface FeedbackState {
+  type: FeedbackType;
+  message: string;
+}
+
+interface TauntEcho {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  rotation: number;
+}
+
+interface BellParticle {
+  id: string;
+  angle: number;
+  dist: number;
+  color: string;
+  size: number;
+}
+
+interface MatchContext {
+  playerCount: number;
+  difficulty: Difficulty;
+  durationSec: number;
+}
+
+interface GameSnapshot extends RoundSnapshot {
+  players: PlayerState[];
+  currentTurn: number;
+  actingPlayer: number;
+  score: number;
+  correctHits: number;
+  wrongHits: number;
+  missedHits: number;
+  reactionTimes: number[];
+  scoreBreakdown: ScoreBreakdown;
+  difficulty: Difficulty;
+  durationSec: number;
+  playerCount: number;
+  userSeatId: number;
+  maxStreak: number;
+}
 
 const FRUITS = [
   { key: "banana", label: "香蕉", labelEn: "banana", icon: "🍌" },
   { key: "strawberry", label: "草莓", labelEn: "strawberry", icon: "🍓" },
   { key: "lemon", label: "柠檬", labelEn: "lemon", icon: "🍋" },
   { key: "grape", label: "葡萄", labelEn: "grape", icon: "🍇" },
-];
+] as const satisfies readonly FruitDefinition[];
 
 const PIP_LAYOUTS = {
   1: ["center"],
@@ -61,7 +135,7 @@ const PIP_LAYOUTS = {
   3: ["top-center", "center", "bottom-center"],
   4: ["top-left", "top-right", "bottom-left", "bottom-right"],
   5: ["top-left", "top-right", "center", "bottom-left", "bottom-right"],
-};
+} as const satisfies Record<number, readonly string[]>;
 
 const MODES = {
   easy: {
@@ -83,9 +157,18 @@ const MODES = {
     scoreBonusWindow: 1000,
     isBoss: true,
   },
-};
+} as const satisfies Record<Difficulty, {
+  label: string;
+  labelEn: string;
+  revealMs: number;
+  scoreBonusWindow: number;
+  isBoss?: boolean;
+}>;
 
-const BOSS_TAUNTS = {
+const MODE_ENTRIES = Object.entries(MODES) as Array<[Difficulty, (typeof MODES)[Difficulty]]>;
+const HISTORY_TABS: ActiveTab[] = ["recent", "trend", "achievements"];
+
+const BOSS_TAUNTS: Record<Language, string[]> = {
   zh: [
     "Yang哥：全桌高呼五个水果，你居然把铃让成了传家宝！",
     "Yang哥：这不是漏拍，这是把胜利铺红毯送给下一位！",
@@ -350,9 +433,12 @@ const COPY = {
     achievementDaily3Desc: "Hit daily goal ({target} rounds) 3 days in a row",
     achievementToast: "Achievement unlocked: {name}",
   },
-};
+} as const;
 
-function fruitLabel(fruitKey, language) {
+type CopyKey = keyof typeof COPY.zh;
+type TemplateVars = Record<string, string | number>;
+
+function fruitLabel(fruitKey: FruitKey | null | undefined, language: Language): string {
   const fruit = FRUITS.find((item) => item.key === fruitKey);
   if (!fruit) {
     return "";
@@ -361,14 +447,14 @@ function fruitLabel(fruitKey, language) {
   return language === "en" ? fruit.labelEn : fruit.label;
 }
 
-function modeLabel(modeKey, language) {
+function modeLabel(modeKey: Difficulty, language: Language): string {
   const mode = MODES[modeKey];
   return language === "en" ? mode.labelEn : mode.label;
 }
 
-function FruitCardFace({ card, compact }) {
+function FruitCardFace({ card, compact = false }: { card: Card | null; compact?: boolean }) {
   const fruit = card ? FRUITS.find((item) => item.key === card.fruit) : null;
-  const positions = card ? (PIP_LAYOUTS[card.count] ?? PIP_LAYOUTS[1]) : [];
+  const positions = card ? (PIP_LAYOUTS[card.count as keyof typeof PIP_LAYOUTS] ?? PIP_LAYOUTS[1]) : [];
 
   return (
     <div className="play-card-face">
@@ -385,7 +471,23 @@ function FruitCardFace({ card, compact }) {
   );
 }
 
-function TableSeat({ player, seat, isActive, isCurrentTurn, language, compactCard, justFlipped }) {
+function TableSeat({
+  player,
+  seat,
+  isActive,
+  isCurrentTurn,
+  language,
+  compactCard,
+  justFlipped,
+}: {
+  player: PlayerState;
+  seat: SeatLayout;
+  isActive: boolean;
+  isCurrentTurn: boolean;
+  language: Language;
+  compactCard: boolean;
+  justFlipped: boolean;
+}) {
   const topCard = getTopCard(player);
   const hasCard = Boolean(topCard);
   const label = language === "en" ? player.labelEn : player.labelZh;
@@ -433,7 +535,7 @@ function TableSeat({ player, seat, isActive, isCurrentTurn, language, compactCar
   );
 }
 
-const ACHIEVEMENT_META = {
+const ACHIEVEMENT_META: Record<AchievementKey, { icon: string; nameKey: CopyKey; descKey: CopyKey }> = {
   first_win:     { icon: "🎯", nameKey: "achievementFirstWin",    descKey: "achievementFirstWinDesc" },
   streak_5:      { icon: "🔥", nameKey: "achievementStreak5",     descKey: "achievementStreak5Desc" },
   perfect_round: { icon: "🌟", nameKey: "achievementPerfectRound",descKey: "achievementPerfectRoundDesc" },
@@ -441,8 +543,8 @@ const ACHIEVEMENT_META = {
   daily_3:       { icon: "📅", nameKey: "achievementDaily3",      descKey: "achievementDaily3Desc" },
 };
 
-function TrendLine({ points, color }) {
-  const nonNullValues = points.map((p) => p.value).filter((v) => v !== null);
+function TrendLine({ points, color }: { points: TrendPoint[]; color: string }) {
+  const nonNullValues = points.map((p) => p.value).filter((v): v is number => v !== null);
   if (nonNullValues.length < 2) return null;
   const W = 260;
   const H = 56;
@@ -451,13 +553,14 @@ function TrendLine({ points, color }) {
   const max = Math.max(...nonNullValues);
   const range = max - min || 1;
   const n = points.length;
-  const cx = (i) => ((i / (n - 1)) * (W - PAD * 2) + PAD).toFixed(1);
-  const cy = (v) => (H - PAD - ((v - min) / range) * (H - PAD * 2)).toFixed(1);
-  const segments = [];
-  let seg = [];
+  const cx = (i: number) => ((i / (n - 1)) * (W - PAD * 2) + PAD).toFixed(1);
+  const cy = (v: number) => (H - PAD - ((v - min) / range) * (H - PAD * 2)).toFixed(1);
+  const segments: string[] = [];
+  let seg: string[] = [];
   for (let i = 0; i < points.length; i++) {
-    if (points[i].value !== null) {
-      seg.push(`${cx(i)},${cy(points[i].value)}`);
+    const point = points[i];
+    if (point && point.value !== null) {
+      seg.push(`${cx(i)},${cy(point.value)}`);
     } else if (seg.length) {
       segments.push(seg.join(" "));
       seg = [];
@@ -476,13 +579,51 @@ function TrendLine({ points, color }) {
   );
 }
 
+const INITIAL_BELL_STATE: BellState = {
+  available: false,
+  fruitKey: null,
+  startedAt: 0,
+  handled: true,
+};
+
+const INITIAL_GAME_SNAPSHOT: GameSnapshot = {
+  players: [],
+  currentTurn: 0,
+  actingPlayer: 0,
+  score: 0,
+  correctHits: 0,
+  wrongHits: 0,
+  missedHits: 0,
+  reactionTimes: [],
+  scoreBreakdown: INITIAL_BREAKDOWN,
+  difficulty: DEFAULT_SETTINGS.difficulty,
+  durationSec: DEFAULT_SETTINGS.duration,
+  playerCount: DEFAULT_SETTINGS.playerCount,
+  userSeatId: 0,
+  maxStreak: 0,
+};
+
+function clearTimeoutRef(ref: TimerRef): void {
+  if (ref.current !== null) {
+    window.clearTimeout(ref.current);
+    ref.current = null;
+  }
+}
+
+function clearIntervalRef(ref: TimerRef): void {
+  if (ref.current !== null) {
+    window.clearInterval(ref.current);
+    ref.current = null;
+  }
+}
+
 function App() {
-  const [screen, setScreen] = useState("home");
-  const [settings, setSettings] = useState(loadSettings);
-  const [bestSummary, setBestSummary] = useState(loadBestSummary);
-  const [recentSummary, setRecentSummary] = useState(loadRecentSummary);
-  const [history, setHistory] = useState(loadHistory);
-  const [players, setPlayers] = useState(() => createPlayers(DEFAULT_SETTINGS.playerCount, FRUITS));
+  const [screen, setScreen] = useState<Screen>("home");
+  const [settings, setSettings] = useState<GameSettings>(loadSettings);
+  const [bestSummary, setBestSummary] = useState<RoundSummary>(loadBestSummary);
+  const [recentSummary, setRecentSummary] = useState<RoundSummary>(loadRecentSummary);
+  const [history, setHistory] = useState<HistoryEntry[]>(loadHistory);
+  const [players, setPlayers] = useState<PlayerState[]>(() => createPlayers(DEFAULT_SETTINGS.playerCount, FRUITS));
   const [currentTurn, setCurrentTurn] = useState(0);
   const [actingPlayer, setActingPlayer] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(DEFAULT_SETTINGS.duration);
@@ -490,26 +631,26 @@ function App() {
   const [correctHits, setCorrectHits] = useState(0);
   const [wrongHits, setWrongHits] = useState(0);
   const [missedHits, setMissedHits] = useState(0);
-  const [reactionTimes, setReactionTimes] = useState([]);
+  const [reactionTimes, setReactionTimes] = useState<number[]>([]);
   const [streak, setStreak] = useState(0);
   const [maxStreak, setMaxStreak] = useState(0);
-  const [dailyGoal, setDailyGoal] = useState(loadDailyGoal);
-  const [achievements, setAchievements] = useState(loadAchievements);
-  const [achievementQueue, setAchievementQueue] = useState([]);
-  const [activeTab, setActiveTab] = useState("recent");
-  const [feedback, setFeedback] = useState({
+  const [dailyGoal, setDailyGoal] = useState<DailyGoal>(loadDailyGoal);
+  const [achievements, setAchievements] = useState<Achievements>(loadAchievements);
+  const [achievementQueue, setAchievementQueue] = useState<AchievementKey[]>([]);
+  const [activeTab, setActiveTab] = useState<ActiveTab>("recent");
+  const [feedback, setFeedback] = useState<FeedbackState>({
     type: "idle",
     message: "按顺时针依次翻牌，只有每位玩家最上面那张参与判定。",
   });
-  const [activeBellFruit, setActiveBellFruit] = useState(null);
-  const [resultSummary, setResultSummary] = useState(INITIAL_SUMMARY);
-  const [scoreBreakdown, setScoreBreakdown] = useState(INITIAL_BREAKDOWN);
+  const [activeBellFruit, setActiveBellFruit] = useState<FruitKey | null>(null);
+  const [resultSummary, setResultSummary] = useState<RoundSummary>(INITIAL_SUMMARY);
+  const [scoreBreakdown, setScoreBreakdown] = useState<ScoreBreakdown>(INITIAL_BREAKDOWN);
   const [penaltyNotice, setPenaltyNotice] = useState("");
   const [bossTaunt, setBossTaunt] = useState("");
   const [bossDisrupting, setBossDisrupting] = useState(false);
-  const [tauntEchoes, setTauntEchoes] = useState([]);
+  const [tauntEchoes, setTauntEchoes] = useState<TauntEcho[]>([]);
   const [justFlippedSeat, setJustFlippedSeat] = useState(-1);
-  const [bellParticles, setBellParticles] = useState([]);
+  const [bellParticles, setBellParticles] = useState<BellParticle[]>([]);
   const [bellPressed, setBellPressed] = useState(false);
   const [cardCollecting, setCardCollecting] = useState(false);
   const [countdown, setCountdown] = useState(0);
@@ -518,37 +659,32 @@ function App() {
   const [isMultiplayer, setIsMultiplayer] = useState(false);
   const [roomCode, setRoomCode] = useState("");
   const [joinCode, setJoinCode] = useState("");
-  const [roomPlayers, setRoomPlayers] = useState([]);
+  const [roomPlayers, setRoomPlayers] = useState<RoomPlayerProjection[]>([]);
   const [myPlayerId, setMyPlayerId] = useState(-1);
   const [mySeatIndex, setMySeatIndex] = useState(-1);
   const [lobbyError, setLobbyError] = useState("");
-  const [multiResults, setMultiResults] = useState(null);
-  const [seatMap, setSeatMap] = useState([]);
+  const [multiResults, setMultiResults] = useState<MultiplayerResults | null>(null);
+  const [seatMap, setSeatMap] = useState<SeatMap>([]);
 
-  const revealIntervalRef = useRef(null);
-  const countdownIntervalRef = useRef(null);
-  const feedbackTimeoutRef = useRef(null);
-  const penaltyTimeoutRef = useRef(null);
-  const bossTauntTimeoutRef = useRef(null);
-  const startupTimeoutRef = useRef(null);
-  const gameStateRef = useRef({});
+  const revealIntervalRef = useRef<number | null>(null);
+  const countdownIntervalRef = useRef<number | null>(null);
+  const feedbackTimeoutRef = useRef<number | null>(null);
+  const penaltyTimeoutRef = useRef<number | null>(null);
+  const bossTauntTimeoutRef = useRef<number | null>(null);
+  const startupTimeoutRef = useRef<number | null>(null);
+  const gameStateRef = useRef<GameSnapshot>(INITIAL_GAME_SNAPSHOT);
   const gameRunningRef = useRef(false);
-  const bellStateRef = useRef({
-    available: false,
-    fruitKey: null,
-    startedAt: 0,
-    handled: true,
-  });
-  const matchContextRef = useRef(null);
-  const flipTimeoutRef = useRef(null);
-  const particleTimeoutRef = useRef(null);
-  const bellPressTimeoutRef = useRef(null);
-  const collectTimeoutRef = useRef(null);
-  const countdownTimerRef = useRef(null);
-  const screenRegionRef = useRef(null);
+  const bellStateRef = useRef<BellState>(INITIAL_BELL_STATE);
+  const matchContextRef = useRef<MatchContext | null>(null);
+  const flipTimeoutRef = useRef<number | null>(null);
+  const particleTimeoutRef = useRef<number | null>(null);
+  const bellPressTimeoutRef = useRef<number | null>(null);
+  const collectTimeoutRef = useRef<number | null>(null);
+  const countdownTimerRef = useRef<number | null>(null);
+  const screenRegionRef = useRef<HTMLElement | null>(null);
 
   const mode = MODES[settings.difficulty];
-  const seatLayouts = getSeatLayouts(settings.playerCount);
+  const seatLayouts = getSeatLayouts(settings.playerCount) ?? [];
   const userSeatId = seatLayouts.findIndex((seat) => seat.isUser);
   const copy = COPY[settings.language] ?? COPY.zh;
   const compactCard = settings.playerCount >= 5;
@@ -556,14 +692,15 @@ function App() {
   const { playFeedback: playFeedbackSound, ensureUnlocked: ensureAudioContext } =
     useAudioEngine(settings.soundEnabled);
 
-  function t(key, vars = {}) {
-    return Object.entries(vars).reduce(
-      (message, [name, value]) => message.replaceAll(`{${name}}`, String(value)),
-      copy[key],
-    );
+  function t(key: CopyKey, vars: TemplateVars = {}): string {
+    let message = String(copy[key]);
+    for (const [name, value] of Object.entries(vars)) {
+      message = message.replaceAll(`{${name}}`, String(value));
+    }
+    return message;
   }
 
-  function formatRelativeTime(ts) {
+  function formatRelativeTime(ts: number): string {
     const diffMs = Date.now() - ts;
     const diffSec = Math.floor(diffMs / 1000);
     if (diffSec < 60) return t("historyJustNow");
@@ -613,7 +750,7 @@ function App() {
   ]);
 
   useEffect(() => {
-    function onKeyDown(event) {
+    function onKeyDown(event: KeyboardEvent) {
       if (screen === "play" && event.code === "Space") {
         event.preventDefault();
         handleBell();
@@ -697,16 +834,16 @@ function App() {
       bossTauntTimeoutRef,
       startupTimeoutRef,
     });
-    window.clearTimeout(flipTimeoutRef.current);
-    window.clearTimeout(particleTimeoutRef.current);
-    window.clearTimeout(bellPressTimeoutRef.current);
-    window.clearTimeout(collectTimeoutRef.current);
-    window.clearInterval(countdownTimerRef.current);
+    clearTimeoutRef(flipTimeoutRef);
+    clearTimeoutRef(particleTimeoutRef);
+    clearTimeoutRef(bellPressTimeoutRef);
+    clearTimeoutRef(collectTimeoutRef);
+    clearIntervalRef(countdownTimerRef);
   }
 
-  function updateFeedback(type, message) {
+  function updateFeedback(type: FeedbackType, message: string): void {
     setFeedback({ type, message });
-    window.clearTimeout(feedbackTimeoutRef.current);
+    clearTimeoutRef(feedbackTimeoutRef);
     feedbackTimeoutRef.current = window.setTimeout(() => {
       setFeedback({
         type: "idle",
@@ -715,7 +852,7 @@ function App() {
     }, 1200);
   }
 
-  function applyBellAvailability(nextPlayers) {
+  function applyBellAvailability(nextPlayers: PlayerState[]): void {
     const evaluation = evaluateBellAvailability(nextPlayers);
 
     if (evaluation.available) {
@@ -738,13 +875,13 @@ function App() {
     setActiveBellFruit(null);
   }
 
-  function triggerBossTaunt(forceMessage) {
-    if (!mode.isBoss) {
+  function triggerBossTaunt(forceMessage?: string): void {
+    if (!("isBoss" in mode && mode.isBoss)) {
       return;
     }
 
     const taunts = BOSS_TAUNTS[settings.language] ?? BOSS_TAUNTS.zh;
-    const message = forceMessage ?? taunts[Math.floor(Math.random() * taunts.length)];
+    const message = forceMessage ?? taunts[Math.floor(Math.random() * taunts.length)] ?? "";
     const echoSeed = Date.now();
     setBossTaunt(message);
     setBossDisrupting(true);
@@ -758,7 +895,7 @@ function App() {
         rotation: -14 + ((echoSeed + index * 11) % 28),
       })),
     ]);
-    window.clearTimeout(bossTauntTimeoutRef.current);
+    clearTimeoutRef(bossTauntTimeoutRef);
     bossTauntTimeoutRef.current = window.setTimeout(() => {
       setBossTaunt("");
       setBossDisrupting(false);
@@ -766,15 +903,15 @@ function App() {
     }, 1700);
   }
 
-  function showPenalty(count) {
+  function showPenalty(count: number): void {
     setPenaltyNotice(t("penaltyBanner", { count }));
-    window.clearTimeout(penaltyTimeoutRef.current);
+    clearTimeoutRef(penaltyTimeoutRef);
     penaltyTimeoutRef.current = window.setTimeout(() => {
       setPenaltyNotice("");
     }, 1500);
   }
 
-  function spawnBellParticles() {
+  function spawnBellParticles(): void {
     const count = 16;
     const seed = Date.now();
     const particles = Array.from({ length: count }, (_, i) => ({
@@ -785,31 +922,31 @@ function App() {
       size: 4 + Math.random() * 5,
     }));
     setBellParticles(particles);
-    window.clearTimeout(particleTimeoutRef.current);
+    clearTimeoutRef(particleTimeoutRef);
     particleTimeoutRef.current = window.setTimeout(() => {
       setBellParticles([]);
     }, 700);
   }
 
-  function triggerBellPress() {
+  function triggerBellPress(): void {
     setBellPressed(true);
-    window.clearTimeout(bellPressTimeoutRef.current);
+    clearTimeoutRef(bellPressTimeoutRef);
     bellPressTimeoutRef.current = window.setTimeout(() => {
       setBellPressed(false);
     }, 250);
   }
 
-  function triggerFlipAnimation(seatIndex) {
+  function triggerFlipAnimation(seatIndex: number): void {
     setJustFlippedSeat(seatIndex);
-    window.clearTimeout(flipTimeoutRef.current);
+    clearTimeoutRef(flipTimeoutRef);
     flipTimeoutRef.current = window.setTimeout(() => {
       setJustFlippedSeat(-1);
     }, 500);
   }
 
-  function triggerCollectAnimation() {
+  function triggerCollectAnimation(): void {
     setCardCollecting(true);
-    window.clearTimeout(collectTimeoutRef.current);
+    clearTimeoutRef(collectTimeoutRef);
     collectTimeoutRef.current = window.setTimeout(() => {
       setCardCollecting(false);
     }, 400);
@@ -864,7 +1001,10 @@ function App() {
     setScreen("home");
   }
 
-  function advanceTurn(basePlayers = gameStateRef.current.players, baseTurn = gameStateRef.current.currentTurn) {
+  function advanceTurn(
+    basePlayers: PlayerState[] = gameStateRef.current.players,
+    baseTurn = gameStateRef.current.currentTurn,
+  ): void {
     if (!gameRunningRef.current) {
       return;
     }
@@ -887,6 +1027,9 @@ function App() {
 
     const actorIndex = baseTurn;
     const actor = preparedPlayers[actorIndex];
+    if (!actor) {
+      return;
+    }
     const { player } = flipCardForPlayer(actor);
     preparedPlayers[actorIndex] = player;
 
@@ -902,7 +1045,7 @@ function App() {
   function startGame() {
     ensureAudioContext();
     stopGameLoops();
-    window.clearInterval(countdownTimerRef.current);
+    clearIntervalRef(countdownTimerRef);
 
     const freshPlayers = createPlayers(settings.playerCount, FRUITS);
 
@@ -940,14 +1083,14 @@ function App() {
       if (tick > 0) {
         setCountdown(tick);
       } else {
-        window.clearInterval(countdownTimerRef.current);
+        clearIntervalRef(countdownTimerRef);
         setCountdown(0);
         beginGameLoop(freshPlayers);
       }
     }, 1000);
   }
 
-  function beginGameLoop(freshPlayers) {
+  function beginGameLoop(freshPlayers: PlayerState[]): void {
     gameRunningRef.current = true;
     setFeedback({ type: "idle", message: t("startRound") });
 
@@ -965,6 +1108,7 @@ function App() {
       durationSec: settings.duration,
       playerCount: settings.playerCount,
       userSeatId,
+      maxStreak: 0,
     };
     advanceTurn(freshPlayers, 0);
 
@@ -1047,7 +1191,11 @@ function App() {
     const tableCount = totalTableCards(snapshot.players);
     const penaltyTarget = Math.ceil(tableCount / 2);
     const nextPlayers = clonePlayers(snapshot.players);
-    const penaltyResult = takePenaltyCards(nextPlayers[snapshot.userSeatId], penaltyTarget);
+    const penaltyPlayer = nextPlayers[snapshot.userSeatId];
+    if (!penaltyPlayer) {
+      return;
+    }
+    const penaltyResult = takePenaltyCards(penaltyPlayer, penaltyTarget);
 
     nextPlayers[snapshot.userSeatId] = penaltyResult.player;
 
@@ -1090,7 +1238,7 @@ function App() {
 
     if (pendingResolution.missed) {
       setMissedHits(resolvedSnapshot.missedHits);
-      setScoreBreakdown(resolvedSnapshot.scoreBreakdown);
+      setScoreBreakdown(resolvedSnapshot.scoreBreakdown ?? INITIAL_BREAKDOWN);
       setFeedback({
         type: "warn",
         message: t("missedBell", {
@@ -1127,8 +1275,8 @@ function App() {
     // Check achievements
     const snapshotMaxStreak = resolvedSnapshot.maxStreak ?? 0;
     let currentAchievements = achievements;
-    const newlyUnlocked = [];
-    const achievementChecks = [
+    const newlyUnlocked: AchievementKey[] = [];
+    const achievementChecks: Array<[AchievementKey, boolean]> = [
       ["first_win", updatedHistory.length >= 1],
       ["streak_5", snapshotMaxStreak >= 5],
       ["perfect_round", summary.correctHits > 0 && summary.wrongHits === 0 && summary.missedHits === 0],
@@ -1152,12 +1300,17 @@ function App() {
       startedAt: 0,
       handled: true,
     };
-    gameStateRef.current = resolvedSnapshot;
+    gameStateRef.current = {
+      ...gameStateRef.current,
+      ...resolvedSnapshot,
+      score: summary.score,
+      scoreBreakdown: resolvedSnapshot.scoreBreakdown ?? INITIAL_BREAKDOWN,
+    };
 
     setScreen("result");
   }
 
-  function updateSetting(key, value) {
+  function updateSetting<Key extends keyof GameSettings>(key: Key, value: GameSettings[Key]): void {
     setSettings((current) => ({
       ...current,
       [key]: value,
@@ -1236,7 +1389,7 @@ function App() {
                 </div>
               </div>
               <div className="history-tabs" role="tablist" aria-label={t("historyTitle")}>
-                {(["recent", "trend", "achievements"]).map((tab) => (
+                {HISTORY_TABS.map((tab) => (
                   <button
                     key={tab}
                     role="tab"
@@ -1397,7 +1550,7 @@ function App() {
                 <div className="control-group">
                   <span>{t("difficulty")}</span>
                   <div className="chip-row">
-                    {Object.entries(MODES).map(([key, item]) => (
+                    {MODE_ENTRIES.map(([key]) => (
                       <button
                         key={key}
                         className={key === settings.difficulty ? "chip active" : "chip"}
@@ -1535,6 +1688,9 @@ function App() {
                 {bossTaunt && <div className="boss-taunt" aria-live="polite" aria-atomic="true">{bossTaunt}</div>}
                 {seatLayouts.map((seat, index) => {
                   const player = players[index];
+                  if (!player) {
+                    return null;
+                  }
                   const topCard = getTopCard(player);
                   const isActive =
                     activeBellFruit &&
@@ -1544,7 +1700,7 @@ function App() {
 
                   return (
                     <TableSeat
-                      key={`${seat.label}-${index}`}
+                      key={`${seat.labelZh}-${index}`}
                       player={player}
                       seat={seat}
                       isActive={Boolean(isActive)}
@@ -1566,7 +1722,7 @@ function App() {
                         "--dist": `${p.dist}px`,
                         width: `${p.size}px`,
                         height: `${p.size}px`,
-                      }}
+                      } as CSSProperties & Record<"--angle" | "--dist", string>}
                     />
                   ))}
                   {bellPressed && (
@@ -1599,7 +1755,7 @@ function App() {
                 <div className="card result-hero">
                   <p className="eyebrow">{t("multiResult")}</p>
                   <h2>
-                    {multiResults[mySeatIndex]?.score ?? 0} {t("scoreUnit")}
+                    {multiResults[String(mySeatIndex)]?.score ?? 0} {t("scoreUnit")}
                   </h2>
                 </div>
 
@@ -1745,8 +1901,8 @@ function App() {
       </section>
       {achievementQueue.length > 0 && (
         <div className="achievement-toast" role="status" aria-live="assertive" aria-atomic="true">
-          <span aria-hidden="true">{ACHIEVEMENT_META[achievementQueue[0]].icon}</span>
-          {" "}{t("achievementToast", { name: t(ACHIEVEMENT_META[achievementQueue[0]].nameKey) })}
+          <span aria-hidden="true">{ACHIEVEMENT_META[achievementQueue[0]!].icon}</span>
+          {" "}{t("achievementToast", { name: t(ACHIEVEMENT_META[achievementQueue[0]!].nameKey) })}
         </div>
       )}
     </main>

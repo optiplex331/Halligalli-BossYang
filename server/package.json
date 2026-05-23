@@ -4,8 +4,8 @@
   "packageManager": "pnpm@11.0.9",
   "type": "module",
   "scripts": {
-    "dev": "node index.js",
-    "start": "node index.js"
+    "dev": "tsx index.ts",
+    "start": "node ../dist/server/index.js"
   },
   "engines": {
     "node": ">=22.13.0",

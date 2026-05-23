@@ -14,8 +14,8 @@ import {
   unlockAchievement,
   DAILY_GOAL_KEY,
   saveJson,
-} from "../game/persistence";
-import { MAX_HISTORY, ACHIEVEMENTS_KEY } from "../game/constants";
+} from "../game/persistence.js";
+import { MAX_HISTORY, ACHIEVEMENTS_KEY } from "../game/constants.js";
 
 describe("persistence normalization", () => {
   it("clamps malformed settings back to supported values", () => {
@@ -73,7 +73,7 @@ describe("persistence normalization", () => {
           throw new Error("quota");
         },
       },
-    };
+    } as unknown as Window & typeof globalThis;
 
     expect(saveJson("test-key", { ok: true })).toBe(false);
 
@@ -85,21 +85,25 @@ describe("history persistence", () => {
   const originalWindow = globalThis.window;
 
   beforeEach(() => {
-    const store = new Map();
+    const store = new Map<string, string>();
     globalThis.window = {
       localStorage: {
-        getItem: (k) => (store.has(k) ? store.get(k) : null),
-        setItem: (k, v) => store.set(k, String(v)),
-        removeItem: (k) => store.delete(k),
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => {
+          store.set(k, String(v));
+        },
+        removeItem: (k: string) => {
+          store.delete(k);
+        },
       },
-    };
+    } as unknown as Window & typeof globalThis;
   });
 
   afterEach(() => {
     globalThis.window = originalWindow;
   });
 
-  function makeEntry(overrides = {}) {
+  function makeEntry(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     return {
       ts: 1700000000000,
       mode: "solo",
@@ -129,15 +133,15 @@ describe("history persistence", () => {
     saveJson(HISTORY_KEY, [makeEntry(), null, "garbage", makeEntry({ ts: 2 })]);
     const history = loadHistory();
     expect(history).toHaveLength(2);
-    expect(history[0].ts).toBe(1700000000000);
+    expect(history[0]!.ts).toBe(1700000000000);
   });
 
   it("appends newest entry to the front", () => {
     appendHistoryEntry(makeEntry({ ts: 1, score: 100 }));
     appendHistoryEntry(makeEntry({ ts: 2, score: 200 }));
     const history = loadHistory();
-    expect(history[0].score).toBe(200);
-    expect(history[1].score).toBe(100);
+    expect(history[0]!.score).toBe(200);
+    expect(history[1]!.score).toBe(100);
   });
 
   it("caps history length at MAX_HISTORY", () => {
@@ -146,12 +150,12 @@ describe("history persistence", () => {
     }
     const history = loadHistory();
     expect(history).toHaveLength(MAX_HISTORY);
-    expect(history[0].ts).toBe(MAX_HISTORY + 24);
+    expect(history[0]!.ts).toBe(MAX_HISTORY + 24);
   });
 
   it("normalizes mode field, defaulting to solo for unknown values", () => {
-    expect(normalizeHistoryEntry(makeEntry({ mode: "co-op" })).mode).toBe("solo");
-    expect(normalizeHistoryEntry(makeEntry({ mode: "multi" })).mode).toBe("multi");
+    expect(normalizeHistoryEntry(makeEntry({ mode: "co-op" }))?.mode).toBe("solo");
+    expect(normalizeHistoryEntry(makeEntry({ mode: "multi" }))?.mode).toBe("multi");
   });
 
   it("returns null for non-object input", () => {
@@ -172,14 +176,18 @@ describe("daily goal persistence", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2025-06-10T12:00:00"));
-    const store = new Map();
+    const store = new Map<string, string>();
     globalThis.window = {
       localStorage: {
-        getItem: (k) => (store.has(k) ? store.get(k) : null),
-        setItem: (k, v) => store.set(k, String(v)),
-        removeItem: (k) => store.delete(k),
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => {
+          store.set(k, String(v));
+        },
+        removeItem: (k: string) => {
+          store.delete(k);
+        },
       },
-    };
+    } as unknown as Window & typeof globalThis;
   });
 
   afterEach(() => {
@@ -217,17 +225,21 @@ describe("daily goal persistence", () => {
 
 describe("achievements persistence", () => {
   const originalWindow = globalThis.window;
-  let store;
+  let store: Map<string, string>;
 
   beforeEach(() => {
-    store = new Map();
+    store = new Map<string, string>();
     globalThis.window = {
       localStorage: {
-        getItem: (k) => (store.has(k) ? store.get(k) : null),
-        setItem: (k, v) => store.set(k, String(v)),
-        removeItem: (k) => store.delete(k),
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => {
+          store.set(k, String(v));
+        },
+        removeItem: (k: string) => {
+          store.delete(k);
+        },
       },
-    };
+    } as unknown as Window & typeof globalThis;
   });
 
   afterEach(() => {

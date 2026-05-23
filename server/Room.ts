@@ -1,9 +1,34 @@
+import type { Difficulty, Language } from "../src/game/types.js";
+import type { GameEngine } from "./GameEngine.js";
+
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 4;
 const ROOM_TIMEOUT_MS = 10 * 60 * 1000;
 
-export function generateCode(existingCodes) {
-  let code;
+export type RoomState = "lobby" | "playing" | "finished";
+
+export interface PlayerProjection {
+  id: number;
+  name: string;
+  ready: boolean;
+  connected: boolean;
+  seatIndex: number;
+  isHost: boolean;
+}
+
+export interface RoomProjection {
+  code: string;
+  hostId: number;
+  maxPlayers: number;
+  difficulty: Difficulty;
+  duration: number;
+  language: Language;
+  state: RoomState;
+  players: PlayerProjection[];
+}
+
+export function generateCode(existingCodes: ReadonlySet<string>): string {
+  let code = "";
   let attempts = 0;
   do {
     code = "";
@@ -16,16 +41,17 @@ export function generateCode(existingCodes) {
 }
 
 export class Player {
-  constructor(id, name, socketId) {
-    this.id = id;
-    this.name = name;
-    this.socketId = socketId;
-    this.ready = false;
-    this.connected = true;
-    this.seatIndex = -1;
-  }
+  ready = false;
+  connected = true;
+  seatIndex = -1;
 
-  toJSON() {
+  constructor(
+    public id: number,
+    public name: string,
+    public socketId: string,
+  ) {}
+
+  toJSON(): Omit<PlayerProjection, "isHost"> {
     return {
       id: this.id,
       name: this.name,
@@ -37,30 +63,31 @@ export class Player {
 }
 
 export class Room {
-  constructor(code, hostId, maxPlayers, difficulty, duration, language) {
-    this.code = code;
-    this.hostId = hostId;
-    this.maxPlayers = maxPlayers;
-    this.difficulty = difficulty;
-    this.duration = duration;
-    this.language = language;
-    this.players = new Map();
-    this.state = "lobby"; // lobby | playing | finished
-    this.engine = null;
-    this.createdAt = Date.now();
+  players = new Map<number, Player>();
+  state: RoomState = "lobby";
+  engine: GameEngine | null = null;
+  createdAt = Date.now();
+  lastActivityAt = Date.now();
+  private _nextPlayerId = 0;
+
+  constructor(
+    public code: string,
+    public hostId: number,
+    public maxPlayers: number,
+    public difficulty: Difficulty,
+    public duration: number,
+    public language: Language,
+  ) {}
+
+  touch(): void {
     this.lastActivityAt = Date.now();
-    this._nextPlayerId = 0;
   }
 
-  touch() {
-    this.lastActivityAt = Date.now();
-  }
-
-  isStale() {
+  isStale(): boolean {
     return Date.now() - this.lastActivityAt > ROOM_TIMEOUT_MS;
   }
 
-  addPlayer(name, socketId) {
+  addPlayer(name: string, socketId: string): Player | null {
     if (this.players.size >= this.maxPlayers) {
       return null;
     }
@@ -75,7 +102,7 @@ export class Room {
     return player;
   }
 
-  removePlayer(playerId) {
+  removePlayer(playerId: number): boolean {
     const player = this.players.get(playerId);
     if (!player) return false;
     this.players.delete(playerId);
@@ -86,20 +113,23 @@ export class Room {
     }
     // Transfer host if needed
     if (this.hostId === playerId && this.players.size > 0) {
-      this.hostId = this.players.values().next().value.id;
+      const nextHost = this.players.values().next().value;
+      if (nextHost) {
+        this.hostId = nextHost.id;
+      }
     }
     this.touch();
     return true;
   }
 
-  getPlayerBySocketId(socketId) {
+  getPlayerBySocketId(socketId: string): Player | null {
     for (const player of this.players.values()) {
       if (player.socketId === socketId) return player;
     }
     return null;
   }
 
-  allReady() {
+  allReady(): boolean {
     if (this.players.size < 2) return false;
     for (const player of this.players.values()) {
       if (!player.ready) return false;
@@ -107,14 +137,14 @@ export class Room {
     return true;
   }
 
-  playerList() {
+  playerList(): PlayerProjection[] {
     return Array.from(this.players.values()).map((p) => ({
       ...p.toJSON(),
       isHost: p.id === this.hostId,
     }));
   }
 
-  toJSON() {
+  toJSON(): RoomProjection {
     return {
       code: this.code,
       hostId: this.hostId,

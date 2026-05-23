@@ -46,14 +46,10 @@ ENV COMMIT_SHA=$COMMIT_SHA
 WORKDIR /app
 
 COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
-COPY --from=prod-deps --chown=node:node /app/server/node_modules ./server/node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --chown=node:node package.json ./
-COPY --chown=node:node src/game ./src/game
-COPY --chown=node:node server/package.json ./server/package.json
-COPY --chown=node:node server/*.js ./server/
 
 USER node
 EXPOSE 3001
 
-CMD ["node", "server/index.js"]
+CMD ["node", "dist/server/index.js"]

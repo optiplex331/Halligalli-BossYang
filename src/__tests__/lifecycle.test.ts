@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearGameLoopHandles } from "../game/lifecycle";
+import { clearGameLoopHandles } from "../game/lifecycle.js";
 
 const originalWindow = globalThis.window;
 
@@ -15,7 +15,7 @@ describe("game lifecycle cleanup", () => {
     globalThis.window = {
       clearInterval,
       clearTimeout,
-    };
+    } as unknown as Window & typeof globalThis;
 
     clearGameLoopHandles({
       revealIntervalRef: { current: 11 },

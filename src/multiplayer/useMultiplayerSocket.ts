@@ -3,8 +3,34 @@ import { getSocket } from "./socket.js";
 import { DAILY_TARGET_ROUNDS, INITIAL_BREAKDOWN } from "../game/constants.js";
 import { getSeatLayouts } from "../game/rules.js";
 import { appendHistoryEntry, saveDailyGoal } from "../game/persistence.js";
+import type { Language, PlayerState, ScoreBreakdown } from "../game/types.js";
+import type {
+  GameBellResultPayload,
+  GameEndPayload,
+  GameFlipPayload,
+  GameMissedPayload,
+  GameStartPayload,
+  GameTickPayload,
+  GameYourSeatPayload,
+  RoomCreatedPayload,
+  RoomErrorPayload,
+  RoomJoinedPayload,
+  RoomPlayerUpdatePayload,
+} from "./protocol.js";
 
-export function useMultiplayerSocket({ isMultiplayer, mySeatIndex, language, actions }) {
+interface MultiplayerSocketOptions {
+  isMultiplayer: boolean;
+  mySeatIndex: number;
+  language: Language;
+  actions: Record<string, any>;
+}
+
+export function useMultiplayerSocket({
+  isMultiplayer,
+  mySeatIndex,
+  language,
+  actions,
+}: MultiplayerSocketOptions): void {
   const actionsRef = useRef(actions);
   useEffect(() => {
     actionsRef.current = actions;
@@ -16,7 +42,7 @@ export function useMultiplayerSocket({ isMultiplayer, mySeatIndex, language, act
     const socket = getSocket();
     const a = () => actionsRef.current;
 
-    function onRoomCreated({ code, playerId, room }) {
+    function onRoomCreated({ code, playerId, room }: RoomCreatedPayload) {
       a().setRoomCode(code);
       a().setMyPlayerId(playerId);
       a().setRoomPlayers(room.players);
@@ -24,7 +50,7 @@ export function useMultiplayerSocket({ isMultiplayer, mySeatIndex, language, act
       a().setScreen("lobby");
     }
 
-    function onRoomJoined({ playerId, room }) {
+    function onRoomJoined({ playerId, room }: RoomJoinedPayload) {
       a().setRoomCode(room.code);
       a().setMyPlayerId(playerId);
       a().setRoomPlayers(room.players);
@@ -32,24 +58,25 @@ export function useMultiplayerSocket({ isMultiplayer, mySeatIndex, language, act
       a().setScreen("lobby");
     }
 
-    function onPlayerUpdate({ players: updatedPlayers }) {
+    function onPlayerUpdate({ players: updatedPlayers }: RoomPlayerUpdatePayload) {
       a().setRoomPlayers(updatedPlayers);
     }
 
-    function onRoomError({ message, messageZh }) {
+    function onRoomError({ message, messageZh }: RoomErrorPayload) {
       a().setLobbyError(language === "zh" ? messageZh : message);
     }
 
-    function onGameStart({ playerCount, difficulty, duration, topCards, seatMap: sm }) {
+    function onGameStart({ playerCount, difficulty, duration, topCards, seatMap: sm }: GameStartPayload) {
       a().setSeatMap(sm);
       if (a().matchContextRef) {
         a().matchContextRef.current = { playerCount, difficulty, durationSec: duration };
       }
       const seats = getSeatLayouts(playerCount);
+      if (!seats) return;
       const freshPlayers = Array.from({ length: playerCount }, (_, i) => ({
         id: i,
-        labelZh: sm[i]?.name || seats[i].labelZh,
-        labelEn: sm[i]?.name || seats[i].labelEn,
+        labelZh: sm[i]?.name || seats[i]?.labelZh || `P${i + 1}`,
+        labelEn: sm[i]?.name || seats[i]?.labelEn || `P${i + 1}`,
         drawPile: [{ id: "hidden", fruit: "banana", count: 0 }],
         wonPile: [],
         faceUpPile: topCards[i] ? [topCards[i]] : [],
@@ -76,13 +103,13 @@ export function useMultiplayerSocket({ isMultiplayer, mySeatIndex, language, act
       a().gameRunningRef.current = true;
     }
 
-    function onYourSeat({ seatIndex }) {
+    function onYourSeat({ seatIndex }: GameYourSeatPayload) {
       a().setMySeatIndex(seatIndex);
     }
 
-    function onGameFlip({ seatIndex, card, nextTurn, bellAvailable, bellFruitKey, topCards }) {
-      a().setPlayers((prev) =>
-        prev.map((p, i) => ({
+    function onGameFlip({ seatIndex, nextTurn, bellAvailable, bellFruitKey, topCards }: GameFlipPayload) {
+      a().setPlayers((prev: PlayerState[]) =>
+        prev.map((p: PlayerState, i: number) => ({
           ...p,
           faceUpPile: topCards[i] ? [topCards[i]] : [],
         })),
@@ -105,19 +132,19 @@ export function useMultiplayerSocket({ isMultiplayer, mySeatIndex, language, act
       }
     }
 
-    function onGameMissed({ fruitKey }) {
-      a().setMissedHits((v) => v + 1);
-      a().setScore((v) => Math.max(0, v - 30));
-      a().setScoreBreakdown((v) => ({ ...v, missedPenalty: v.missedPenalty + 30 }));
+    function onGameMissed({ fruitKey }: GameMissedPayload) {
+      a().setMissedHits((v: number) => v + 1);
+      a().setScore((v: number) => Math.max(0, v - 30));
+      a().setScoreBreakdown((v: ScoreBreakdown) => ({ ...v, missedPenalty: v.missedPenalty + 30 }));
       a().setStreak(0);
       a().updateFeedback("warn", a().t("missedBell", { fruit: a().fruitLabel(fruitKey, language) }));
       a().playFeedbackSound("warn");
     }
 
-    function onBellResult(data) {
+    function onBellResult(data: GameBellResultPayload) {
       if (data.type === "correct") {
-        a().setPlayers((prev) =>
-          prev.map((p, i) => ({
+        a().setPlayers((prev: PlayerState[]) =>
+          prev.map((p: PlayerState, i: number) => ({
             ...p,
             faceUpPile: data.topCards[i] ? [data.topCards[i]] : [],
           })),
@@ -128,10 +155,10 @@ export function useMultiplayerSocket({ isMultiplayer, mySeatIndex, language, act
 
         if (data.winnerId === mySeatIndex) {
           const reactionMs = Date.now() - a().bellStateRef.current.startedAt;
-          a().setScore((v) => v + data.earned);
-          a().setCorrectHits((v) => v + 1);
-          a().setReactionTimes((v) => [...v, reactionMs]);
-          a().setStreak((v) => v + 1);
+          a().setScore((v: number) => v + data.earned);
+          a().setCorrectHits((v: number) => v + 1);
+          a().setReactionTimes((v: number[]) => [...v, reactionMs]);
+          a().setStreak((v: number) => v + 1);
           a().updateFeedback("success", a().t("bellSuccess", { count: data.collectedCount }));
           a().playFeedbackSound("success");
           a().spawnBellParticles();
@@ -146,8 +173,8 @@ export function useMultiplayerSocket({ isMultiplayer, mySeatIndex, language, act
         a().triggerBellPress();
         a().triggerCollectAnimation();
       } else if (data.type === "wrong") {
-        a().setPlayers((prev) =>
-          prev.map((p, i) => ({
+        a().setPlayers((prev: PlayerState[]) =>
+          prev.map((p: PlayerState, i: number) => ({
             ...p,
             faceUpPile: data.topCards[i] ? [data.topCards[i]] : [],
           })),
@@ -164,9 +191,9 @@ export function useMultiplayerSocket({ isMultiplayer, mySeatIndex, language, act
         }
 
         if (data.playerId === mySeatIndex) {
-          a().setWrongHits((v) => v + 1);
-          a().setScore((v) => Math.max(0, v - 50 - data.penaltyCount * 4));
-          a().setScoreBreakdown((v) => ({
+          a().setWrongHits((v: number) => v + 1);
+          a().setScore((v: number) => Math.max(0, v - 50 - data.penaltyCount * 4));
+          a().setScoreBreakdown((v: ScoreBreakdown) => ({
             ...v,
             wrongPenalty: v.wrongPenalty + 50,
             cardPenalty: v.cardPenalty + data.penaltyCount * 4,
@@ -192,16 +219,16 @@ export function useMultiplayerSocket({ isMultiplayer, mySeatIndex, language, act
       }
     }
 
-    function onGameTick({ secondsLeft: s }) {
+    function onGameTick({ secondsLeft: s }: GameTickPayload) {
       a().setSecondsLeft(s);
     }
 
-    function onGameEnd({ results }) {
+    function onGameEnd({ results }: GameEndPayload) {
       a().gameRunningRef.current = false;
       a().setMultiResults(results);
       a().setScreen("result");
 
-      const mine = results && typeof results === "object" ? results[mySeatIndex] : null;
+      const mine = results && typeof results === "object" ? results[String(mySeatIndex)] : null;
       if (mine) {
         const ctx = a().matchContextRef?.current ?? {};
         const updated = appendHistoryEntry({
