@@ -37,10 +37,10 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || 'master' }}
           fetch-depth: 0
 
-      - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+      - name: Set up Task
+        uses: go-task/setup-task@3be4020d41929789a01026e0e427a4321ce0ad44 # v2.0.0
         with:
-          node-version: 22.13.0
+          version: 3.x
 
       - name: Resolve release metadata
         id: release
@@ -48,40 +48,36 @@ jobs:
         run: |
           set -euo pipefail
 
-          image="$(echo "ghcr.io/${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
-
-          if describe="$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' --long --abbrev=7 2>/dev/null)"; then
-            base="${describe%%-*}"
-            rest="${describe#*-}"
-            distance="${rest%%-*}"
-            short_sha="${describe##*-g}"
-            base="${base#v}"
-          else
-            base="$(node -p "require('./package.json').version")"
-            distance="$(git rev-list --count HEAD)"
-            short_sha="$(git rev-parse --short=7 HEAD)"
-          fi
-
-          version_tag="${base}-$(printf "%04d" "${distance}")-g${short_sha}"
+          image="$(task -s -t .github/utils/Taskfile.yaml image-repo)"
+          version_tag="$(task -s -t .github/utils/Taskfile.yaml generate-extended-version)"
+          image_tag="$(task -s -t .github/utils/Taskfile.yaml generate-extended-version-tag)"
           commit_sha="$(git rev-parse HEAD)"
 
           {
             echo "image=${image}"
             echo "version_tag=${version_tag}"
+            echo "image_tag=${image_tag}"
             echo "commit_sha=${commit_sha}"
           } >> "${GITHUB_OUTPUT}"
 
           echo "Release commit: ${commit_sha}"
           echo "App version: ${version_tag}"
-          echo "GHCR image: ${image}:${version_tag}"
+          echo "GHCR image: ${image_tag}"
 
       - name: Validate release configuration
         shell: bash
+        env:
+          DO_GHCR_USERNAME: ${{ vars.DO_GHCR_USERNAME }}
+          DO_GHCR_TOKEN: ${{ secrets.DO_GHCR_TOKEN }}
         run: |
           set -euo pipefail
 
           : "${DO_APP_ID:?Set repository variable DO_APP_ID to the DigitalOcean App Platform app ID.}"
           : "${DO_PRODUCTION_URL:?Set repository variable DO_PRODUCTION_URL to the live production URL.}"
+          if [[ -n "${DO_GHCR_USERNAME:-}" || -n "${DO_GHCR_TOKEN:-}" ]]; then
+            : "${DO_GHCR_USERNAME:?Set repository variable DO_GHCR_USERNAME when DO_GHCR_TOKEN is set.}"
+            : "${DO_GHCR_TOKEN:?Set repository secret DO_GHCR_TOKEN when DO_GHCR_USERNAME is set.}"
+          fi
 
       - name: Set up doctl
         uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2
@@ -93,19 +89,23 @@ jobs:
         env:
           APP_VERSION: ${{ steps.release.outputs.version_tag }}
           COMMIT_SHA: ${{ steps.release.outputs.commit_sha }}
+          IMAGE_TAG: ${{ steps.release.outputs.version_tag }}
+          DO_GHCR_USERNAME: ${{ vars.DO_GHCR_USERNAME }}
+          DO_GHCR_TOKEN: ${{ secrets.DO_GHCR_TOKEN }}
         run: |
           set -euo pipefail
 
           spec_path="${RUNNER_TEMP}/app.release.yaml"
-          cp .do/app.yaml "${spec_path}"
 
-          perl -0pi -e 's/(deploy_on_push:\s*)true/${1}false/g' "${spec_path}"
-          perl -0pi -e 's/(key: APP_VERSION\s*\n\s*value:\s*).*/${1}"$ENV{APP_VERSION}"/' "${spec_path}"
-          perl -0pi -e 's/(key: COMMIT_SHA\s*\n\s*value:\s*).*/${1}"$ENV{COMMIT_SHA}"/' "${spec_path}"
+          if [[ -n "${DO_GHCR_USERNAME:-}" ]]; then
+            export GHCR_REGISTRY_CREDENTIALS="${DO_GHCR_USERNAME}:${DO_GHCR_TOKEN}"
+          fi
 
-          grep -q 'deploy_on_push: false' "${spec_path}"
-          grep -q 'key: APP_VERSION' "${spec_path}"
-          grep -q 'key: COMMIT_SHA' "${spec_path}"
+          task -s -t .github/utils/Taskfile.yaml render-do-app-spec \
+            OUTPUT_PATH="${spec_path}" \
+            IMAGE_TAG="${IMAGE_TAG}" \
+            APP_VERSION="${APP_VERSION}" \
+            COMMIT_SHA="${COMMIT_SHA}"
 
           echo "spec_path=${spec_path}" >> "${GITHUB_ENV}"
 
@@ -117,11 +117,10 @@ jobs:
 
           echo "Deploying DO app ${DO_APP_ID}"
           echo "Release commit ${{ steps.release.outputs.commit_sha }}"
-          echo "GHCR image ${{ steps.release.outputs.image }}:${{ steps.release.outputs.version_tag }}"
+          echo "GHCR image ${{ steps.release.outputs.image_tag }}"
 
           deployment_id="$(doctl apps update "${DO_APP_ID}" \
             --spec "${spec_path}" \
-            --update-sources \
             --wait \
             --format ActiveDeployment.ID \
             --no-header | tail -n 1 | tr -d '[:space:]')"

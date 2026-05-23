@@ -1,6 +1,6 @@
 # Rollback
 
-Stage 1 rollback uses the same PR-only `master` path as normal releases. The DigitalOcean app still deploys from the repository source, so the reliable rollback unit is a reverted commit on `master`, not a manually selected GHCR image.
+Stage 1 rollback uses the same PR-only `master` path as normal releases. DigitalOcean runs the GHCR image built by GitHub Actions, so the normal rollback unit is still a reverted commit on `master`; the release workflow then publishes and deploys the rollback image.
 
 ## Preferred Rollback
 
@@ -17,12 +17,12 @@ This keeps production history auditable and preserves the same release gates as 
 
 ## Emergency Containment
 
-If production must be restored before a revert PR can merge, use DigitalOcean App Platform's deployment controls to restore the last known good deployment when available. Treat that as temporary containment, then follow with the preferred rollback path so `master`, GitHub Actions, and DO Production converge again.
+If production must be restored before a revert PR can merge, update DigitalOcean to a known-good GHCR image tag or use App Platform's deployment controls to restore the last known good deployment when available. Treat that as temporary containment, then follow with the preferred rollback path so `master`, GitHub Actions, GHCR, and DO Production converge again.
 
 ## What Not To Do
 
 - Do not push directly to `master`.
-- Do not re-enable DigitalOcean `deploy_on_push`.
+- Do not switch DigitalOcean back to source-based deploys for normal rollback.
 - Do not bypass PR checks for normal rollback.
 - Do not document or use AWS, Kubernetes, GitOps, PostgreSQL, or Redis rollback steps in Stage 1.
 

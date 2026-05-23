@@ -27,12 +27,12 @@ pnpm start            # Serve dist/ + socket.io (production)
 - Use a task branch for non-trivial work; do not make feature or fix changes directly on `master`.
 - Follow Angular commit messages: `<type>(<scope>): <summary>`, for example `fix(game): clamp penalty score`.
 - Keep code and matching documentation changes in the same branch and commit set.
-- Deployment is GitHub Actions-controlled in Stage 1: PR checks gate `master`, the container workflow publishes GHCR images, and `Release DO Production` triggers DigitalOcean after `master` container validation succeeds.
+- Deployment is GitHub Actions-controlled in Stage 1: PR checks gate `master`, the container workflow publishes GHCR images, and `Release DO Production` updates DigitalOcean to run the validated image.
 
 ## Technology Stack
 
 - **Languages**: JavaScript (ES modules), CSS, HTML
-- **Runtime**: Browser + Node.js (`^20.19.0 || >=22.13.0`) — Node serves static + WebSocket in production
+- **Runtime**: Browser + Node.js (`>=22.13.0`) — Node serves static + WebSocket in production
 - **Frameworks**: React 19, Vite 7, `@vitejs/plugin-react` 5, socket.io 4 (server) + socket.io-client 4 (browser); `vitest` for unit tests
 - **Config**: No `.env`. `vite.config.js` proxies `/socket.io` → `localhost:3001` for dev. Runtime data in `localStorage` under `halligalli_settings`, `halligalli_best`, `halligalli_recent`, `halligalli_history` (rolling 100-round log).
 
