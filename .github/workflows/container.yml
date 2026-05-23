@@ -5,18 +5,27 @@ on:
     branches:
       - master
   push:
-    branches:
-      - master
+    tags:
+      - "v*.*.*"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   packages: write
+  pull-requests: write
 
 jobs:
   build-scan-publish:
     name: Container build and scan
     runs-on: ubuntu-latest
+
+    outputs:
+      image: ${{ steps.release.outputs.image }}
+      version: ${{ steps.release.outputs.version }}
+      image_tag: ${{ steps.release.outputs.image_tag }}
+      image_digest: ${{ steps.push.outputs.image_digest }}
+      commit_sha: ${{ steps.release.outputs.commit_sha }}
+      should_publish: ${{ steps.release.outputs.should_publish }}
 
     steps:
       - name: Check out repository
@@ -24,37 +33,40 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Task
-        uses: go-task/setup-task@3be4020d41929789a01026e0e427a4321ce0ad44 # v2.0.0
-        with:
-          version: 3.x
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
-      - name: Resolve image version
+      - name: Resolve image identity
         id: release
         shell: bash
         run: |
           set -euo pipefail
 
-          image="$(task -s -t .github/utils/Taskfile.yaml image-repo)"
-          version_tag="$(task -s -t .github/utils/Taskfile.yaml generate-extended-version)"
-          image_tag="$(task -s -t .github/utils/Taskfile.yaml generate-extended-version-tag)"
+          image="ghcr.io/${GITHUB_REPOSITORY}"
+          image="$(echo "${image}" | tr '[:upper:]' '[:lower:]')"
           commit_sha="$(git rev-parse HEAD)"
+          should_publish=false
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            should_publish=true
+          else
+            version="pr-${GITHUB_SHA::7}"
+          fi
 
           {
             echo "image=${image}"
-            echo "version_tag=${version_tag}"
-            echo "image_tag=${image_tag}"
+            echo "version=${version}"
+            echo "image_tag=${image}:${version}"
             echo "commit_sha=${commit_sha}"
-            echo "should_push=$([[ "${GITHUB_REF}" == "refs/heads/master" && "${GITHUB_EVENT_NAME}" != "pull_request" ]] && echo true || echo false)"
+            echo "should_publish=${should_publish}"
           } >> "${GITHUB_OUTPUT}"
 
           echo "Image: ${image}"
-          echo "Version tag: ${version_tag}"
-          echo "Image tag: ${image_tag}"
+          echo "Version: ${version}"
+          echo "Image tag: ${image}:${version}"
           echo "Commit SHA: ${commit_sha}"
+          echo "Publish: ${should_publish}"
 
       - name: Build image
         shell: bash
@@ -62,13 +74,12 @@ jobs:
           set -euo pipefail
 
           docker build \
-            --build-arg APP_VERSION="${{ steps.release.outputs.version_tag }}" \
+            --build-arg APP_VERSION="${{ steps.release.outputs.version }}" \
             --build-arg COMMIT_SHA="${{ steps.release.outputs.commit_sha }}" \
             --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
             --label "org.opencontainers.image.revision=${{ steps.release.outputs.commit_sha }}" \
-            --label "org.opencontainers.image.version=${{ steps.release.outputs.version_tag }}" \
+            --label "org.opencontainers.image.version=${{ steps.release.outputs.version }}" \
             --tag "${{ steps.release.outputs.image_tag }}" \
-            --tag "${{ steps.release.outputs.image }}:latest" \
             .
 
       - name: Scan image
@@ -82,7 +93,7 @@ jobs:
           severity: HIGH,CRITICAL
 
       - name: Log in to GHCR
-        if: steps.release.outputs.should_push == 'true'
+        if: steps.release.outputs.should_publish == 'true'
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
         with:
           registry: ghcr.io
@@ -90,13 +101,114 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push image
-        if: steps.release.outputs.should_push == 'true'
+        if: steps.release.outputs.should_publish == 'true'
+        id: push
         shell: bash
         run: |
           set -euo pipefail
 
-          docker push "${{ steps.release.outputs.image_tag }}"
-          docker push "${{ steps.release.outputs.image }}:latest"
+          push_output="$(docker push "${{ steps.release.outputs.image_tag }}")"
+          echo "${push_output}"
 
-          echo "Published ${{ steps.release.outputs.image_tag }}"
-          echo "Published ${{ steps.release.outputs.image }}:latest"
+          image_digest="$(printf '%s\n' "${push_output}" | awk '/digest: sha256:/ {print $3; exit}')"
+          if [[ -z "${image_digest}" ]]; then
+            image_digest="$(docker buildx imagetools inspect "${{ steps.release.outputs.image_tag }}" --format '{{.Manifest.Digest}}')"
+          fi
+
+          if [[ -z "${image_digest}" ]]; then
+            echo "Could not resolve pushed image digest." >&2
+            exit 1
+          fi
+
+          echo "image_digest=${image_digest}" >> "${GITHUB_OUTPUT}"
+          echo "Published ${{ steps.release.outputs.image_tag }} @ ${image_digest}"
+
+  propose-production-promotion:
+    name: Propose production promotion
+    needs: build-scan-publish
+    if: needs.build-scan-publish.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out master
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: master
+          fetch-depth: 0
+          token: ${{ secrets.HALLIGALLI_RELEASE_BOT_TOKEN }}
+
+      - name: Update Production Manifest
+        shell: bash
+        env:
+          VERSION: ${{ needs.build-scan-publish.outputs.version }}
+          COMMIT_SHA: ${{ needs.build-scan-publish.outputs.commit_sha }}
+          IMAGE_DIGEST: ${{ needs.build-scan-publish.outputs.image_digest }}
+        run: |
+          set -euo pipefail
+
+          ruby <<'RUBY'
+          require "yaml"
+
+          path = "deploy/production/app.yaml"
+          spec = YAML.load_file(path)
+          web = spec.fetch("services").find { |service| service.fetch("name") == "web" }
+          image = web.fetch("image")
+          image.delete("tag")
+          image["digest"] = ENV.fetch("IMAGE_DIGEST")
+
+          envs = web.fetch("envs")
+          envs.find { |env| env.fetch("key") == "APP_VERSION" }["value"] = ENV.fetch("VERSION")
+          envs.find { |env| env.fetch("key") == "COMMIT_SHA" }["value"] = ENV.fetch("COMMIT_SHA")
+
+          File.write(path, YAML.dump(spec).sub(/\A---\s*\n/, ""))
+          RUBY
+
+      - name: Open promotion PR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.HALLIGALLI_RELEASE_BOT_TOKEN }}
+          VERSION: ${{ needs.build-scan-publish.outputs.version }}
+          COMMIT_SHA: ${{ needs.build-scan-publish.outputs.commit_sha }}
+          IMAGE_TAG: ${{ needs.build-scan-publish.outputs.image_tag }}
+          IMAGE_DIGEST: ${{ needs.build-scan-publish.outputs.image_digest }}
+        run: |
+          set -euo pipefail
+
+          branch="release/promote-v${VERSION}-production"
+
+          git config user.name "halligalli-release-bot"
+          git config user.email "halligalli-release-bot@users.noreply.github.com"
+          git checkout -B "${branch}"
+          git add deploy/production/app.yaml
+
+          if git diff --cached --quiet; then
+            echo "Production Manifest already points at ${IMAGE_DIGEST}."
+            exit 0
+          fi
+
+          git commit -m "chore(release): promote v${VERSION} to production"
+          git push --force-with-lease origin "${branch}"
+
+          body="$(mktemp)"
+          cat > "${body}" <<BODY
+          ## Production Promotion
+
+          Promote Halligalli v${VERSION} to DO Production.
+
+          - Image: \`${IMAGE_TAG}\`
+          - Digest: \`${IMAGE_DIGEST}\`
+          - Commit: \`${COMMIT_SHA}\`
+
+          Merge this PR to trigger the GitOps Reconciler for \`deploy/production/app.yaml\`.
+          BODY
+
+          existing_pr="$(gh pr list --head "${branch}" --base master --json number --jq '.[0].number // empty')"
+          if [[ -n "${existing_pr}" ]]; then
+            gh pr edit "${existing_pr}" --title "chore(release): promote v${VERSION} to production" --body-file "${body}"
+          else
+            gh pr create \
+              --base master \
+              --head "${branch}" \
+              --title "chore(release): promote v${VERSION} to production" \
+              --body-file "${body}"
+          fi

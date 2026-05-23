@@ -195,11 +195,13 @@ public/yang-boss.png     — Boss portrait
 
 Deployed as a single GHCR-backed Node.js service on DigitalOcean App Platform. The server serves the Vite-built static frontend from `dist/` and accepts WebSocket connections on the same origin — no CORS config, no separate CDN.
 
-- Config: `.do/app.yaml`
+- Production manifest: `deploy/production/app.yaml`
 - Release branch: `master`
-- Trigger: GitHub Actions `Release DO Production` after the container workflow succeeds on `master`
+- Versioning: Release Please creates human-merged release PRs and `vX.Y.Z` tags
+- Promotion: release tags build and scan GHCR images, then open human-merged production promotion PRs
+- Reconcile: GitHub Actions applies `deploy/production/app.yaml` to DigitalOcean after that manifest changes on `master`
 - Health check: `/health` reports status, active rooms, release version, and commit SHA
-- Container registry: GHCR publishes and DigitalOcean runs traceable Stage 1 images for `master`
+- Drift check: scheduled GitHub Actions compare Git, DigitalOcean, and `/health`
 
 Operations docs:
 

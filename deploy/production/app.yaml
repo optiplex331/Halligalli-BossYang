@@ -1,4 +1,3 @@
-# Template only. Production source of truth is deploy/production/app.yaml.
 name: halligalli
 region: ams
 services:
@@ -7,7 +6,7 @@ services:
       registry_type: GHCR
       registry: optiplex331
       repository: halligalli-bossyang
-      tag: latest # production_halligalli-web
+      digest: sha256:7487de8666c7ab8cd342b90ee55863f96f51211cc796be9c2173df3cc3e2dfc1
     instance_count: 1
     instance_size_slug: apps-s-1vcpu-0.5gb
     http_port: 3001
@@ -15,6 +14,6 @@ services:
       - key: NODE_ENV
         value: production
       - key: APP_VERSION
-        value: local
+        value: 0.1.0-0002-gb051852
       - key: COMMIT_SHA
-        value: unknown
+        value: b051852b28e1f2bd2f8e5f64d0d142a3d5abe63c

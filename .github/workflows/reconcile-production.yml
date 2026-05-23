@@ -1,0 +1,156 @@
+name: Reconcile DO Production
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - deploy/production/app.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: do-production
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    name: Reconcile DO Production
+    runs-on: ubuntu-latest
+    environment:
+      name: do-production
+      url: ${{ vars.DO_PRODUCTION_URL }}
+
+    env:
+      DO_APP_ID: ${{ vars.DO_APP_ID }}
+      DO_PRODUCTION_URL: ${{ vars.DO_PRODUCTION_URL }}
+      SPEC_PATH: deploy/production/app.yaml
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Validate release configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          : "${DO_APP_ID:?Set environment variable DO_APP_ID to the DigitalOcean App Platform app ID.}"
+          : "${DO_PRODUCTION_URL:?Set environment variable DO_PRODUCTION_URL to the live production URL.}"
+
+      - name: Set up doctl
+        uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2
+        with:
+          token: ${{ secrets.DO_API_TOKEN }}
+
+      - name: Validate Production Manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          doctl apps spec validate "${SPEC_PATH}"
+
+      - name: Read manifest release identity
+        id: manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ruby <<'RUBY' >> "${GITHUB_OUTPUT}"
+          require "yaml"
+
+          spec = YAML.load_file(ENV.fetch("SPEC_PATH"))
+          web = spec.fetch("services").find { |service| service.fetch("name") == "web" }
+          image = web.fetch("image")
+          envs = web.fetch("envs")
+          env_by_key = envs.to_h { |env| [env.fetch("key"), env.fetch("value").to_s] }
+
+          puts "image_digest=#{image.fetch("digest")}"
+          puts "app_version=#{env_by_key.fetch("APP_VERSION")}"
+          puts "commit_sha=#{env_by_key.fetch("COMMIT_SHA")}"
+          RUBY
+
+      - name: Deploy via DigitalOcean
+        id: deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Deploying DO app ${DO_APP_ID}"
+          echo "Manifest digest ${{ steps.manifest.outputs.image_digest }}"
+          echo "Manifest version ${{ steps.manifest.outputs.app_version }}"
+          echo "Manifest commit ${{ steps.manifest.outputs.commit_sha }}"
+
+          deployment_id="$(doctl apps update "${DO_APP_ID}" \
+            --spec "${SPEC_PATH}" \
+            --wait \
+            --format ActiveDeployment.ID \
+            --no-header | tail -n 1 | tr -d '[:space:]')"
+
+          if [[ -z "${deployment_id}" ]]; then
+            deployment_id="$(doctl apps list-deployments "${DO_APP_ID}" --format ID --no-header | head -n 1 | awk '{print $1}')"
+          fi
+
+          if [[ -z "${deployment_id}" ]]; then
+            echo "DigitalOcean deployment finished but no deployment ID was returned." >&2
+            exit 1
+          fi
+
+          echo "deployment_id=${deployment_id}" >> "${GITHUB_OUTPUT}"
+          echo "DO deployment ID: ${deployment_id}"
+
+      - name: Smoke test /health
+        shell: bash
+        env:
+          EXPECTED_VERSION: ${{ steps.manifest.outputs.app_version }}
+          EXPECTED_COMMIT: ${{ steps.manifest.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+
+          health_url="${DO_PRODUCTION_URL%/}/health"
+          echo "Smoke testing ${health_url}"
+
+          for attempt in {1..12}; do
+            response="$(curl --fail --silent --show-error "${health_url}" || true)"
+
+            if HEALTH_RESPONSE="${response}" node <<'NODE'
+            const body = process.env.HEALTH_RESPONSE;
+            let health;
+
+            try {
+              health = JSON.parse(body);
+            } catch {
+              console.error("Health response is not valid JSON:", body);
+              process.exit(1);
+            }
+
+            const expectedVersion = process.env.EXPECTED_VERSION;
+            const expectedCommit = process.env.EXPECTED_COMMIT;
+
+            if (health.status !== "ok") {
+              console.error("Unexpected health status:", health);
+              process.exit(1);
+            }
+
+            if (health.version !== expectedVersion || health.commit !== expectedCommit) {
+              console.error("Release identity mismatch:", {
+                expectedVersion,
+                actualVersion: health.version,
+                expectedCommit,
+                actualCommit: health.commit,
+              });
+              process.exit(1);
+            }
+          NODE
+            then
+              echo "Smoke test passed for deployment ${{ steps.deployment.outputs.deployment_id }}"
+              exit 0
+            fi
+
+            echo "Health check attempt ${attempt} did not match the manifest yet."
+            sleep 10
+          done
+
+          echo "Production /health did not report the manifest release metadata." >&2
+          exit 1
