@@ -51,6 +51,8 @@ image:
 
 The committed `latest` value is a placeholder. The release workflow renders a temporary app spec and replaces the marked `tag` line with the immutable image tag for the released commit. After cutover, GitHub Actions is the production deployment trigger.
 
+The renderer lives in `.github/utils/Taskfile.yaml` alongside the release-version and image-tag commands. Keep that Taskfile scoped to release automation; do not use it to replace the direct pnpm product checks.
+
 ## Release Metadata
 
 The release workflow injects the same identity into the DigitalOcean app spec and the Docker image build:
@@ -99,3 +101,14 @@ For a production release, map the deployed system with:
 - DO deployment ID from the `Deploy DO Production` step
 
 Use `doctl apps logs <app-id> --deployment <deployment-id> --type run` when investigating a failed deployment.
+
+## Release Utility Checks
+
+Before changing release automation, verify the shared utility commands directly:
+
+```bash
+task -s -t .github/utils/Taskfile.yaml generate-extended-version
+task -s -t .github/utils/Taskfile.yaml generate-extended-version-tag
+```
+
+For app-spec changes, render to a temporary path and inspect the image tag and release environment variables before merging.

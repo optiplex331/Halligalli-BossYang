@@ -17,6 +17,8 @@ These checks do not deploy, publish images, or change DigitalOcean state on pull
 
 The `Container` workflow builds the single-service image from `Dockerfile`. Version and image-tag commands live in `.github/utils/Taskfile.yaml` and run through the official `go-task/setup-task` GitHub Action.
 
+That Taskfile is intentionally narrow. It owns release metadata, GHCR image-name generation, and DigitalOcean app-spec rendering. It is not the product build system: product checks still run direct `pnpm install --frozen-lockfile`, `pnpm run test`, and `pnpm run build`.
+
 On pull requests, it only builds and scans the image locally.
 
 On `master`, it builds, scans, and publishes to GHCR:
@@ -47,6 +49,8 @@ The `Release DO Production` workflow starts after the `Container` workflow succe
 The release workflow is serialized by the `do-production` concurrency group, so only one production deployment runs at a time.
 
 Manual production dispatches must be run from `master`. Dispatches from other branches are skipped so release metadata cannot describe a feature-branch image as production.
+
+The release app spec is rendered into the GitHub Actions runner temp directory. The committed `.do/app.yaml` keeps a marked `latest` placeholder, while production receives the immutable version tag for the released commit.
 
 ## Platform Boundary
 
