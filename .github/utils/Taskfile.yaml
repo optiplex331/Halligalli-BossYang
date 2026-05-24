@@ -54,3 +54,72 @@ tasks:
         abort("Production Manifest must set APP_VERSION") if envs["APP_VERSION"].to_s.empty?
         abort("Production Manifest must set COMMIT_SHA") if envs["COMMIT_SHA"].to_s.empty?
         RUBY
+
+  classify-changes:
+    desc: "Classify changed files for routed GitOps checks"
+    dir: "{{.REPO_ROOT}}"
+    cmds:
+      - ruby .github/utils/classify-changes.rb
+
+  validate-change-routing:
+    desc: "Validate representative routed-check classifications"
+    dir: "{{.REPO_ROOT}}"
+    cmds:
+      - |
+        set -euo pipefail
+
+        ruby <<'RUBY'
+        scenarios = {
+          "business PR" => {
+            files: ["src/App.tsx", "server/index.ts"],
+            expected: {
+              "product_checks_required" => "true",
+              "container_build_required" => "true",
+              "release_metadata_changed" => "false",
+              "production_manifest_changed" => "false",
+            },
+          },
+          "Release PR" => {
+            files: ["CHANGELOG.md", ".github/utils/.release-please-manifest.json"],
+            expected: {
+              "product_checks_required" => "false",
+              "container_build_required" => "false",
+              "release_metadata_changed" => "true",
+              "production_manifest_changed" => "false",
+            },
+          },
+          "Production Promotion PR" => {
+            files: ["deploy/production/app.yaml"],
+            expected: {
+              "product_checks_required" => "false",
+              "container_build_required" => "false",
+              "release_metadata_changed" => "false",
+              "production_manifest_changed" => "true",
+            },
+          },
+          "workflow routing change" => {
+            files: [".github/workflows/ci.yml", ".github/workflows/container.yml"],
+            expected: {
+              "product_checks_required" => "true",
+              "container_build_required" => "true",
+              "release_metadata_changed" => "false",
+              "production_manifest_changed" => "false",
+            },
+          },
+        }
+
+        scenarios.each do |name, scenario|
+          output = IO.popen(["ruby", ".github/utils/classify-changes.rb", *scenario.fetch(:files)], &:read)
+          values = output.lines.filter_map do |line|
+            key, value = line.strip.split("=", 2)
+            [key, value] if scenario.fetch(:expected).key?(key)
+          end.to_h
+
+          scenario.fetch(:expected).each do |key, expected|
+            actual = values.fetch(key)
+            abort("#{name}: expected #{key}=#{expected}, got #{actual}") unless actual == expected
+          end
+        end
+
+        puts "Validated #{scenarios.length} routed-check classification scenarios."
+        RUBY

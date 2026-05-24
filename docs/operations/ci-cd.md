@@ -8,10 +8,19 @@ Pull requests targeting `master` run these required checks:
 
 | Check | Workflow | Job | What it proves |
 |---|---|---|---|
-| Product checks | `CI` | `Product checks` | Release config, `pnpm install --frozen-lockfile`, Vitest, TypeScript, and the production build pass. |
-| Container build and scan | `Container` | `Container build and scan` | The production Docker image builds and Trivy finds no unfixed HIGH or CRITICAL vulnerabilities. |
+| Product checks | `CI` | `Product checks` | The change has the right product or metadata validation for its type. |
+| Container build and scan | `Container` | `Container build and scan` | The change has the right image validation for its type. |
 
 PR checks do not publish images or change DigitalOcean state.
+
+The check names are intentionally stable because branch protection depends on them. The work inside each check is routed by change type instead of using workflow-level path filters that could leave required checks waiting for a skipped workflow.
+
+| Change type | Product checks | Container build and scan |
+|---|---|---|
+| Business/runtime PR | Validates release config, installs dependencies, runs tests, typechecks, and builds the app. | Builds the production image and runs Trivy. |
+| Release PR | Validates release config and routed-check classification. Skips product build work. | Skips image build work. |
+| Production Promotion PR | Validates release config, including the Production Manifest shape. Skips product build work. | Skips image build work because the Release Tag already built and scanned the image. |
+| Docs or metadata-only PR | Validates release config and routed-check classification. Skips product build work. | Skips image build work. |
 
 ## Release PR
 
@@ -26,7 +35,7 @@ Release Please uses `HALLIGALLI_RELEASE_BOT_TOKEN` so the generated PR can run f
 
 ## Release Image
 
-The `Container` workflow builds and scans images on PRs. On a `vX.Y.Z` tag it also publishes:
+The `Container` workflow builds and scans images for business/runtime PRs and release tags. On a `vX.Y.Z` tag it also publishes:
 
 ```text
 ghcr.io/<owner>/<repo>:X.Y.Z
@@ -79,7 +88,7 @@ Configure the protected `master` ruleset to require:
 - `Product checks`
 - `Container build and scan`
 
-Do not require production deployment as a PR check. Production release happens only after a Production Promotion PR changes the manifest on `master`.
+Do not add separate required checks for release metadata, manifest validation, or production deployment. Production release happens only after a Production Promotion PR changes the manifest on `master`.
 
 ## Dependency Updates
 
