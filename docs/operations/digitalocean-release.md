@@ -67,8 +67,9 @@ The server exposes that identity at `/health`:
 2. The tag builds, scans, and pushes a GHCR image.
 3. The build workflow resolves the pushed image digest.
 4. The build workflow opens a Production Promotion PR that updates `deploy/production/app.yaml`.
-5. Merge the Production Promotion PR.
-6. `Reconcile DO Production` applies the manifest and smoke tests `/health`.
+5. The Production Promotion PR runs the stable required checks, but those checks route to manifest validation instead of rebuilding the already published image.
+6. Merge the Production Promotion PR.
+7. `Reconcile DO Production` applies the manifest and smoke tests `/health`.
 
 ## Deployment Trace
 

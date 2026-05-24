@@ -28,28 +28,50 @@ jobs:
         with:
           version: 3.x
 
+      - name: Classify changed files
+        id: changes
+        env:
+          CHANGE_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          CHANGE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CHANGE_BEFORE_SHA: ${{ github.event.before || '' }}
+        run: task -s -t .github/utils/Taskfile.yaml classify-changes
+
       - name: Validate release configuration
         run: task -s -t .github/utils/Taskfile.yaml validate-release-config
 
+      - name: Validate change routing
+        run: task -s -t .github/utils/Taskfile.yaml validate-change-routing
+
       - name: Set up pnpm
+        if: steps.changes.outputs.product_checks_required == 'true'
         uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
         with:
           run_install: false
 
       - name: Set up Node.js
+        if: steps.changes.outputs.product_checks_required == 'true'
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version-file: package.json
           cache: pnpm
 
       - name: Install dependencies
+        if: steps.changes.outputs.product_checks_required == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Run tests
+        if: steps.changes.outputs.product_checks_required == 'true'
         run: pnpm run test
 
       - name: Typecheck
+        if: steps.changes.outputs.product_checks_required == 'true'
         run: pnpm run typecheck
 
       - name: Build app
+        if: steps.changes.outputs.product_checks_required == 'true'
         run: pnpm run build
+
+      - name: Skip heavy product checks
+        if: steps.changes.outputs.product_checks_required != 'true'
+        run: |
+          echo "Heavy product checks are not required for ${{ steps.changes.outputs.classification }} changes."
