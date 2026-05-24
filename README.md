@@ -109,9 +109,9 @@ Dark felt palette, gold accent (`--gold-light`), tabular-numeral stat displays, 
 
 ## Tech Stack
 
-- React 19 + Vite 7 + plain CSS (frontend)
+- React 19 + Vite 8 + TypeScript + plain CSS (frontend)
 - Node.js + socket.io 4 (WebSocket server)
-- Vitest for unit tests (40 tests across game logic, persistence, and stats)
+- Vitest for unit tests (44 tests across game logic, persistence, lifecycle, health, and stats)
 - Single-service deploy on DigitalOcean App Platform
 
 ---
@@ -164,28 +164,32 @@ Open http://localhost:3001.
 
 ```text
 src/
-├── App.jsx              — UI + single-player game loop
-├── main.jsx             — app entry
+├── App.tsx              — UI + single-player game loop
+├── main.tsx             — app entry
 ├── styles.css           — all styles
 ├── audio/
-│   └── useAudioEngine.js   — AudioContext hook (playFeedback, ensureUnlocked)
+│   └── useAudioEngine.ts   — AudioContext hook (playFeedback, ensureUnlocked)
 ├── game/                — shared game logic (browser + server)
-│   ├── constants.js
-│   ├── persistence.js   — localStorage helpers incl. history, daily goal, achievements
-│   ├── rules.js
-│   ├── lifecycle.js
-│   └── stats.js         — pure stat functions (streak, trend, daily goal streak)
+│   ├── constants.ts
+│   ├── persistence.ts   — localStorage helpers incl. history, daily goal, achievements
+│   ├── rules.ts
+│   ├── lifecycle.ts
+│   ├── stats.ts         — pure stat functions (streak, trend, daily goal streak)
+│   └── types.ts         — shared gameplay types
 └── multiplayer/
-    ├── socket.js        — socket.io-client singleton
-    └── useMultiplayerSocket.js — room/game socket event subscriptions
+    ├── protocol.ts      — shared multiplayer payload types
+    ├── socket.ts        — socket.io-client singleton
+    └── useMultiplayerSocket.ts — room/game socket event subscriptions
 
 server/
-├── index.js             — HTTP server + socket.io router + static dist/ serving
-├── Room.js              — room/player model, match codes, host transfer
-└── GameEngine.js        — server-authoritative game loop
+├── index.ts             — HTTP server + socket.io router + static dist/ serving
+├── health.ts            — /health response shape and release identity
+├── Room.ts              — room/player model, match codes, host transfer
+└── GameEngine.ts        — server-authoritative game loop
 
-.do/app.yaml             — DigitalOcean App Platform spec
-scripts/simulate-bell.mjs — card-distribution tuning utility
+.do/app.yaml             — legacy DigitalOcean template
+deploy/production/app.yaml — GitOps Production Manifest
+scripts/simulate-bell.ts — card-distribution tuning utility
 public/yang-boss.png     — Boss portrait
 ```
 

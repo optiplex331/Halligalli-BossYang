@@ -5,12 +5,12 @@
 **Core Value:** Open the site → meaningful practice immediately → fast feedback makes the next round better. Multiplayer is opt-in, same-origin, zero-config for the player.
 
 ### Constraints
-- **Stack**: React 19 + Vite 7 + plain CSS + Node.js + socket.io — no frontend framework swaps
+- **Stack**: React 19 + Vite 8 + TypeScript + plain CSS + Node.js + socket.io — no frontend framework swaps
 - **Architecture**: SPA + same-origin WebSocket server; local progress stays in localStorage
 - **Platform**: Desktop and mobile browsers — both must feel intentional
 - **Content**: Bilingual (zh/en) — new flows must not regress either language
-- **Codebase**: Game logic extracted to `src/game/` and shared with `server/` via relative imports; `App.jsx` is still large — new features need incremental decomposition
-- **Shared modules**: `src/game/*.js` runs in both browser (Vite) and Node (native ESM). All intra-module imports MUST use explicit `.js` extensions — Node ESM rejects extensionless specifiers.
+- **Codebase**: Game logic extracted to `src/game/` and shared with `server/` via relative imports; `App.tsx` is still large — new features need incremental decomposition
+- **Shared modules**: `src/game/*.ts` runs in both browser (Vite) and Node after compilation. Local runtime imports that compile to Node.js ESM MUST use emitted `.js` extensions.
 
 ## Commands
 
@@ -27,14 +27,14 @@ pnpm start            # Serve dist/ + socket.io (production)
 - Use a task branch for non-trivial work; do not make feature or fix changes directly on `master`.
 - Follow Angular commit messages: `<type>(<scope>): <summary>`, for example `fix(game): clamp penalty score`.
 - Keep code and matching documentation changes in the same branch and commit set.
-- Deployment is GitHub Actions-controlled in Stage 1: PR checks gate `master`, the container workflow publishes GHCR images, and `Release DO Production` updates DigitalOcean to run the validated image.
+- Deployment is GitOps-controlled: Release Please opens Release PRs, `vX.Y.Z` tags publish GHCR Release Images, Production Promotion PRs update `deploy/production/app.yaml`, and `Reconcile DO Production` applies that manifest to DigitalOcean.
 
 ## Technology Stack
 
-- **Languages**: JavaScript (ES modules), CSS, HTML
+- **Languages**: TypeScript, CSS, HTML
 - **Runtime**: Browser + Node.js (`>=22.13.0`) — Node serves static + WebSocket in production
-- **Frameworks**: React 19, Vite 7, `@vitejs/plugin-react` 5, socket.io 4 (server) + socket.io-client 4 (browser); `vitest` for unit tests
-- **Config**: No `.env`. `vite.config.js` proxies `/socket.io` → `localhost:3001` for dev. Runtime data in `localStorage` under `halligalli_settings`, `halligalli_best`, `halligalli_recent`, `halligalli_history` (rolling 100-round log).
+- **Frameworks**: React 19, Vite 8, `@vitejs/plugin-react` 6, socket.io 4 (server) + socket.io-client 4 (browser); `vitest` for unit tests
+- **Config**: No `.env`. `vite.config.ts` proxies `/socket.io` → `localhost:3001` for dev. Runtime data in `localStorage` under `halligalli_settings`, `halligalli_best`, `halligalli_recent`, `halligalli_history` (rolling 100-round log).
 
 ## Conventions
 
@@ -47,12 +47,12 @@ pnpm start            # Serve dist/ + socket.io (production)
 - Socket event names: `namespace:action` (`room:create`, `game:flip`, `game:bell-result`)
 
 ### Code Style
-- No formatter or linter config — match existing style in `App.jsx`/`main.jsx`
+- No formatter or linter config — match existing style in `App.tsx`/`main.tsx`
 - JSX: multiline props and nested ternaries preferred over compressed inline
 - No comments unless logic is genuinely non-obvious from naming
 - No JSDoc/TSDoc
-- No TypeScript — plain JS objects throughout
-- Relative imports only with explicit `.js` extension on shared modules (`./game/rules.js`) — Node ESM requires it; Vite tolerates either
+- TypeScript source uses structural types and small shared protocol/game types where they protect cross-runtime contracts
+- Relative runtime imports that compile to Node.js ESM use explicit emitted `.js` extensions (`./game/rules.js`) — Node ESM requires it; Vite tolerates either
 
 ### Patterns
 - Guard all browser APIs: `typeof window === "undefined"` before `localStorage`/Web Audio
@@ -65,9 +65,9 @@ pnpm start            # Serve dist/ + socket.io (production)
 - Default export only for main component; helpers stay file-local or in `src/game/`
 - Multiplayer uses server-authoritative state — client emits intent (`game:bell`), never mutates game state locally in multiplayer mode; single-player path is unchanged
 - Reduced-motion: every new keyframe animation must have a `@media (prefers-reduced-motion: reduce)` override
-- Every new `localStorage` key MUST get a `normalize*` function in `persistence.js` + a test in `src/__tests__/persistence.test.js`
+- Every new `localStorage` key MUST get a `normalize*` function in `persistence.ts` + a test in `src/__tests__/persistence.test.ts`
 - Audio goes through `useAudioEngine` — do not instantiate `AudioContext` directly in new code
-- Multiplayer socket events: add handlers inside `useMultiplayerSocket`, not directly in `App.jsx`. Pass new state setters via the `actions` prop
+- Multiplayer socket events: add handlers inside `useMultiplayerSocket`, not directly in `App.tsx`. Pass new state setters via the `actions` prop
 - ARIA: feedback/penalty/boss-taunt divs must keep `aria-live`; bell button must keep `aria-label`+`aria-pressed`; lobby card keeps `role="dialog"`; screen sections keep `tabIndex={-1}` for focus management
 - Touch targets: all interactive elements must stay ≥ 44px min-height at the 520px breakpoint (enforced in `.primary-button`, `.ghost-button`, `.chip`)
 - iOS audio: call `ensureAudioContext()` at every entry point that leads to gameplay (startGame, createRoom, joinRoom)
@@ -77,41 +77,46 @@ pnpm start            # Serve dist/ + socket.io (production)
 ### Structure
 ```
 src/
-├── main.jsx            — mounts App, imports styles
-├── App.jsx             — all state, game loop, 4-screen render (~1756 lines, still shrinking)
+├── main.tsx            — mounts App, imports styles
+├── App.tsx             — all state, game loop, 4-screen render, still shrinking
 ├── styles.css          — all styles including 3D animations (~2110 lines)
 ├── audio/
-│   └── useAudioEngine.js   — encapsulates AudioContext + tone scheduling; returns {playFeedback, ensureUnlocked}
+│   └── useAudioEngine.ts   — encapsulates AudioContext + tone scheduling; returns {playFeedback, ensureUnlocked}
 ├── game/
-│   ├── constants.js    — FRUIT_KEYS, DEFAULT_SETTINGS, INITIAL_*, COUNT_DISTRIBUTION, storage keys, HISTORY_KEY, MAX_HISTORY, VALID_MODES
-│   ├── persistence.js  — loadJson/saveJson, normalize/load settings & summaries, loadHistory/appendHistoryEntry/normalizeHistoryEntry
-│   ├── rules.js        — deck creation, card flipping, bell evaluation, scoring math (shared with server)
-│   ├── lifecycle.js    — clearGameLoopHandles
+│   ├── constants.ts    — FRUIT_KEYS, DEFAULT_SETTINGS, INITIAL_*, COUNT_DISTRIBUTION, storage keys, HISTORY_KEY, MAX_HISTORY, VALID_MODES
+│   ├── persistence.ts  — loadJson/saveJson, normalize/load settings & summaries, loadHistory/appendHistoryEntry/normalizeHistoryEntry
+│   ├── rules.ts        — deck creation, card flipping, bell evaluation, scoring math (shared with server)
+│   ├── lifecycle.ts    — clearGameLoopHandles
+│   ├── stats.ts        — pure stat functions for streaks, trends, and daily goals
+│   ├── types.ts        — shared gameplay types
 │   └── __tests__/      — vitest unit tests for stats (bell simulation)
 ├── multiplayer/
-│   ├── socket.js               — singleton socket.io-client wrapper (getSocket/connectSocket/disconnectSocket)
-│   └── useMultiplayerSocket.js — subscribes to all room/game socket events; hoisted out of App.jsx
+│   ├── protocol.ts             — shared multiplayer payload types
+│   ├── socket.ts               — singleton socket.io-client wrapper (getSocket/connectSocket/disconnectSocket)
+│   └── useMultiplayerSocket.ts — subscribes to all room/game socket events; hoisted out of App.tsx
 └── __tests__/
-    ├── persistence.test.js     — settings/summary/history normalization and rolling-log persistence
-    ├── rules.test.js           — deck creation, bell evaluation, scoring math
-    └── lifecycle.test.js       — game loop handle cleanup
+    ├── persistence.test.ts     — settings/summary/history normalization and rolling-log persistence
+    ├── rules.test.ts           — deck creation, bell evaluation, scoring math
+    └── lifecycle.test.ts       — game loop handle cleanup
 
 server/
-├── index.js            — HTTP server (serves dist/ + SPA fallback + /health) + socket.io event router
-├── Room.js             — Room/Player classes, match-code generation, host transfer, stale cleanup
-├── GameEngine.js       — server-authoritative game loop, per-player scoring, bell race resolution
+├── index.ts            — HTTP server (serves dist/ + SPA fallback + /health) + socket.io event router
+├── health.ts           — /health response shape and release identity projection
+├── Room.ts             — Room/Player classes, match-code generation, host transfer, stale cleanup
+├── GameEngine.ts       — server-authoritative game loop, per-player scoring, bell race resolution
 └── package.json        — legacy separate manifest (deps now hoisted to root; kept for standalone server dev)
 
 public/yang-boss.png    — Boss portrait
-.do/app.yaml            — DigitalOcean App Platform spec (ams region, node-js, port 3001)
-scripts/simulate-bell.mjs — Monte Carlo utility for tuning COUNT_DISTRIBUTION (not shipped)
+.do/app.yaml            — legacy DigitalOcean template; production source of truth is deploy/production/app.yaml
+deploy/production/app.yaml — GitOps Production Manifest applied by Reconcile DO Production
+scripts/simulate-bell.ts — Monte Carlo utility for tuning COUNT_DISTRIBUTION (not shipped)
 ```
 
 ### State Machine
 Screen-driven: `home → play → result` for single-player; `home → lobby → play → result` for multiplayer. All routing via `screen` useState — no router.
 
 ### Key Refs
-`gameStateRef` (stale-closure guard for async callbacks), `gameRunningRef` (loop gate), `bellStateRef` (bell timing). All state names derivable from App.jsx.
+`gameStateRef` (stale-closure guard for async callbacks), `gameRunningRef` (loop gate), `bellStateRef` (bell timing). All state names derivable from App.tsx.
 
 ### Game Loop
 **Single-player**: `revealIntervalRef` fires every `mode.revealMs` (900–1850ms) → `advanceTurn()` → flips card clockwise → `applyBellAvailability()` checks if any fruit totals exactly 5 across top face-up cards → sets `bellStateRef` and `activeBellFruit`.
@@ -125,7 +130,7 @@ Screen-driven: `home → play → result` for single-player; `home → lobby →
 - Multiplayer final: ranked scoreboard by score, breakdown shown per player
 
 ### Card Distribution
-`COUNT_DISTRIBUTION` in `src/game/constants.js` was tuned via `scripts/simulate-bell.mjs` Monte Carlo to target ~4–7 flips between bell windows across 3–6 player counts. Re-run the simulator before tweaking.
+`COUNT_DISTRIBUTION` in `src/game/constants.ts` was tuned via `scripts/simulate-bell.ts` Monte Carlo to target ~4–7 flips between bell windows across 3–6 player counts. Re-run the simulator before tweaking.
 
 ### Child Components
 `FruitCardFace` and `TableSeat` are presentational props-only; no state. `TableSeat` accepts a `justFlipped` prop that drives the 3D flip animation via CSS classes on nested `.card-3d-container → .card-3d-inner → .card-3d-front/back` elements.
@@ -150,7 +155,7 @@ Host has exclusive `room:start` rights. Disconnects during lobby remove the play
 - **Lighthouse one-shot for a11y** — a single `lighthouse_audit` call covers all four a11y sub-categories at once and beats manual element inspection every time.
 - **Trust the session summary / plan line anchors** — when the previous session's summary names an exact file + offset, go there directly; don't re-grep what's already been located.
 - **All edits in one pass, then verify once** — make every planned edit across a file before running any check; no redundant intermediate verification rounds.
-- **COPY table edits: always touch zh + en in one Edit pair** — App.jsx:94–300; never add a zh key without the en counterpart in the same message.
+- **COPY table edits: always touch zh + en in one Edit pair** — `App.tsx`; never add a zh key without the en counterpart in the same message.
 - **Fix test data format bugs before running tests a second time** — if a new test generates date strings, verify they're zero-padded (`2025-06-08` not `2025-06-8`); one read of the failing assertion is enough to diagnose this class of error.
 
 ### Don't
@@ -166,8 +171,8 @@ Host has exclusive `room:start` rights. Disconnects during lobby remove the play
 - **Target**: DigitalOcean App Platform, Amsterdam (`ams`), `apps-s-1vcpu-0.5gb` instance
 - **URL**: https://halligalli-8xko3.ondigitalocean.app/
 - **App ID**: `a28fcbb5-7581-41f7-8bd6-6c9d0ded0994`
-- **Trigger**: GitHub Actions `Release DO Production` after the `Container` workflow succeeds on `master`
-- **Manual redeploy**: dispatch the `Release DO Production` workflow from GitHub Actions
-- **Spec updates**: `doctl apps update <app-id> --spec .do/app.yaml`
+- **Trigger**: Production Promotion PR changes `deploy/production/app.yaml` on `master`; GitHub Actions `Reconcile DO Production` applies it
+- **Manual redeploy**: dispatch the `Reconcile DO Production` workflow from GitHub Actions
+- **Spec updates**: update `deploy/production/app.yaml` through a Production Promotion PR
 - **Logs**: `doctl apps logs <app-id> --deployment <deployment-id> --type build|run`
-- **Gotcha**: `.do/app.yaml` installs pnpm in the build command before `pnpm install --frozen-lockfile`, keeping the runtime on Node.js only.
+- **Gotcha**: production uses the GHCR Release Image digest from the Production Manifest; do not deploy `latest` or source rebuilds.
