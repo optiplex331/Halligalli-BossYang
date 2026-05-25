@@ -1,101 +1,101 @@
-# CI/CD and GitOps
+# CI/CD 与 GitOps
 
-Halligalli uses GitHub Actions as the delivery control plane and GitOps reconciler for the single-service DigitalOcean Production app. Production desired state lives in `deploy/production/app.yaml`; DigitalOcean is updated only from that Git-tracked manifest.
+Halligalli 使用 GitHub Actions 作为交付控制面，并作为单服务 DigitalOcean Production 应用的 GitOps Reconciler。生产期望状态保存在 `deploy/production/app.yaml`；DigitalOcean 只从这份 Git 跟踪的清单更新。
 
 ## Pull Request Gates
 
-Pull requests targeting `master` run these required checks:
+所有目标分支为 `master` 的 pull request 都会运行这些 required checks：
 
-| Check | Workflow | Job | What it proves |
+| Check | Workflow | Job | 证明内容 |
 |---|---|---|---|
-| Product checks | `CI` | `Product checks` | The change has the right product or metadata validation for its type. |
-| Container build and scan | `Container` | `Container build and scan` | The change has the right image validation for its type. |
+| Product checks | `CI` | `Product checks` | 这个变更按类型完成了正确的产品或元数据校验。 |
+| Container build and scan | `Container` | `Container build and scan` | 这个变更按类型完成了正确的镜像校验。 |
 
-PR checks do not publish images or change DigitalOcean state.
+PR checks 不发布镜像，也不改变 DigitalOcean 状态。
 
-The check names are intentionally stable because branch protection depends on them. The work inside each check is routed by change type instead of using workflow-level path filters that could leave required checks waiting for a skipped workflow.
+这些 check 名称会刻意保持稳定，因为 branch protection 依赖它们。每个 check 内部实际执行的工作由 `dorny/paths-filter` 和 `.github/utils/change-filters.yaml` 按变更类型路由，而不是用 workflow 级别的 path filters。这样可以避免 workflow 被跳过后 required check 一直等待的问题。
 
-| Change type | Product checks | Container build and scan |
+| 变更类型 | Product checks | Container build and scan |
 |---|---|---|
-| Business/runtime PR | Validates release config, installs dependencies, runs tests, typechecks, and builds the app. | Builds the production image and runs Trivy. |
-| Release PR | Validates release config and routed-check classification. Skips product build work. | Skips image build work. |
-| Production Promotion PR | Validates release config, including the Production Manifest shape. Skips product build work. | Skips image build work because the Release Tag already built and scanned the image. |
-| Docs or metadata-only PR | Validates release config and routed-check classification. Skips product build work. | Skips image build work. |
+| 业务或运行时代码 PR | 校验 release 配置，安装依赖，运行测试、类型检查和应用构建。 | 构建生产镜像并运行 Trivy 扫描。 |
+| Release PR | 校验 release 配置和 action-based change filters。跳过产品构建工作。 | 跳过镜像构建工作。 |
+| Production Promotion PR | 校验 release 配置，包括 Production Manifest 结构。跳过产品构建工作。 | 跳过镜像构建工作，因为 Release Tag 已经构建并扫描过镜像。 |
+| 文档或元数据 PR | 校验 release 配置和 action-based change filters。跳过产品构建工作。 | 跳过镜像构建工作。 |
 
 ## Release PR
 
-Pushes to `master` run Release Please. It opens or updates a human-reviewed Release PR that maintains:
+每次 push 到 `master` 都会运行 Release Please。它会打开或更新一个需要人工 review 的 Release PR，并维护：
 
 - `CHANGELOG.md`
 - `.github/utils/.release-please-manifest.json`
 
-The Release PR does not make `package.json` a version source. Merging it creates a `vX.Y.Z` Release Tag and GitHub Release.
+Release PR 不会让 `package.json` 成为版本来源。合并 Release PR 会创建一个 `vX.Y.Z` Release Tag 和 GitHub Release。
 
-Release Please uses `HALLIGALLI_RELEASE_BOT_TOKEN` so the generated PR can run follow-on checks and workflows.
+Release Please 使用 `HALLIGALLI_RELEASE_BOT_TOKEN`，这样自动生成的 PR 可以触发后续 checks 和 workflows。
 
 ## Release Image
 
-The `Container` workflow builds and scans images for business/runtime PRs and release tags. On a `vX.Y.Z` tag it also publishes:
+`Container` workflow 会为业务或运行时代码 PR 以及 release tags 构建并扫描镜像。当触发源是 `vX.Y.Z` tag 时，它还会发布：
 
 ```text
 ghcr.io/<owner>/<repo>:X.Y.Z
 ```
 
-It does not publish `latest`. Production promotion uses the pushed image digest, not a mutable tag.
+它不会发布 `latest`。Production promotion 使用已推送镜像的 digest，而不是可变 tag。
 
 ## Production Promotion
 
-After a release image is published, the container workflow opens a human-reviewed Production Promotion PR. That PR updates:
+release image 发布后，container workflow 会打开一个需要人工 review 的 Production Promotion PR。这个 PR 更新：
 
 ```text
 deploy/production/app.yaml
 ```
 
-The manifest records:
+这份 manifest 记录：
 
-- GHCR registry and repository
+- GHCR registry 和 repository
 - image digest
 - `APP_VERSION`
 - `COMMIT_SHA`
 
-Merging the Production Promotion PR is the production approval point.
+合并 Production Promotion PR 是生产发布的审批点。
 
 ## GitOps Reconciler
 
-`Reconcile DO Production` runs when `deploy/production/app.yaml` changes on `master`, or by manual dispatch. It:
+`Reconcile DO Production` 会在 `deploy/production/app.yaml` 于 `master` 发生变化时运行，也可以手动 dispatch。它会：
 
-1. Validates the Production Manifest.
-2. Applies it with `doctl apps update --wait`.
-3. Smoke tests `/health`.
-4. Fails unless `/health.status`, `/health.version`, and `/health.commit` match the manifest.
+1. 校验 Production Manifest。
+2. 使用 `doctl apps update --wait` 应用 manifest。
+3. 对 `/health` 做 smoke test。
+4. 如果 `/health.status`、`/health.version` 或 `/health.commit` 与 manifest 不匹配，则失败。
 
-The workflow is serialized by the `do-production` concurrency group.
+该 workflow 使用 `do-production` concurrency group 串行化执行。
 
 ## Drift Check
 
-`Production Drift Check` runs every 30 minutes and by manual dispatch. It compares:
+`Production Drift Check` 每 30 分钟运行一次，也可以手动 dispatch。它会比较：
 
 - `deploy/production/app.yaml`
-- the live DigitalOcean app spec
+- 当前 live DigitalOcean app spec
 - live `/health`
 
-It fails if the live image digest, release version, or commit no longer match Git.
+如果 live image digest、release version 或 commit 不再与 Git 匹配，它会失败。
 
 ## Branch Protection
 
-Configure the protected `master` ruleset to require:
+受保护的 `master` ruleset 应要求：
 
 - `Product checks`
 - `Container build and scan`
 
-Do not add separate required checks for release metadata, manifest validation, or production deployment. Production release happens only after a Production Promotion PR changes the manifest on `master`.
+不要为 release metadata、manifest validation 或 production deployment 单独增加 required checks。生产发布只会在 Production Promotion PR 修改 manifest 并合入 `master` 后发生。
 
 ## Dependency Updates
 
-Dependabot opens weekly PRs against `master` for:
+Dependabot 会每周针对 `master` 打开 PR，覆盖：
 
 - root pnpm dependencies
 - `server/` pnpm dependencies
 - GitHub Actions
 
-Dependabot does not auto-merge and does not bypass PR checks.
+Dependabot 不会自动合并，也不会绕过 PR checks。

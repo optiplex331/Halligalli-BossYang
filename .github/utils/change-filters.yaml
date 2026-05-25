@@ -1,0 +1,31 @@
+# Shared dorny/paths-filter config for the Two-Gate Check Model.
+#
+# These filters are used inside required workflows. Do not move them to
+# workflow-level path filters, because skipped workflows can leave branch
+# protection waiting for required checks.
+
+product:
+  - ".github/workflows/**"
+  - ".github/utils/change-filters.yaml"
+  - ".github/utils/validate-release-config.mjs"
+  - ".dockerignore"
+  - "Dockerfile"
+  - "index.html"
+  - "package.json"
+  - "pnpm-lock.yaml"
+  - "pnpm-workspace.yaml"
+  - "public/**"
+  - "scripts/**"
+  - "server/**"
+  - "src/**"
+  - "tsconfig.json"
+  - "tsconfig.server.json"
+  - "vite.config.ts"
+
+release_metadata:
+  - ".github/utils/.release-please-manifest.json"
+  - ".github/utils/release-please-config.json"
+  - "CHANGELOG.md"
+
+production_manifest:
+  - "deploy/production/app.yaml"
