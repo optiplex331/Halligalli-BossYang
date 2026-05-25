@@ -6,7 +6,7 @@
 	"devEngines": {
 		"runtime": {
 			"name": "node",
-			"version": "22.13.0"
+			"version": ">=24.0.0 <25"
 		}
 	},
 	"scripts": {
@@ -20,7 +20,7 @@
 		"simulate:bell": "tsx scripts/simulate-bell.ts"
 	},
 	"engines": {
-		"node": ">=22.13.0",
+		"node": ">=24.0.0 <25",
 		"pnpm": ">=11.0.9"
 	},
 	"dependencies": {
@@ -30,7 +30,7 @@
 		"socket.io-client": "^4.8.3"
 	},
 	"devDependencies": {
-		"@types/node": "^22.19.19",
+		"@types/node": "^24.12.4",
 		"@types/react": "^19.2.15",
 		"@types/react-dom": "^19.2.3",
 		"@vitejs/plugin-react": "^6.0.2",

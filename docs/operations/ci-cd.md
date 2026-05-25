@@ -11,13 +11,13 @@ Halligalli 使用 GitHub Actions 作为交付控制面，并作为单服务 Digi
 | Product checks | `CI` | `Product checks` | 这个变更按类型完成了正确的产品或元数据校验。 |
 | Container build and scan | `Container` | `Container build and scan` | 这个变更按类型完成了正确的镜像校验。 |
 
-PR checks 不发布镜像，也不改变 DigitalOcean 状态。
+PR checks 不发布镜像，也不改变 DigitalOcean 状态。CI 使用 `package.json` 作为 `actions/setup-node` 的版本来源，当前产品运行时基线是 Node.js 24。
 
 这些 check 名称会刻意保持稳定，因为 branch protection 依赖它们。每个 check 内部实际执行的工作由 `dorny/paths-filter` 和 `.github/utils/change-filters.yaml` 按变更类型路由，而不是用 workflow 级别的 path filters。这样可以避免 workflow 被跳过后 required check 一直等待的问题。
 
 | 变更类型 | Product checks | Container build and scan |
 |---|---|---|
-| 业务或运行时代码 PR | 校验 release 配置，安装依赖，运行测试、类型检查和应用构建。 | 构建生产镜像并运行 Trivy 扫描。 |
+| 业务或运行时代码 PR | 在 Node.js 24 上校验 release 配置，安装依赖，运行测试、类型检查和应用构建。 | 构建 Node.js 24 生产镜像并运行 Trivy 扫描。 |
 | Release PR | 校验 release 配置和 action-based change filters。跳过产品构建工作。 | 跳过镜像构建工作。 |
 | Production Promotion PR | 校验 release 配置，包括 Production Manifest 结构。跳过产品构建工作。 | 跳过镜像构建工作，因为 Release Tag 已经构建并扫描过镜像。 |
 | 文档或元数据 PR | 校验 release 配置和 action-based change filters。跳过产品构建工作。 | 跳过镜像构建工作。 |

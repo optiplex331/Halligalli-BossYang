@@ -33,7 +33,7 @@ pnpm start            # Serve dist/ + socket.io (production)
 ## Technology Stack
 
 - **Languages**: TypeScript, CSS, HTML
-- **Runtime**: Browser + Node.js (`>=22.13.0`) — Node serves static + WebSocket in production
+- **Runtime**: Browser + Node.js 24 (`>=24.0.0 <25`) — Node serves static + WebSocket in production
 - **Frameworks**: React 19, Vite 8, `@vitejs/plugin-react` 6, socket.io 4 (server) + socket.io-client 4 (browser); `vitest` for unit tests
 - **Config**: No `.env`. `vite.config.ts` proxies `/socket.io` → `localhost:3001` for dev. Runtime data in `localStorage` under `halligalli_settings`, `halligalli_best`, `halligalli_recent`, `halligalli_history` (rolling 100-round log).
 

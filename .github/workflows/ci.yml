@@ -76,21 +76,19 @@ jobs:
           echo "release_metadata_changed=${release_metadata_changed}"
           echo "production_manifest_changed=${production_manifest_changed}"
 
-      - name: Validate release configuration
-        run: node .github/utils/validate-release-config.mjs
-
       - name: Set up pnpm
-        if: steps.changes.outputs.product_checks_required == 'true'
         uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
         with:
           run_install: false
 
       - name: Set up Node.js
-        if: steps.changes.outputs.product_checks_required == 'true'
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version-file: package.json
           cache: pnpm
+
+      - name: Validate release configuration
+        run: node .github/utils/validate-release-config.mjs
 
       - name: Install dependencies
         if: steps.changes.outputs.product_checks_required == 'true'

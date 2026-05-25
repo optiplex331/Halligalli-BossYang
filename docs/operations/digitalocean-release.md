@@ -1,6 +1,6 @@
 # DigitalOcean Production
 
-Halligalli Production 运行在 DigitalOcean App Platform 上，是一个由 GHCR 镜像驱动的 Node.js 单服务应用。GitHub Actions 会从 Git 跟踪的 Production Manifest `deploy/production/app.yaml` reconcile DigitalOcean。
+Halligalli Production 运行在 DigitalOcean App Platform 上，是一个由 GHCR 镜像驱动的 Node.js 24 单服务应用。GitHub Actions 会从 Git 跟踪的 Production Manifest `deploy/production/app.yaml` reconcile DigitalOcean。
 
 ## Production App
 
@@ -10,7 +10,7 @@ Halligalli Production 运行在 DigitalOcean App Platform 上，是一个由 GHC
 | Service | `web` |
 | Region | `ams` |
 | Release branch | `master` |
-| Runtime | 从 Node.js 单服务 Dockerfile 构建的 GHCR image |
+| Runtime | 从 Node.js 24 单服务 Dockerfile 构建的 GHCR image |
 | HTTP port | `3001` |
 | Production Manifest | `deploy/production/app.yaml` |
 
