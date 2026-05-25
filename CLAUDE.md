@@ -18,6 +18,7 @@
 pnpm run dev          # Vite dev server (port 5173, proxies /socket.io → :3001)
 pnpm run dev:server   # Game server only (port 3001) — run alongside dev
 pnpm run test         # vitest run (all unit tests, no watch)
+pnpm run typecheck    # TypeScript checks for browser + server projects
 pnpm run build        # Production build → dist/
 pnpm start            # Serve dist/ + socket.io (production)
 ```

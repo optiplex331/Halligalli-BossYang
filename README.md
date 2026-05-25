@@ -136,10 +136,11 @@ Multiplayer features will not work without the server, but single-player does:
 pnpm run dev
 ```
 
-### Tests
+### Tests and typecheck
 
 ```bash
 pnpm run test
+pnpm run typecheck
 ```
 
 ### Container check
