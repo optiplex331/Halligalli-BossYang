@@ -188,7 +188,6 @@ server/
 ├── Room.ts              — room/player model, match codes, host transfer
 └── GameEngine.ts        — server-authoritative game loop
 
-.do/app.yaml             — legacy DigitalOcean template
 deploy/production/app.yaml — GitOps Production Manifest
 scripts/simulate-bell.ts — card-distribution tuning utility
 public/yang-boss.png     — Boss portrait

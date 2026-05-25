@@ -33,18 +33,70 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Task
-        uses: go-task/setup-task@01a4adf9db2d14c1de7a560f09170b6e0df736aa # v2.1.0
+      - name: Detect changed file groups
+        id: paths
+        if: github.ref_type != 'tag'
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         with:
-          version: 3.x
+          token: ${{ secrets.GITHUB_TOKEN }}
+          filters: .github/utils/change-filters.yaml
+          list-files: shell
 
-      - name: Classify changed files
+      - name: Resolve check routing
         id: changes
+        shell: bash
         env:
-          CHANGE_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
-          CHANGE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          CHANGE_BEFORE_SHA: ${{ github.event.before || '' }}
-        run: task -s -t .github/utils/Taskfile.yaml classify-changes
+          FILTER_PRODUCT: ${{ steps.paths.outputs.product || 'false' }}
+          FILTER_RELEASE_METADATA: ${{ steps.paths.outputs.release_metadata || 'false' }}
+          FILTER_PRODUCTION_MANIFEST: ${{ steps.paths.outputs.production_manifest || 'false' }}
+        run: |
+          set -euo pipefail
+
+          tag_release=false
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            tag_release=true
+          fi
+
+          product_required="${FILTER_PRODUCT}"
+          container_required="${FILTER_PRODUCT}"
+          release_metadata_changed="${FILTER_RELEASE_METADATA}"
+          production_manifest_changed="${FILTER_PRODUCTION_MANIFEST}"
+
+          if [[ "${tag_release}" == "true" || "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            container_required=true
+          fi
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            product_required=true
+          fi
+
+          if [[ "${tag_release}" == "true" ]]; then
+            classification="release-tag"
+          elif [[ "${product_required}" == "true" ]]; then
+            classification="product-runtime"
+          elif [[ "${production_manifest_changed}" == "true" && "${release_metadata_changed}" != "true" ]]; then
+            classification="production-manifest"
+          elif [[ "${release_metadata_changed}" == "true" && "${production_manifest_changed}" != "true" ]]; then
+            classification="release-metadata"
+          elif [[ "${production_manifest_changed}" == "true" && "${release_metadata_changed}" == "true" ]]; then
+            classification="release-and-production-metadata"
+          else
+            classification="metadata-or-docs"
+          fi
+
+          {
+            echo "classification=${classification}"
+            echo "product_checks_required=${product_required}"
+            echo "container_build_required=${container_required}"
+            echo "release_metadata_changed=${release_metadata_changed}"
+            echo "production_manifest_changed=${production_manifest_changed}"
+          } >> "${GITHUB_OUTPUT}"
+
+          echo "classification=${classification}"
+          echo "product_checks_required=${product_required}"
+          echo "container_build_required=${container_required}"
+          echo "release_metadata_changed=${release_metadata_changed}"
+          echo "production_manifest_changed=${production_manifest_changed}"
 
       - name: Set up Docker Buildx
         if: steps.changes.outputs.container_build_required == 'true'

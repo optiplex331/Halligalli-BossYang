@@ -108,7 +108,6 @@ server/
 └── package.json        — legacy separate manifest (deps now hoisted to root; kept for standalone server dev)
 
 public/yang-boss.png    — Boss portrait
-.do/app.yaml            — legacy DigitalOcean template; production source of truth is deploy/production/app.yaml
 deploy/production/app.yaml — GitOps Production Manifest applied by Reconcile DO Production
 scripts/simulate-bell.ts — Monte Carlo utility for tuning COUNT_DISTRIBUTION (not shipped)
 ```
