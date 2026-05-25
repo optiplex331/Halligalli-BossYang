@@ -110,7 +110,7 @@ Dark felt palette, gold accent (`--gold-light`), tabular-numeral stat displays, 
 ## Tech Stack
 
 - React 19 + Vite 8 + TypeScript + plain CSS (frontend)
-- Node.js + socket.io 4 (WebSocket server)
+- Node.js 24 + socket.io 4 (WebSocket server)
 - Vitest for unit tests (44 tests across game logic, persistence, lifecycle, health, and stats)
 - Single-service deploy on DigitalOcean App Platform
 
@@ -121,6 +121,7 @@ Dark felt palette, gold accent (`--gold-light`), tabular-numeral stat displays, 
 ### Dev (both frontend and server)
 
 ```bash
+node --version       # v24.x
 pnpm install
 pnpm run dev         # Vite dev server on :5173
 pnpm run dev:server  # socket.io server on :3001 (in a second terminal)
