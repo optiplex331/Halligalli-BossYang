@@ -41,6 +41,8 @@ image:
 
 不要在生产使用 `latest`。release workflow 可以推送一个便于人阅读的 version tag，但 DigitalOcean 应该运行 Git 中记录的 digest。
 
+GitHub Actions 中对 Production Manifest 的 release identity 读写应通过 provider-neutral 的 `.github/utils/*.mjs` helper 完成。helper 内部可以理解当前 DigitalOcean manifest 结构，但 workflow 不应散落 DigitalOcean-specific YAML 解析逻辑；这样未来迁移生产 provider 时，主要替换 helper 内部和少量 CLI 编排。
+
 ## Release Identity
 
 Production Manifest 会把 release identity 注入应用：
@@ -60,6 +62,8 @@ COMMIT_SHA=<full commit sha>
   "commit": "abc1234..."
 }
 ```
+
+`/health` smoke test 和 drift check 的 JSON 校验应复用 `.github/utils/*.mjs` 中的无依赖 Node 脚本。简单的 `curl` 调用和重试循环可以保留在 Bash 中。
 
 ## Promotion Flow
 

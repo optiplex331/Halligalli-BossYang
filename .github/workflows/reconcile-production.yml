@@ -18,7 +18,7 @@ concurrency:
 jobs:
   reconcile:
     name: Reconcile DO Production
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: do-production
       url: ${{ vars.DO_PRODUCTION_URL }}
@@ -30,7 +30,12 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: package.json
 
       - name: Validate release configuration
         shell: bash
@@ -56,20 +61,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          ruby <<'RUBY' >> "${GITHUB_OUTPUT}"
-          require "yaml"
-
-          spec = YAML.load_file(ENV.fetch("SPEC_PATH"))
-          web = spec.fetch("services").find { |service| service.fetch("name") == "web" }
-          image = web.fetch("image")
-          envs = web.fetch("envs")
-          env_by_key = envs.to_h { |env| [env.fetch("key"), env.fetch("value").to_s] }
-
-          puts "image_digest=#{image.fetch("digest")}"
-          puts "app_version=#{env_by_key.fetch("APP_VERSION")}"
-          puts "commit_sha=#{env_by_key.fetch("COMMIT_SHA")}"
-          RUBY
+          node .github/utils/read-production-manifest.mjs
 
       - name: Deploy via DigitalOcean
         id: deployment
@@ -114,35 +106,7 @@ jobs:
           for attempt in {1..12}; do
             response="$(curl --fail --silent --show-error "${health_url}" || true)"
 
-            if HEALTH_RESPONSE="${response}" node <<'NODE'
-            const body = process.env.HEALTH_RESPONSE;
-            let health;
-
-            try {
-              health = JSON.parse(body);
-            } catch {
-              console.error("Health response is not valid JSON:", body);
-              process.exit(1);
-            }
-
-            const expectedVersion = process.env.EXPECTED_VERSION;
-            const expectedCommit = process.env.EXPECTED_COMMIT;
-
-            if (health.status !== "ok") {
-              console.error("Unexpected health status:", health);
-              process.exit(1);
-            }
-
-            if (health.version !== expectedVersion || health.commit !== expectedCommit) {
-              console.error("Release identity mismatch:", {
-                expectedVersion,
-                actualVersion: health.version,
-                expectedCommit,
-                actualCommit: health.commit,
-              });
-              process.exit(1);
-            }
-          NODE
+            if HEALTH_RESPONSE="${response}" node .github/utils/check-health.mjs
             then
               echo "Smoke test passed for deployment ${{ steps.deployment.outputs.deployment_id }}"
               exit 0

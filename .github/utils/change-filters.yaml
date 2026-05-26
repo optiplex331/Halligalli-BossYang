@@ -20,9 +20,11 @@ product_runtime:
   - "vite.config.ts"
 
 delivery_control:
+  - ".github/actions/**"
   - ".github/workflows/**"
   - ".github/utils/change-filters.yaml"
-  - ".github/utils/validate-release-config.mjs"
+  - ".github/utils/*.mjs"
+  - ".github/utils/**/*.mjs"
   - ".github/dependabot.yml"
 
 release_metadata:
