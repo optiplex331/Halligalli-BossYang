@@ -17,6 +17,20 @@ PR checks 不发布镜像，也不改变 DigitalOcean 状态。CI 使用 `packag
 
 GitHub Actions workflow 中清晰、短小、shell 原生的编排逻辑保留在 Bash 中，例如 `git`、`docker`、`doctl`、`gh`、`curl` 和环境变量检查。结构化解析、可复用 JSON 校验、Production Manifest release identity 读写、drift 比较和非平凡 inline heredoc 应放进无依赖的 `.github/utils/*.mjs`，并用 Node 内置 `node --test` 覆盖。
 
+常规产品测试使用 Vitest：
+
+```bash
+pnpm run test
+```
+
+release utility tests 保持无依赖，直接使用 Node 内置 runner：
+
+```bash
+node --test .github/utils/__tests__/*.test.mjs
+```
+
+Vitest 配置会排除 `.github/utils/__tests__/`，避免把 Node runner 测试误收集成产品测试。
+
 | 变更类型 | Product checks | Container build and scan |
 |---|---|---|
 | 业务或运行时代码 PR | 在 Node.js 24 上校验 release 配置和 utility tests，安装依赖，运行测试、类型检查和应用构建。 | 构建 Node.js 24 生产镜像并运行 Trivy 扫描。 |

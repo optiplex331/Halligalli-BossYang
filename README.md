@@ -111,7 +111,8 @@ Dark felt palette, gold accent (`--gold-light`), tabular-numeral stat displays, 
 
 - React 19 + Vite 8 + TypeScript + plain CSS (frontend)
 - Node.js 24 + socket.io 4 (WebSocket server)
-- Vitest for unit tests (44 tests across game logic, persistence, lifecycle, health, and stats)
+- Vitest for product unit tests (44 tests across game logic, persistence, lifecycle, health, and stats)
+- Node's built-in test runner for dependency-free release utility tests
 - Single-service deploy on DigitalOcean App Platform
 
 ---
@@ -141,6 +142,7 @@ pnpm run dev
 
 ```bash
 pnpm run test
+node --test .github/utils/__tests__/*.test.mjs
 pnpm run typecheck
 ```
 
@@ -190,6 +192,7 @@ server/
 └── GameEngine.ts        — server-authoritative game loop
 
 deploy/production/app.yaml — GitOps Production Manifest
+.github/utils/            — dependency-free release and Production Manifest utilities
 scripts/simulate-bell.ts — card-distribution tuning utility
 public/yang-boss.png     — Boss portrait
 ```
