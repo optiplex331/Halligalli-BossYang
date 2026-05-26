@@ -31,50 +31,8 @@ jobs:
           filters: .github/utils/change-filters.yaml
           list-files: shell
 
-      - name: Resolve check routing
-        id: changes
-        shell: bash
-        env:
-          product_checks_required: ${{ steps.paths.outputs.product_runtime || 'false' }}
-          delivery_control_changed: ${{ steps.paths.outputs.delivery_control || 'false' }}
-          release_metadata_changed: ${{ steps.paths.outputs.release_metadata || 'false' }}
-          production_manifest_changed: ${{ steps.paths.outputs.production_manifest || 'false' }}
-        run: |
-          # -e: exit on any command failure
-          # -u: treat unset variables as errors
-          # -o pipefail: fail if any command in a pipeline fails
-          set -euo pipefail
-
-          # Manual runs should exercise the full product path and workflow lint.
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            product_checks_required=true
-            delivery_control_changed=true
-          fi
-
-          # Classify by highest-impact matching category.
-          if [[ "${product_checks_required}" == "true" ]]; then
-            classification="product-runtime"
-          elif [[ "${delivery_control_changed}" == "true" ]]; then
-            classification="delivery-control"
-          elif [[ "${production_manifest_changed}" == "true" ]]; then
-            classification="production-manifest"
-          elif [[ "${release_metadata_changed}" == "true" ]]; then
-            classification="release-metadata"
-          else
-            classification="metadata-or-docs"
-          fi
-
-          {
-            echo "classification=${classification}"
-            echo "product_checks_required=${product_checks_required}"
-            echo "container_build_required=${product_checks_required}"
-            echo "delivery_control_changed=${delivery_control_changed}"
-            echo "release_metadata_changed=${release_metadata_changed}"
-            echo "production_manifest_changed=${production_manifest_changed}"
-          } | tee -a "${GITHUB_OUTPUT}"
-
       - name: Enforce Production Manifest-only PRs
-        if: github.event_name == 'pull_request' && steps.changes.outputs.production_manifest_changed == 'true'
+        if: github.event_name == 'pull_request' && steps.paths.outputs.production_manifest == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -92,42 +50,42 @@ jobs:
           fi
 
       - name: Lint GitHub Actions workflows
-        if: steps.changes.outputs.delivery_control_changed == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.paths.outputs.delivery_control == 'true'
         run: docker run --rm -v "${PWD}:/repo" --workdir /repo rhysd/actionlint:1.7.12 -color
 
       - name: Validate release configuration
         run: node .github/utils/validate-release-config.mjs
 
+      - name: Skip heavy product checks
+        if: github.event_name != 'workflow_dispatch' && steps.paths.outputs.product_runtime != 'true'
+        run: |
+          echo "Heavy product checks are not required for these changes."
+
       - name: Set up pnpm
-        if: steps.changes.outputs.product_checks_required == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.paths.outputs.product_runtime == 'true'
         uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
         with:
           run_install: false
 
       - name: Set up Node.js
-        if: steps.changes.outputs.product_checks_required == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.paths.outputs.product_runtime == 'true'
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version-file: package.json
           cache: pnpm
 
       - name: Install dependencies
-        if: steps.changes.outputs.product_checks_required == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.paths.outputs.product_runtime == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Run tests
-        if: steps.changes.outputs.product_checks_required == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.paths.outputs.product_runtime == 'true'
         run: pnpm run test
 
       - name: Typecheck
-        if: steps.changes.outputs.product_checks_required == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.paths.outputs.product_runtime == 'true'
         run: pnpm run typecheck
 
       - name: Build app
-        if: steps.changes.outputs.product_checks_required == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.paths.outputs.product_runtime == 'true'
         run: pnpm run build
-
-      - name: Skip heavy product checks
-        if: steps.changes.outputs.product_checks_required != 'true'
-        run: |
-          echo "Heavy product checks are not required for ${{ steps.changes.outputs.classification }} changes."
