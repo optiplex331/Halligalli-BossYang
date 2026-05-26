@@ -31,3 +31,9 @@ coverage/
 # Temp
 *.tmp
 *.temp
+
+# Coding agents
+.claude/
+.codex/
+.mcp.json
+.mcp.*.json
