@@ -79,7 +79,7 @@ Production Promotion PR 必须只修改 `deploy/production/app.yaml`；如果同
 
 ## Drift Check
 
-`Production Drift Check` 每 30 分钟运行一次，也可以手动 dispatch。它会比较：
+`Production Drift Check` 每天运行一次，也可以手动 dispatch。它会比较：
 
 - `deploy/production/app.yaml`
 - 当前 live DigitalOcean app spec
