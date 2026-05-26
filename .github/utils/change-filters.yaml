@@ -4,10 +4,7 @@
 # workflow-level path filters, because skipped workflows can leave branch
 # protection waiting for required checks.
 
-product:
-  - ".github/workflows/**"
-  - ".github/utils/change-filters.yaml"
-  - ".github/utils/validate-release-config.mjs"
+product_runtime:
   - ".dockerignore"
   - "Dockerfile"
   - "index.html"
@@ -21,6 +18,12 @@ product:
   - "tsconfig.json"
   - "tsconfig.server.json"
   - "vite.config.ts"
+
+delivery_control:
+  - ".github/workflows/**"
+  - ".github/utils/change-filters.yaml"
+  - ".github/utils/validate-release-config.mjs"
+  - ".github/dependabot.yml"
 
 release_metadata:
   - ".github/utils/.release-please-manifest.json"
