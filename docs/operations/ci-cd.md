@@ -15,13 +15,17 @@ PR checks 不发布镜像，也不改变 DigitalOcean 状态。CI 使用 `packag
 
 这些 check 名称会刻意保持稳定，因为 branch protection 依赖它们。每个 check 内部实际执行的工作由 `dorny/paths-filter` 和 `.github/utils/change-filters.yaml` 按变更类型路由，而不是用 workflow 级别的 path filters。这样可以避免 workflow 被跳过后 required check 一直等待的问题。
 
+GitHub Actions workflow 中清晰、短小、shell 原生的编排逻辑保留在 Bash 中，例如 `git`、`docker`、`doctl`、`gh`、`curl` 和环境变量检查。结构化解析、可复用 JSON 校验、Production Manifest release identity 读写、drift 比较和非平凡 inline heredoc 应放进无依赖的 `.github/utils/*.mjs`，并用 Node 内置 `node --test` 覆盖。
+
 | 变更类型 | Product checks | Container build and scan |
 |---|---|---|
-| 业务或运行时代码 PR | 在 Node.js 24 上校验 release 配置，安装依赖，运行测试、类型检查和应用构建。 | 构建 Node.js 24 生产镜像并运行 Trivy 扫描。 |
-| Delivery control PR | 校验 release 配置并用 actionlint 检查 GitHub Actions workflows。跳过产品构建工作。 | 跳过镜像构建工作。 |
-| Release PR | 校验 release 配置。跳过产品构建工作。 | 跳过镜像构建工作。 |
-| Production Promotion PR | 校验 release 配置，包括 Production Manifest 结构，并要求 PR 只修改 `deploy/production/app.yaml`。跳过产品构建工作。 | 跳过镜像构建工作，因为 Release Tag 已经构建并扫描过镜像。 |
-| 文档或其他元数据 PR | 校验 release 配置。跳过产品构建工作。 | 跳过镜像构建工作。 |
+| 业务或运行时代码 PR | 在 Node.js 24 上校验 release 配置和 utility tests，安装依赖，运行测试、类型检查和应用构建。 | 构建 Node.js 24 生产镜像并运行 Trivy 扫描。 |
+| Delivery control PR | 校验 release 配置和 utility tests，并用 actionlint 检查 GitHub Actions workflows。跳过产品构建工作。 | 跳过镜像构建工作。 |
+| Release PR | 校验 release 配置和 utility tests。跳过产品构建工作。 | 跳过镜像构建工作。 |
+| Production Promotion PR | 校验 release 配置和 utility tests，包括 Production Manifest 结构，并要求 PR 只修改 `deploy/production/app.yaml`。跳过产品构建工作。 | 跳过镜像构建工作，因为 Release Tag 已经构建并扫描过镜像。 |
+| 文档或其他元数据 PR | 校验 release 配置和 utility tests。跳过产品构建工作。 | 跳过镜像构建工作。 |
+
+Utility tests 只在 `Product checks` 门禁中无条件运行，不要求 `pnpm install`。`Container`、`Reconcile DO Production` 和 `Production Drift Check` 运行各自需要的 utility，但不重复完整 utility test suite。
 
 ## Release PR
 

@@ -109,6 +109,7 @@ server/
 
 public/yang-boss.png    — Boss portrait
 deploy/production/app.yaml — GitOps Production Manifest applied by Reconcile DO Production
+.github/utils/          — dependency-free GitHub Actions utilities for release config and Production Manifest release identity handling
 scripts/simulate-bell.ts — Monte Carlo utility for tuning COUNT_DISTRIBUTION (not shipped)
 ```
 
@@ -176,3 +177,4 @@ Host has exclusive `room:start` rights. Disconnects during lobby remove the play
 - **Spec updates**: update `deploy/production/app.yaml` through a Production Promotion PR
 - **Logs**: `doctl apps logs <app-id> --deployment <deployment-id> --type build|run`
 - **Gotcha**: production uses the GHCR Release Image digest from the Production Manifest; do not deploy `latest` or source rebuilds.
+- **Workflow utilities**: keep clear shell-native workflow glue in Bash; move structured parsing, reusable JSON checks, Production Manifest release identity handling, and non-trivial inline heredocs into dependency-free `.github/utils/*.mjs` scripts with `node --test` coverage.

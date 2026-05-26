@@ -39,9 +39,14 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Skip container build and scan
+        if: steps.changes.outputs.container_build_required != 'true'
+        run: |
+          echo "Container build and scan are not required for ${{ steps.changes.outputs.classification }} changes."
+
       - name: Set up Docker Buildx
         if: steps.changes.outputs.container_build_required == 'true'
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
       - name: Resolve image identity
         if: steps.changes.outputs.container_build_required == 'true'
@@ -62,19 +67,16 @@ jobs:
             version="pr-${GITHUB_SHA::7}"
           fi
 
-          {
-            echo "image=${image}"
-            echo "version=${version}"
-            echo "image_tag=${image}:${version}"
-            echo "commit_sha=${commit_sha}"
-            echo "should_publish=${should_publish}"
-          } >> "${GITHUB_OUTPUT}"
+          outputs=(
+            "image=${image}"
+            "version=${version}"
+            "image_tag=${image}:${version}"
+            "commit_sha=${commit_sha}"
+            "should_publish=${should_publish}"
+          )
 
-          echo "Image: ${image}"
-          echo "Version: ${version}"
-          echo "Image tag: ${image}:${version}"
-          echo "Commit SHA: ${commit_sha}"
-          echo "Publish: ${should_publish}"
+          printf '%s\n' "${outputs[@]}" >> "${GITHUB_OUTPUT}"
+          printf '%s\n' "${outputs[@]}"
 
       - name: Build image
         if: steps.changes.outputs.container_build_required == 'true'
@@ -85,9 +87,9 @@ jobs:
           docker build \
             --build-arg APP_VERSION="${{ steps.release.outputs.version }}" \
             --build-arg COMMIT_SHA="${{ steps.release.outputs.commit_sha }}" \
-            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
-            --label "org.opencontainers.image.revision=${{ steps.release.outputs.commit_sha }}" \
             --label "org.opencontainers.image.version=${{ steps.release.outputs.version }}" \
+            --label "org.opencontainers.image.revision=${{ steps.release.outputs.commit_sha }}" \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
             --tag "${{ steps.release.outputs.image_tag }}" \
             .
 
@@ -101,11 +103,6 @@ jobs:
           ignore-unfixed: true
           vuln-type: os,library
           severity: HIGH,CRITICAL
-
-      - name: Skip container build and scan
-        if: steps.changes.outputs.container_build_required != 'true'
-        run: |
-          echo "Container build and scan are not required for ${{ steps.changes.outputs.classification }} changes."
 
       - name: Log in to GHCR
         if: steps.release.outputs.should_publish == 'true'
@@ -152,6 +149,11 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.HALLIGALLI_RELEASE_BOT_TOKEN }}
 
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: package.json
+
       - name: Update Production Manifest
         shell: bash
         env:
@@ -160,23 +162,7 @@ jobs:
           IMAGE_DIGEST: ${{ needs.build-scan-publish.outputs.image_digest }}
         run: |
           set -euo pipefail
-
-          ruby <<'RUBY'
-          require "yaml"
-
-          path = "deploy/production/app.yaml"
-          spec = YAML.load_file(path)
-          web = spec.fetch("services").find { |service| service.fetch("name") == "web" }
-          image = web.fetch("image")
-          image.delete("tag")
-          image["digest"] = ENV.fetch("IMAGE_DIGEST")
-
-          envs = web.fetch("envs")
-          envs.find { |env| env.fetch("key") == "APP_VERSION" }["value"] = ENV.fetch("VERSION")
-          envs.find { |env| env.fetch("key") == "COMMIT_SHA" }["value"] = ENV.fetch("COMMIT_SHA")
-
-          File.write(path, YAML.dump(spec).sub(/\A---\s*\n/, ""))
-          RUBY
+          node .github/utils/update-production-manifest.mjs
 
       - name: Open promotion PR
         shell: bash
