@@ -35,29 +35,24 @@ jobs:
         id: changes
         shell: bash
         env:
-          FILTER_PRODUCT_RUNTIME: ${{ steps.paths.outputs.product_runtime || 'false' }}
-          FILTER_DELIVERY_CONTROL: ${{ steps.paths.outputs.delivery_control || 'false' }}
-          FILTER_RELEASE_METADATA: ${{ steps.paths.outputs.release_metadata || 'false' }}
-          FILTER_PRODUCTION_MANIFEST: ${{ steps.paths.outputs.production_manifest || 'false' }}
+          product_checks_required: ${{ steps.paths.outputs.product_runtime || 'false' }}
+          delivery_control_changed: ${{ steps.paths.outputs.delivery_control || 'false' }}
+          release_metadata_changed: ${{ steps.paths.outputs.release_metadata || 'false' }}
+          production_manifest_changed: ${{ steps.paths.outputs.production_manifest || 'false' }}
         run: |
           # -e: exit on any command failure
           # -u: treat unset variables as errors
           # -o pipefail: fail if any command in a pipeline fails
           set -euo pipefail
 
-          product_required="${FILTER_PRODUCT_RUNTIME}"
-          delivery_control_changed="${FILTER_DELIVERY_CONTROL}"
-          release_metadata_changed="${FILTER_RELEASE_METADATA}"
-          production_manifest_changed="${FILTER_PRODUCTION_MANIFEST}"
-
           # Manual runs should exercise the full product path and workflow lint.
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            product_required=true
+            product_checks_required=true
             delivery_control_changed=true
           fi
 
           # Classify by highest-impact matching category.
-          if [[ "${product_required}" == "true" ]]; then
+          if [[ "${product_checks_required}" == "true" ]]; then
             classification="product-runtime"
           elif [[ "${delivery_control_changed}" == "true" ]]; then
             classification="delivery-control"
@@ -71,8 +66,8 @@ jobs:
 
           {
             echo "classification=${classification}"
-            echo "product_checks_required=${product_required}"
-            echo "container_build_required=${product_required}"
+            echo "product_checks_required=${product_checks_required}"
+            echo "container_build_required=${product_checks_required}"
             echo "delivery_control_changed=${delivery_control_changed}"
             echo "release_metadata_changed=${release_metadata_changed}"
             echo "production_manifest_changed=${production_manifest_changed}"
