@@ -48,10 +48,10 @@ runs:
       id: routing
       shell: bash
       env:
-        FILTER_PRODUCT_RUNTIME: ${{ steps.paths.outputs.product_runtime || 'false' }}
-        FILTER_DELIVERY_CONTROL: ${{ steps.paths.outputs.delivery_control || 'false' }}
-        FILTER_RELEASE_METADATA: ${{ steps.paths.outputs.release_metadata || 'false' }}
-        FILTER_PRODUCTION_MANIFEST: ${{ steps.paths.outputs.production_manifest || 'false' }}
+        PRODUCT_RUNTIME: ${{ steps.paths.outputs.product_runtime || 'false' }}
+        DELIVERY_CONTROL: ${{ steps.paths.outputs.delivery_control || 'false' }}
+        RELEASE_METADATA: ${{ steps.paths.outputs.release_metadata || 'false' }}
+        PRODUCTION_MANIFEST: ${{ steps.paths.outputs.production_manifest || 'false' }}
       run: |
         set -euo pipefail
 
@@ -60,14 +60,9 @@ runs:
           tag_release=true
         fi
 
-        product_runtime="${FILTER_PRODUCT_RUNTIME}"
-        delivery_control="${FILTER_DELIVERY_CONTROL}"
-        release_metadata="${FILTER_RELEASE_METADATA}"
-        production_manifest="${FILTER_PRODUCTION_MANIFEST}"
-
-        product_checks_required="${product_runtime}"
-        delivery_control_checks_required="${delivery_control}"
-        container_build_required="${product_runtime}"
+        product_checks_required="${PRODUCT_RUNTIME}"
+        delivery_control_checks_required="${DELIVERY_CONTROL}"
+        container_build_required="${PRODUCT_RUNTIME}"
 
         if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
           product_checks_required=true
@@ -81,15 +76,15 @@ runs:
 
         if [[ "${tag_release}" == "true" ]]; then
           classification="release-tag"
-        elif [[ "${product_runtime}" == "true" ]]; then
+        elif [[ "${PRODUCT_RUNTIME}" == "true" ]]; then
           classification="product-runtime"
-        elif [[ "${delivery_control}" == "true" ]]; then
+        elif [[ "${DELIVERY_CONTROL}" == "true" ]]; then
           classification="delivery-control"
-        elif [[ "${production_manifest}" == "true" && "${release_metadata}" == "true" ]]; then
+        elif [[ "${PRODUCTION_MANIFEST}" == "true" && "${RELEASE_METADATA}" == "true" ]]; then
           classification="release-and-production-metadata"
-        elif [[ "${production_manifest}" == "true" ]]; then
+        elif [[ "${PRODUCTION_MANIFEST}" == "true" ]]; then
           classification="production-manifest"
-        elif [[ "${release_metadata}" == "true" ]]; then
+        elif [[ "${RELEASE_METADATA}" == "true" ]]; then
           classification="release-metadata"
         else
           classification="metadata-or-docs"
@@ -97,10 +92,10 @@ runs:
 
         {
           echo "classification=${classification}"
-          echo "product_runtime=${product_runtime}"
-          echo "delivery_control=${delivery_control}"
-          echo "release_metadata=${release_metadata}"
-          echo "production_manifest=${production_manifest}"
+          echo "product_runtime=${PRODUCT_RUNTIME}"
+          echo "delivery_control=${DELIVERY_CONTROL}"
+          echo "release_metadata=${RELEASE_METADATA}"
+          echo "production_manifest=${PRODUCTION_MANIFEST}"
           echo "product_checks_required=${product_checks_required}"
           echo "delivery_control_checks_required=${delivery_control_checks_required}"
           echo "container_build_required=${container_build_required}"
@@ -108,10 +103,10 @@ runs:
 
         echo "::group::Check routing"
         echo "classification=${classification}"
-        echo "product_runtime=${product_runtime}"
-        echo "delivery_control=${delivery_control}"
-        echo "release_metadata=${release_metadata}"
-        echo "production_manifest=${production_manifest}"
+        echo "product_runtime=${PRODUCT_RUNTIME}"
+        echo "delivery_control=${DELIVERY_CONTROL}"
+        echo "release_metadata=${RELEASE_METADATA}"
+        echo "production_manifest=${PRODUCTION_MANIFEST}"
         echo "product_checks_required=${product_checks_required}"
         echo "delivery_control_checks_required=${delivery_control_checks_required}"
         echo "container_build_required=${container_build_required}"
