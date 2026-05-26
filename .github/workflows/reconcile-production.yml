@@ -42,11 +42,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          : "${DO_APP_ID:?Set environment variable DO_APP_ID to the DigitalOcean App Platform app ID.}"
-          : "${DO_PRODUCTION_URL:?Set environment variable DO_PRODUCTION_URL to the live production URL.}"
+          if [[ -z "${DO_APP_ID}" ]]; then
+            echo "Set environment variable DO_APP_ID to the DigitalOcean App Platform app ID." >&2
+            exit 1
+          fi
+
+          if [[ -z "${DO_PRODUCTION_URL}" ]]; then
+            echo "Set environment variable DO_PRODUCTION_URL to the live production URL." >&2
+            exit 1
+          fi
 
       - name: Set up doctl
-        uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2
+        uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2.5.2
         with:
           token: ${{ secrets.DO_API_TOKEN }}
 
@@ -106,7 +113,8 @@ jobs:
           for attempt in {1..12}; do
             response="$(curl --fail --silent --show-error "${health_url}" || true)"
 
-            if HEALTH_RESPONSE="${response}" node .github/utils/check-health.mjs
+            export HEALTH_RESPONSE="${response}"
+            if node .github/utils/check-health.mjs
             then
               echo "Smoke test passed for deployment ${{ steps.deployment.outputs.deployment_id }}"
               exit 0
