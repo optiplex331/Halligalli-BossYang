@@ -1,18 +1,15 @@
 {
-  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
-  "bootstrap-sha": "c08fdca6118f4590f24a1f2ad01d07d7f89a7166",
-  "include-component-in-tag": false,
-  "include-v-in-tag": true,
-  "include-v-in-release-name": true,
-  "pull-request-title-pattern": "chore: release v${version}",
-  "packages": {
-    ".": {
-      "release-type": "go",
-      "package-name": "halligalli",
-      "changelog-path": "CHANGELOG.md",
-      "include-component-in-tag": false,
-      "include-v-in-tag": true,
-      "include-v-in-release-name": true
-    }
-  }
+	"$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+	"bootstrap-sha": "c08fdca6118f4590f24a1f2ad01d07d7f89a7166",
+	"include-component-in-tag": false,
+	"include-v-in-tag": true,
+	"include-v-in-release-name": true,
+	"pull-request-title-pattern": "chore: release v${version}",
+	"packages": {
+		".": {
+			"release-type": "go",
+			"package-name": "halligalli",
+			"changelog-path": "CHANGELOG.md"
+		}
+	}
 }
