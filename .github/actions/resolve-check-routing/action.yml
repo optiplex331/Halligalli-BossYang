@@ -90,24 +90,18 @@ runs:
           classification="metadata-or-docs"
         fi
 
-        {
-          echo "classification=${classification}"
-          echo "product_runtime=${PRODUCT_RUNTIME}"
-          echo "delivery_control=${DELIVERY_CONTROL}"
-          echo "release_metadata=${RELEASE_METADATA}"
-          echo "production_manifest=${PRODUCTION_MANIFEST}"
-          echo "product_checks_required=${product_checks_required}"
-          echo "delivery_control_checks_required=${delivery_control_checks_required}"
-          echo "container_build_required=${container_build_required}"
-        } >> "${GITHUB_OUTPUT}"
+        outputs=(
+          "classification=${classification}"
+          "product_runtime=${PRODUCT_RUNTIME}"
+          "delivery_control=${DELIVERY_CONTROL}"
+          "release_metadata=${RELEASE_METADATA}"
+          "production_manifest=${PRODUCTION_MANIFEST}"
+          "product_checks_required=${product_checks_required}"
+          "delivery_control_checks_required=${delivery_control_checks_required}"
+          "container_build_required=${container_build_required}"
+        )
 
+        printf '%s\n' "${outputs[@]}" >> "${GITHUB_OUTPUT}"
         echo "::group::Check routing"
-        echo "classification=${classification}"
-        echo "product_runtime=${PRODUCT_RUNTIME}"
-        echo "delivery_control=${DELIVERY_CONTROL}"
-        echo "release_metadata=${RELEASE_METADATA}"
-        echo "production_manifest=${PRODUCTION_MANIFEST}"
-        echo "product_checks_required=${product_checks_required}"
-        echo "delivery_control_checks_required=${delivery_control_checks_required}"
-        echo "container_build_required=${container_build_required}"
+        printf '%s\n' "${outputs[@]}"
         echo "::endgroup::"
