@@ -1,0 +1,118 @@
+name: Resolve check routing
+description: Resolve shared CI and container routing from changed file groups.
+
+inputs:
+  token:
+    description: GitHub token for pull request file detection.
+    required: true
+
+outputs:
+  classification:
+    description: Human-readable change classification.
+    value: ${{ steps.routing.outputs.classification }}
+  product_runtime:
+    description: Whether product runtime files changed.
+    value: ${{ steps.routing.outputs.product_runtime }}
+  delivery_control:
+    description: Whether delivery control files changed.
+    value: ${{ steps.routing.outputs.delivery_control }}
+  release_metadata:
+    description: Whether release metadata files changed.
+    value: ${{ steps.routing.outputs.release_metadata }}
+  production_manifest:
+    description: Whether the production manifest changed.
+    value: ${{ steps.routing.outputs.production_manifest }}
+  product_checks_required:
+    description: Whether heavy product checks are required.
+    value: ${{ steps.routing.outputs.product_checks_required }}
+  delivery_control_checks_required:
+    description: Whether delivery control checks are required.
+    value: ${{ steps.routing.outputs.delivery_control_checks_required }}
+  container_build_required:
+    description: Whether the container build and scan are required.
+    value: ${{ steps.routing.outputs.container_build_required }}
+
+runs:
+  using: composite
+  steps:
+    - name: Detect changed file groups
+      id: paths
+      if: github.ref_type != 'tag'
+      uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+      with:
+        token: ${{ inputs.token }}
+        filters: .github/utils/change-filters.yaml
+        list-files: shell
+
+    - name: Resolve routing
+      id: routing
+      shell: bash
+      env:
+        FILTER_PRODUCT_RUNTIME: ${{ steps.paths.outputs.product_runtime || 'false' }}
+        FILTER_DELIVERY_CONTROL: ${{ steps.paths.outputs.delivery_control || 'false' }}
+        FILTER_RELEASE_METADATA: ${{ steps.paths.outputs.release_metadata || 'false' }}
+        FILTER_PRODUCTION_MANIFEST: ${{ steps.paths.outputs.production_manifest || 'false' }}
+      run: |
+        set -euo pipefail
+
+        tag_release=false
+        if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          tag_release=true
+        fi
+
+        product_runtime="${FILTER_PRODUCT_RUNTIME}"
+        delivery_control="${FILTER_DELIVERY_CONTROL}"
+        release_metadata="${FILTER_RELEASE_METADATA}"
+        production_manifest="${FILTER_PRODUCTION_MANIFEST}"
+
+        product_checks_required="${product_runtime}"
+        delivery_control_checks_required="${delivery_control}"
+        container_build_required="${product_runtime}"
+
+        if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+          product_checks_required=true
+          delivery_control_checks_required=true
+          container_build_required=true
+        fi
+
+        if [[ "${tag_release}" == "true" ]]; then
+          container_build_required=true
+        fi
+
+        if [[ "${tag_release}" == "true" ]]; then
+          classification="release-tag"
+        elif [[ "${product_runtime}" == "true" ]]; then
+          classification="product-runtime"
+        elif [[ "${delivery_control}" == "true" ]]; then
+          classification="delivery-control"
+        elif [[ "${production_manifest}" == "true" && "${release_metadata}" == "true" ]]; then
+          classification="release-and-production-metadata"
+        elif [[ "${production_manifest}" == "true" ]]; then
+          classification="production-manifest"
+        elif [[ "${release_metadata}" == "true" ]]; then
+          classification="release-metadata"
+        else
+          classification="metadata-or-docs"
+        fi
+
+        {
+          echo "classification=${classification}"
+          echo "product_runtime=${product_runtime}"
+          echo "delivery_control=${delivery_control}"
+          echo "release_metadata=${release_metadata}"
+          echo "production_manifest=${production_manifest}"
+          echo "product_checks_required=${product_checks_required}"
+          echo "delivery_control_checks_required=${delivery_control_checks_required}"
+          echo "container_build_required=${container_build_required}"
+        } >> "${GITHUB_OUTPUT}"
+
+        echo "::group::Check routing"
+        echo "classification=${classification}"
+        echo "product_runtime=${product_runtime}"
+        echo "delivery_control=${delivery_control}"
+        echo "release_metadata=${release_metadata}"
+        echo "production_manifest=${production_manifest}"
+        echo "product_checks_required=${product_checks_required}"
+        echo "delivery_control_checks_required=${delivery_control_checks_required}"
+        echo "container_build_required=${container_build_required}"
+        echo "::endgroup::"

@@ -33,77 +33,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Detect changed file groups
-        id: paths
-        if: github.ref_type != 'tag'
-        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          filters: .github/utils/change-filters.yaml
-          list-files: shell
-
       - name: Resolve check routing
         id: changes
-        shell: bash
-        env:
-          FILTER_PRODUCT_RUNTIME: ${{ steps.paths.outputs.product_runtime || 'false' }}
-          FILTER_DELIVERY_CONTROL: ${{ steps.paths.outputs.delivery_control || 'false' }}
-          FILTER_RELEASE_METADATA: ${{ steps.paths.outputs.release_metadata || 'false' }}
-          FILTER_PRODUCTION_MANIFEST: ${{ steps.paths.outputs.production_manifest || 'false' }}
-        run: |
-          set -euo pipefail
-
-          tag_release=false
-          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            tag_release=true
-          fi
-
-          product_required="${FILTER_PRODUCT_RUNTIME}"
-          container_required="${FILTER_PRODUCT_RUNTIME}"
-          delivery_control_changed="${FILTER_DELIVERY_CONTROL}"
-          release_metadata_changed="${FILTER_RELEASE_METADATA}"
-          production_manifest_changed="${FILTER_PRODUCTION_MANIFEST}"
-
-          if [[ "${tag_release}" == "true" || "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            container_required=true
-          fi
-
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            product_required=true
-            delivery_control_changed=true
-          fi
-
-          if [[ "${tag_release}" == "true" ]]; then
-            classification="release-tag"
-          elif [[ "${product_required}" == "true" ]]; then
-            classification="product-runtime"
-          elif [[ "${delivery_control_changed}" == "true" ]]; then
-            classification="delivery-control"
-          elif [[ "${production_manifest_changed}" == "true" && "${release_metadata_changed}" != "true" ]]; then
-            classification="production-manifest"
-          elif [[ "${release_metadata_changed}" == "true" && "${production_manifest_changed}" != "true" ]]; then
-            classification="release-metadata"
-          elif [[ "${production_manifest_changed}" == "true" && "${release_metadata_changed}" == "true" ]]; then
-            classification="release-and-production-metadata"
-          else
-            classification="metadata-or-docs"
-          fi
-
-          {
-            echo "classification=${classification}"
-            echo "product_checks_required=${product_required}"
-            echo "container_build_required=${container_required}"
-            echo "delivery_control_changed=${delivery_control_changed}"
-            echo "release_metadata_changed=${release_metadata_changed}"
-            echo "production_manifest_changed=${production_manifest_changed}"
-          } >> "${GITHUB_OUTPUT}"
-
-          echo "classification=${classification}"
-          echo "product_checks_required=${product_required}"
-          echo "container_build_required=${container_required}"
-          echo "delivery_control_changed=${delivery_control_changed}"
-          echo "release_metadata_changed=${release_metadata_changed}"
-          echo "production_manifest_changed=${production_manifest_changed}"
+        uses: ./.github/actions/resolve-check-routing
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
         if: steps.changes.outputs.container_build_required == 'true'
