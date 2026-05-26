@@ -31,6 +31,17 @@ jobs:
           filters: .github/utils/change-filters.yaml
           list-files: shell
 
+      - name: Show changed file groups
+        shell: bash
+        env:
+          PATH_FILTER_OUTPUTS: ${{ toJson(steps.paths.outputs) }}
+        run: |
+          set -euo pipefail
+
+          echo "::group::Changed file groups"
+          printf '%s\n' "${PATH_FILTER_OUTPUTS}"
+          echo "::endgroup::"
+
       - name: Enforce Production Manifest-only PRs
         if: github.event_name == 'pull_request' && steps.paths.outputs.production_manifest == 'true'
         shell: bash
