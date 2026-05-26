@@ -16,11 +16,11 @@ permissions:
 jobs:
   product-checks:
     name: Product checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
@@ -36,22 +36,27 @@ jobs:
         id: changes
         shell: bash
         env:
-          FILTER_PRODUCT: ${{ steps.paths.outputs.product || 'false' }}
+          FILTER_PRODUCT_RUNTIME: ${{ steps.paths.outputs.product_runtime || 'false' }}
+          FILTER_DELIVERY_CONTROL: ${{ steps.paths.outputs.delivery_control || 'false' }}
           FILTER_RELEASE_METADATA: ${{ steps.paths.outputs.release_metadata || 'false' }}
           FILTER_PRODUCTION_MANIFEST: ${{ steps.paths.outputs.production_manifest || 'false' }}
         run: |
           set -euo pipefail
 
-          product_required="${FILTER_PRODUCT}"
+          product_required="${FILTER_PRODUCT_RUNTIME}"
+          delivery_control_changed="${FILTER_DELIVERY_CONTROL}"
           release_metadata_changed="${FILTER_RELEASE_METADATA}"
           production_manifest_changed="${FILTER_PRODUCTION_MANIFEST}"
 
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             product_required=true
+            delivery_control_changed=true
           fi
 
           if [[ "${product_required}" == "true" ]]; then
             classification="product-runtime"
+          elif [[ "${delivery_control_changed}" == "true" ]]; then
+            classification="delivery-control"
           elif [[ "${production_manifest_changed}" == "true" && "${release_metadata_changed}" != "true" ]]; then
             classification="production-manifest"
           elif [[ "${release_metadata_changed}" == "true" && "${production_manifest_changed}" != "true" ]]; then
@@ -66,6 +71,7 @@ jobs:
             echo "classification=${classification}"
             echo "product_checks_required=${product_required}"
             echo "container_build_required=${product_required}"
+            echo "delivery_control_changed=${delivery_control_changed}"
             echo "release_metadata_changed=${release_metadata_changed}"
             echo "production_manifest_changed=${production_manifest_changed}"
           } >> "${GITHUB_OUTPUT}"
@@ -73,16 +79,39 @@ jobs:
           echo "classification=${classification}"
           echo "product_checks_required=${product_required}"
           echo "container_build_required=${product_required}"
+          echo "delivery_control_changed=${delivery_control_changed}"
           echo "release_metadata_changed=${release_metadata_changed}"
           echo "production_manifest_changed=${production_manifest_changed}"
 
+      - name: Enforce Production Manifest-only PRs
+        if: github.event_name == 'pull_request' && steps.changes.outputs.production_manifest_changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          changed_files="$(git diff --name-only --diff-filter=ACMRT \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}")"
+          disallowed_files="$(printf '%s\n' "${changed_files}" | sed '/^deploy\/production\/app.yaml$/d' | sed '/^$/d')"
+
+          if [[ -n "${disallowed_files}" ]]; then
+            echo "Production Manifest PRs must only change deploy/production/app.yaml." >&2
+            echo "Disallowed files:" >&2
+            printf '%s\n' "${disallowed_files}" >&2
+            exit 1
+          fi
+
+      - name: Lint GitHub Actions workflows
+        if: steps.changes.outputs.delivery_control_changed == 'true'
+        run: docker run --rm -v "${PWD}:/repo" --workdir /repo rhysd/actionlint:1.7.12 -color
+
       - name: Set up pnpm
-        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.2
         with:
           run_install: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.0.2
         with:
           node-version-file: package.json
           cache: pnpm

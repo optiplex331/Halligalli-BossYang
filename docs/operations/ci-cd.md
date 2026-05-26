@@ -18,9 +18,10 @@ PR checks 不发布镜像，也不改变 DigitalOcean 状态。CI 使用 `packag
 | 变更类型 | Product checks | Container build and scan |
 |---|---|---|
 | 业务或运行时代码 PR | 在 Node.js 24 上校验 release 配置，安装依赖，运行测试、类型检查和应用构建。 | 构建 Node.js 24 生产镜像并运行 Trivy 扫描。 |
-| Release PR | 校验 release 配置和 action-based change filters。跳过产品构建工作。 | 跳过镜像构建工作。 |
-| Production Promotion PR | 校验 release 配置，包括 Production Manifest 结构。跳过产品构建工作。 | 跳过镜像构建工作，因为 Release Tag 已经构建并扫描过镜像。 |
-| 文档或元数据 PR | 校验 release 配置和 action-based change filters。跳过产品构建工作。 | 跳过镜像构建工作。 |
+| Delivery control PR | 校验 release 配置并用 actionlint 检查 GitHub Actions workflows。跳过产品构建工作。 | 跳过镜像构建工作。 |
+| Release PR | 校验 release 配置。跳过产品构建工作。 | 跳过镜像构建工作。 |
+| Production Promotion PR | 校验 release 配置，包括 Production Manifest 结构，并要求 PR 只修改 `deploy/production/app.yaml`。跳过产品构建工作。 | 跳过镜像构建工作，因为 Release Tag 已经构建并扫描过镜像。 |
+| 文档或其他元数据 PR | 校验 release 配置。跳过产品构建工作。 | 跳过镜像构建工作。 |
 
 ## Release PR
 
@@ -59,6 +60,7 @@ deploy/production/app.yaml
 - `COMMIT_SHA`
 
 合并 Production Promotion PR 是生产发布的审批点。
+Production Promotion PR 必须只修改 `deploy/production/app.yaml`；如果同一个 PR 混入产品代码、workflow、release metadata 或文档变更，required checks 会失败。
 
 ## GitOps Reconciler
 

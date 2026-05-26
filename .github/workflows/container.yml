@@ -17,7 +17,7 @@ permissions:
 jobs:
   build-scan-publish:
     name: Container build and scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     outputs:
       image: ${{ steps.release.outputs.image }}
@@ -29,7 +29,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
@@ -46,7 +46,8 @@ jobs:
         id: changes
         shell: bash
         env:
-          FILTER_PRODUCT: ${{ steps.paths.outputs.product || 'false' }}
+          FILTER_PRODUCT_RUNTIME: ${{ steps.paths.outputs.product_runtime || 'false' }}
+          FILTER_DELIVERY_CONTROL: ${{ steps.paths.outputs.delivery_control || 'false' }}
           FILTER_RELEASE_METADATA: ${{ steps.paths.outputs.release_metadata || 'false' }}
           FILTER_PRODUCTION_MANIFEST: ${{ steps.paths.outputs.production_manifest || 'false' }}
         run: |
@@ -57,8 +58,9 @@ jobs:
             tag_release=true
           fi
 
-          product_required="${FILTER_PRODUCT}"
-          container_required="${FILTER_PRODUCT}"
+          product_required="${FILTER_PRODUCT_RUNTIME}"
+          container_required="${FILTER_PRODUCT_RUNTIME}"
+          delivery_control_changed="${FILTER_DELIVERY_CONTROL}"
           release_metadata_changed="${FILTER_RELEASE_METADATA}"
           production_manifest_changed="${FILTER_PRODUCTION_MANIFEST}"
 
@@ -68,12 +70,15 @@ jobs:
 
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             product_required=true
+            delivery_control_changed=true
           fi
 
           if [[ "${tag_release}" == "true" ]]; then
             classification="release-tag"
           elif [[ "${product_required}" == "true" ]]; then
             classification="product-runtime"
+          elif [[ "${delivery_control_changed}" == "true" ]]; then
+            classification="delivery-control"
           elif [[ "${production_manifest_changed}" == "true" && "${release_metadata_changed}" != "true" ]]; then
             classification="production-manifest"
           elif [[ "${release_metadata_changed}" == "true" && "${production_manifest_changed}" != "true" ]]; then
@@ -88,6 +93,7 @@ jobs:
             echo "classification=${classification}"
             echo "product_checks_required=${product_required}"
             echo "container_build_required=${container_required}"
+            echo "delivery_control_changed=${delivery_control_changed}"
             echo "release_metadata_changed=${release_metadata_changed}"
             echo "production_manifest_changed=${production_manifest_changed}"
           } >> "${GITHUB_OUTPUT}"
@@ -95,6 +101,7 @@ jobs:
           echo "classification=${classification}"
           echo "product_checks_required=${product_required}"
           echo "container_build_required=${container_required}"
+          echo "delivery_control_changed=${delivery_control_changed}"
           echo "release_metadata_changed=${release_metadata_changed}"
           echo "production_manifest_changed=${production_manifest_changed}"
 
@@ -201,11 +208,11 @@ jobs:
     name: Propose production promotion
     needs: build-scan-publish
     if: needs.build-scan-publish.outputs.should_publish == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Check out master
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: master
           fetch-depth: 0
