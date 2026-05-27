@@ -41,6 +41,64 @@ HALLIGALLI_ALLOWED_ORIGINS=https://play.halligalli.games
 
 `/readyz` is the Readiness Surface for traffic checks. `/health` still reports Release Identity for smoke and drift checks.
 
+## Stage 2 Learner Map
+
+Stage 2 added the reviewable AWS Staging/Portfolio foundation. It is complete as a scaffold: the repository now describes the intended AWS resources, manual deployment workflow, validation commands, GitHub configuration, and cost boundaries. It is not complete as a live environment until a human configures real AWS/Terraform/GitHub values and deliberately runs plan/apply or a manual deploy.
+
+What was added:
+
+- `deploy/aws-staging/` declares the Terraform root for the AWS staging environment.
+- `.github/workflows/aws-staging.yml` declares a manually triggered GitHub Actions workflow for validation, frontend deploy, backend deploy, and backend smoke checks.
+- `docs/operations/aws-staging.md` documents the safety boundary, architecture, local validation, GitHub environment values, manual workflow, and lifecycle.
+- CI change routing treats `deploy/aws-staging/**` as Delivery Control, so AWS staging work can be validated without changing the existing DO Production release path.
+
+Read the files in this order when learning the stage:
+
+1. `docs/operations/aws-staging.md` for the big picture and operating rules.
+2. `deploy/aws-staging/README.md` for the Terraform root boundary.
+3. `deploy/aws-staging/locals.tf` and `variables.tf` for naming, region, domain, tags, and cost guardrails.
+4. `deploy/aws-staging/frontend.tf` for S3, CloudFront, Route 53, and the frontend certificate flow.
+5. `deploy/aws-staging/backend.tf` for ECR, VPC, ALB, ECS Fargate, task definition, and backend health checks.
+6. `.github/workflows/aws-staging.yml` for how GitHub Actions would deploy each side manually.
+
+Key concepts to learn from this stage:
+
+| Concept | What it means here | Concrete operation |
+|---|---|---|
+| Terraform root | A directory that declares one infrastructure boundary. | Run `terraform -chdir=deploy/aws-staging validate -no-color` to check the declaration without creating resources. |
+| Remote state | Terraform Cloud stores infrastructure state instead of committing `.tfstate`. | Configure Terraform Cloud before any real plan/apply. |
+| Staging environment | A non-production AWS environment for demos and learning. | Keep DO Production unchanged; use AWS only for the portfolio staging path. |
+| Static frontend hosting | The Vite build becomes static files served from S3 through CloudFront. | `deploy-frontend` builds `dist/`, syncs it to S3, then invalidates CloudFront. |
+| Backend entry | A stable HTTPS URL for HTTP and socket.io traffic. | `https://api.halligalli.games` routes through ALB to the ECS task. |
+| Container registry | AWS staging backend images live in ECR, separate from GHCR production images. | `deploy-backend` builds and pushes an ECR image tagged like `staging-<sha>`. |
+| ECS Fargate | AWS runs the backend container without managing EC2 hosts directly. | The workflow registers a new task definition revision and updates the ECS service. |
+| ALB health check | The load balancer decides whether the backend task can receive traffic. | ALB checks `/readyz`; smoke checks also call `/health`. |
+| Release identity | The container reports `APP_VERSION` and `COMMIT_SHA` through `/health`. | The backend deploy injects the staging image tag and commit SHA when building the image. |
+| Cost guardrail | The scaffold avoids expensive defaults for a learner/demo environment. | NAT Gateway is disabled, desired count is limited to `0` or `1`, and logs retain for 14 days. |
+| Manual gate | AWS-mutating actions require explicit human confirmation. | Deploy operations require `workflow_dispatch` plus `confirm_cost=STAGING_APPLY`. |
+
+The mental model:
+
+```text
+Developer change
+  -> PR checks stay stable
+  -> AWS staging files are reviewed as Delivery Control
+  -> Terraform describes the target AWS shape
+  -> a human chooses when to create/update AWS resources
+  -> a manual workflow deploys frontend or backend
+  -> smoke checks verify /readyz and /health
+  -> DO Production remains on the existing GitOps release path
+```
+
+As a DevOps learner, focus less on memorizing service names and more on the boundaries:
+
+- Git stores the desired scaffold, not secrets or state.
+- Terraform describes infrastructure, but does not create it until plan/apply runs with credentials.
+- GitHub Actions automates repeatable steps, but production-impacting or cost-impacting work is manually gated.
+- Frontend and backend deploy separately because static assets and long-running socket servers have different runtime needs.
+- `/readyz` answers "can this task receive traffic?", while `/health` answers "which release identity is running?"
+- AWS Staging is for learning and demos; DO Production remains the live production system.
+
 ## Local Validation
 
 These commands do not require AWS credentials or Terraform Cloud credentials:
