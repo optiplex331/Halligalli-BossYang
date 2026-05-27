@@ -1,0 +1,47 @@
+output "backend_entry" {
+  description = "Future secure Backend Entry for AWS Staging HTTP, readiness, health, and socket.io traffic."
+  value       = local.backend_scaffold.backend_entry
+}
+
+output "backend_ecr_repository_url" {
+  description = "AWS Staging Image repository for the backend container."
+  value       = aws_ecr_repository.backend.repository_url
+}
+
+output "backend_alb_dns_name" {
+  description = "Public ALB DNS name to use as the future Route 53 alias target for api.halligalli.games."
+  value       = aws_lb.backend.dns_name
+}
+
+output "backend_alb_zone_id" {
+  description = "Public ALB hosted zone ID to use as the future Route 53 alias target for api.halligalli.games."
+  value       = aws_lb.backend.zone_id
+}
+
+output "backend_health_paths" {
+  description = "Backend HTTP surfaces expected by AWS Staging smoke checks and ALB target health."
+  value = {
+    health    = local.backend_scaffold.health_path
+    readiness = local.backend_scaffold.readiness_path
+    websocket = local.backend_scaffold.websocket_path
+  }
+}
+
+output "backend_runtime_environment" {
+  description = "Non-secret runtime environment represented in the AWS Staging backend task definition."
+  value = {
+    HALLIGALLI_ALLOWED_ORIGINS = local.backend_scaffold.allowed_origins
+    APP_VERSION                = var.backend_app_version
+    COMMIT_SHA                 = var.backend_commit_sha
+  }
+}
+
+output "backend_default_desired_count" {
+  description = "Single-task AWS Staging backend default; values above one are intentionally rejected."
+  value       = local.backend_scaffold.default_desired_count
+}
+
+output "backend_log_group_name" {
+  description = "CloudWatch Logs group for AWS Staging backend container logs."
+  value       = aws_cloudwatch_log_group.backend.name
+}

@@ -26,6 +26,7 @@ delivery_control:
   - ".github/utils/*.mjs"
   - ".github/utils/**/*.mjs"
   - ".github/dependabot.yml"
+  - "deploy/aws-staging/**"
 
 release_metadata:
   - ".github/utils/.release-please-manifest.json"

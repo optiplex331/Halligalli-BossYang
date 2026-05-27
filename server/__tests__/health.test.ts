@@ -8,6 +8,7 @@ const ORIGINAL_ENV = {
   APP_VERSION: process.env.APP_VERSION,
   COMMIT_SHA: process.env.COMMIT_SHA,
   GITHUB_SHA: process.env.GITHUB_SHA,
+  HALLIGALLI_ALLOWED_ORIGINS: process.env.HALLIGALLI_ALLOWED_ORIGINS,
 };
 
 afterEach(() => {
@@ -116,6 +117,88 @@ describe("/health", () => {
         version: "local",
         commit: "unknown",
       });
+    } finally {
+      await stop(server);
+    }
+  });
+});
+
+describe("/readyz", () => {
+  it("reports server readiness without release identity", async () => {
+    const server = createHalligalliServer();
+    server.rooms.set("ROOM", new Room("ROOM", 0, 4, "normal", 60, "zh"));
+
+    try {
+      const baseUrl = await listen(server);
+      const response = await fetch(`${baseUrl}/readyz`);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe("application/json");
+      expect(await response.json()).toEqual({
+        status: "ready",
+      });
+    } finally {
+      await stop(server);
+    }
+  });
+});
+
+describe("socket CORS", () => {
+  it("keeps local same-origin behavior without wildcard CORS when no allow-list is configured", async () => {
+    delete process.env.HALLIGALLI_ALLOWED_ORIGINS;
+    const server = createHalligalliServer();
+
+    try {
+      const baseUrl = await listen(server);
+      const response = await fetch(`${baseUrl}/socket.io/?EIO=4&transport=polling`, {
+        headers: {
+          Origin: "https://preview.halligalli.games",
+        },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    } finally {
+      await stop(server);
+    }
+  });
+
+  it("allows configured frontend origins from a comma-separated allow-list", async () => {
+    process.env.HALLIGALLI_ALLOWED_ORIGINS =
+      "https://staging.halligalli.games, https://preview.halligalli.games";
+    const server = createHalligalliServer();
+
+    try {
+      const baseUrl = await listen(server);
+      const response = await fetch(`${baseUrl}/socket.io/?EIO=4&transport=polling`, {
+        headers: {
+          Origin: "https://preview.halligalli.games",
+        },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("access-control-allow-origin")).toBe(
+        "https://preview.halligalli.games",
+      );
+    } finally {
+      await stop(server);
+    }
+  });
+
+  it("rejects unlisted frontend origins when the allow-list is configured", async () => {
+    process.env.HALLIGALLI_ALLOWED_ORIGINS = "https://staging.halligalli.games";
+    const server = createHalligalliServer();
+
+    try {
+      const baseUrl = await listen(server);
+      const response = await fetch(`${baseUrl}/socket.io/?EIO=4&transport=polling`, {
+        headers: {
+          Origin: "https://evil.example",
+        },
+      });
+
+      expect(response.status).toBe(403);
+      expect(response.headers.get("access-control-allow-origin")).toBeNull();
     } finally {
       await stop(server);
     }

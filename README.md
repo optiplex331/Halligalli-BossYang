@@ -111,8 +111,9 @@ Dark felt palette, gold accent (`--gold-light`), tabular-numeral stat displays, 
 
 - React 19 + Vite 8 + TypeScript + plain CSS (frontend)
 - Node.js 24 + socket.io 4 (WebSocket server)
-- Vitest for unit tests (44 tests across game logic, persistence, lifecycle, health, and stats)
-- Single-service deploy on DigitalOcean App Platform
+- Vitest for unit tests across game logic, persistence, lifecycle, health, socket config, and stats
+- Single-service production deploy on DigitalOcean App Platform
+- Reviewable AWS Staging/Portfolio scaffold for a separated S3/CloudFront frontend and ECR/ECS backend
 
 ---
 
@@ -190,6 +191,7 @@ server/
 └── GameEngine.ts        — server-authoritative game loop
 
 deploy/production/app.yaml — GitOps Production Manifest
+deploy/aws-staging/        — AWS Staging/Portfolio Terraform scaffold
 scripts/simulate-bell.ts — card-distribution tuning utility
 public/yang-boss.png     — Boss portrait
 ```
@@ -198,7 +200,9 @@ public/yang-boss.png     — Boss portrait
 
 ## Deployment and Operations
 
-Deployed as a single GHCR-backed Node.js service on DigitalOcean App Platform. The server serves the Vite-built static frontend from `dist/` and accepts WebSocket connections on the same origin — no CORS config, no separate CDN.
+Production is deployed as a single GHCR-backed Node.js service on DigitalOcean App Platform. The server serves the Vite-built static frontend from `dist/` and accepts WebSocket connections on the same origin.
+
+AWS Staging/Portfolio is scaffolded separately for review and future demos. It represents `play.halligalli.games` as a S3/CloudFront frontend and `api.halligalli.games` as an ECR/ECS backend, but it is manually dispatched and does not replace DO Production.
 
 - Production manifest: `deploy/production/app.yaml`
 - Release branch: `master`
@@ -206,12 +210,14 @@ Deployed as a single GHCR-backed Node.js service on DigitalOcean App Platform. T
 - Promotion: release tags build and scan GHCR images, then open human-merged production promotion PRs
 - Reconcile: GitHub Actions applies `deploy/production/app.yaml` to DigitalOcean after that manifest changes on `master`
 - Health check: `/health` reports status, active rooms, release version, and commit SHA
+- Readiness check: `/readyz` reports traffic readiness without release identity
 - Drift check: scheduled GitHub Actions compare Git, DigitalOcean, and `/health`
 
 Operations docs:
 
 - [CI/CD](docs/operations/ci-cd.md)
 - [DigitalOcean release](docs/operations/digitalocean-release.md)
+- [AWS staging scaffold](docs/operations/aws-staging.md)
 - [Rollback](docs/operations/rollback.md)
 
 ---
