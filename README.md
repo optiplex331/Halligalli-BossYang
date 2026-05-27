@@ -56,7 +56,7 @@ Cards use CSS `rotateY` + `backface-visibility` to produce a genuine 3D flip. Th
 ### Boss Mode — Yang
 Yang is a persistent observer who appears in Boss difficulty. After any missed bell window he delivers a taunt — a brief message rendered with a float animation above his portrait. The table also shifts to signal pressure. All animations are gated by `prefers-reduced-motion`.
 
-### Training progression (M4)
+### Training progression
 The home screen training card tracks long-term improvement across three tabs:
 
 - **近期 / Recent** — last 5 rounds with score, accuracy, and avg reaction time
@@ -202,7 +202,7 @@ public/yang-boss.png     — Boss portrait
 
 Production is deployed as a single GHCR-backed Node.js service on DigitalOcean App Platform. The server serves the Vite-built static frontend from `dist/` and accepts WebSocket connections on the same origin.
 
-AWS Staging/Portfolio is scaffolded separately for review and future demos. It represents `play.halligalli.games` as a S3/CloudFront frontend and `api.halligalli.games` as an ECR/ECS backend, but it is manually dispatched and does not replace DO Production.
+AWS Staging/Portfolio is scaffolded separately for review and future demos. It represents `play.halligalli.games` as an S3/CloudFront frontend and `api.halligalli.games` as an ECR/ECS backend, but it is manually dispatched, cost-guarded, and does not replace DO Production.
 
 - Production manifest: `deploy/production/app.yaml`
 - Release branch: `master`
