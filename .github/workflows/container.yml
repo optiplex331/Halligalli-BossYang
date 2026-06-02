@@ -162,7 +162,7 @@ jobs:
           IMAGE_DIGEST: ${{ needs.build-scan-publish.outputs.image_digest }}
         run: |
           set -euo pipefail
-          node .github/utils/update-production-manifest.mjs
+          python3 .github/utils/update_production_manifest.py
 
       - name: Open promotion PR
         shell: bash
