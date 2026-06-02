@@ -37,12 +37,12 @@ describe("multiplayer socket Backend Entry", () => {
   });
 
   it("uses an explicit Backend Entry URL for separated AWS staging", async () => {
-    vi.stubEnv("VITE_HALLIGALLI_BACKEND_URL", " https://api.halligalli.games ");
+    vi.stubEnv("VITE_HALLIGALLI_BACKEND_URL", " https://api.example.com ");
     const { getSocket } = await import("./socket.js");
 
     getSocket();
 
-    expect(ioMock).toHaveBeenCalledWith("https://api.halligalli.games", {
+    expect(ioMock).toHaveBeenCalledWith("https://api.example.com", {
       autoConnect: false,
       transports: ["websocket", "polling"],
     });

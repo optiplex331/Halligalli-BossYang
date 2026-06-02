@@ -152,7 +152,7 @@ describe("socket CORS", () => {
       const baseUrl = await listen(server);
       const response = await fetch(`${baseUrl}/socket.io/?EIO=4&transport=polling`, {
         headers: {
-          Origin: "https://preview.halligalli.games",
+          Origin: "https://preview.example.com",
         },
       });
 
@@ -165,20 +165,20 @@ describe("socket CORS", () => {
 
   it("allows configured frontend origins from a comma-separated allow-list", async () => {
     process.env.HALLIGALLI_ALLOWED_ORIGINS =
-      "https://staging.halligalli.games, https://preview.halligalli.games";
+      "https://staging.example.com, https://preview.example.com";
     const server = createHalligalliServer();
 
     try {
       const baseUrl = await listen(server);
       const response = await fetch(`${baseUrl}/socket.io/?EIO=4&transport=polling`, {
         headers: {
-          Origin: "https://preview.halligalli.games",
+          Origin: "https://preview.example.com",
         },
       });
 
       expect(response.status).toBe(200);
       expect(response.headers.get("access-control-allow-origin")).toBe(
-        "https://preview.halligalli.games",
+        "https://preview.example.com",
       );
     } finally {
       await stop(server);
@@ -186,7 +186,7 @@ describe("socket CORS", () => {
   });
 
   it("rejects unlisted frontend origins when the allow-list is configured", async () => {
-    process.env.HALLIGALLI_ALLOWED_ORIGINS = "https://staging.halligalli.games";
+    process.env.HALLIGALLI_ALLOWED_ORIGINS = "https://staging.example.com";
     const server = createHalligalliServer();
 
     try {

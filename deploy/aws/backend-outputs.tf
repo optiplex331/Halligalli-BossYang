@@ -9,17 +9,17 @@ output "backend_ecr_repository_url" {
 }
 
 output "backend_alb_dns_name" {
-  description = "Public ALB DNS name to use as the future Route 53 alias target for api.halligalli.games."
+  description = "Public ALB DNS name to use as the future Route 53 alias target for the backend hostname."
   value       = aws_lb.backend.dns_name
 }
 
 output "backend_alb_zone_id" {
-  description = "Public ALB hosted zone ID to use as the future Route 53 alias target for api.halligalli.games."
+  description = "Public ALB hosted zone ID to use as the future Route 53 alias target for the backend hostname."
   value       = aws_lb.backend.zone_id
 }
 
 output "backend_dns_alias_record" {
-  description = "Route 53 alias record reserved for api.halligalli.games when route53_zone_id is provided."
+  description = "Route 53 alias record reserved for the backend hostname when route53_zone_id is provided."
   value       = local.dns.backend_hostname
 }
 

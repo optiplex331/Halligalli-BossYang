@@ -21,13 +21,13 @@ variable "aws_region" {
 }
 
 variable "domain_name" {
-  description = "AWS Staging/Portfolio public domain."
+  description = "Public domain used by the AWS Staging/Portfolio reference. Override with a local tfvars file for real environments."
   type        = string
-  default     = "halligalli.games"
+  default     = "example.com"
 
   validation {
-    condition     = var.domain_name == "halligalli.games"
-    error_message = "AWS Staging/Portfolio is fixed to halligalli.games for this scaffold."
+    condition     = can(regex("^[a-z0-9][a-z0-9.-]*[a-z0-9]$", var.domain_name))
+    error_message = "Domain name must be a lowercase DNS name."
   }
 }
 
@@ -65,7 +65,7 @@ variable "enable_nat_gateway" {
 }
 
 variable "route53_zone_id" {
-  description = "Route 53 hosted zone ID for halligalli.games. Leave null for local scaffold validation; set it when planning/applying public staging DNS."
+  description = "Route 53 hosted zone ID for the configured domain. Leave null for local scaffold validation; set it in ignored tfvars when planning/applying real staging DNS."
   type        = string
   default     = null
   nullable    = true
@@ -77,9 +77,9 @@ variable "route53_zone_id" {
 }
 
 variable "github_repository" {
-  description = "GitHub owner/repository allowed to assume the AWS Staging deploy role through OIDC."
+  description = "GitHub owner/repository allowed to assume the AWS Staging deploy role through OIDC. Override in ignored tfvars for real deployments."
   type        = string
-  default     = "optiplex331/Halligalli-BossYang"
+  default     = "example-owner/example-repo"
 
   validation {
     condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_repository))
@@ -113,9 +113,9 @@ variable "github_oidc_thumbprint_list" {
 }
 
 variable "github_oidc_subjects" {
-  description = "GitHub OIDC subject claims allowed to assume the AWS Staging deploy role."
+  description = "GitHub OIDC subject claims allowed to assume the AWS Staging deploy role. Override in ignored tfvars for real deployments."
   type        = list(string)
-  default     = ["repo:optiplex331/Halligalli-BossYang:environment:aws-staging"]
+  default     = ["repo:example-owner/example-repo:environment:aws-staging"]
 
   validation {
     condition     = length(var.github_oidc_subjects) > 0

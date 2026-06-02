@@ -191,7 +191,7 @@ server/
 └── GameEngine.ts        — server-authoritative game loop
 
 deploy/production/app.yaml — GitOps Production Manifest
-deploy/aws-staging/        — AWS Staging/Portfolio Terraform scaffold
+deploy/aws/        — sanitized AWS Staging/Portfolio Terraform reference
 scripts/simulate-bell.ts — card-distribution tuning utility
 public/yang-boss.png     — Boss portrait
 ```
@@ -202,7 +202,7 @@ public/yang-boss.png     — Boss portrait
 
 Production is deployed as a single GHCR-backed Node.js service on DigitalOcean App Platform. The server serves the Vite-built static frontend from `dist/` and accepts WebSocket connections on the same origin.
 
-AWS Staging/Portfolio is scaffolded separately for review and future demos. It represents `play.halligalli.games` as an S3/CloudFront frontend and `api.halligalli.games` as an ECR/ECS backend, but it is manually dispatched, cost-guarded, and does not replace DO Production.
+AWS Staging/Portfolio is scaffolded separately for review and future demos. The public Terraform reference models an S3/CloudFront frontend and ECR/ECS backend with example values; real account-specific tfvars, backend config, state, and domain bindings are intentionally excluded from Git. It is manually dispatched, cost-guarded, and does not replace DO Production.
 
 - Production manifest: `deploy/production/app.yaml`
 - Release branch: `master`

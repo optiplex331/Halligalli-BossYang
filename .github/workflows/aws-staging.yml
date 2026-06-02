@@ -39,8 +39,6 @@ permissions:
 
 env:
   AWS_REGION: eu-west-1
-  AWS_STAGING_FRONTEND_URL: https://play.halligalli.games
-  AWS_STAGING_BACKEND_URL: https://api.halligalli.games
 
 jobs:
   validate:
@@ -59,7 +57,7 @@ jobs:
         run: |
           docker run --rm \
             -v "${PWD}:/workspace" \
-            --workdir /workspace/deploy/aws-staging \
+            --workdir /workspace/deploy/aws \
             hashicorp/terraform:1.15.4 \
             fmt -check -recursive
 
@@ -67,7 +65,7 @@ jobs:
         run: |
           docker run --rm \
             -v "${PWD}:/workspace" \
-            --workdir /workspace/deploy/aws-staging \
+            --workdir /workspace/deploy/aws \
             hashicorp/terraform:1.15.4 \
             init -backend=false -input=false
 
@@ -75,7 +73,7 @@ jobs:
         run: |
           docker run --rm \
             -v "${PWD}:/workspace" \
-            --workdir /workspace/deploy/aws-staging \
+            --workdir /workspace/deploy/aws \
             hashicorp/terraform:1.15.4 \
             validate -no-color
 
@@ -102,14 +100,16 @@ jobs:
     runs-on: ubuntu-24.04
     environment:
       name: aws-staging
-      url: ${{ env.AWS_STAGING_FRONTEND_URL }}
+      url: ${{ vars.AWS_STAGING_FRONTEND_URL }}
 
     env:
       AWS_STAGING_ROLE_ARN: ${{ vars.AWS_STAGING_ROLE_ARN }}
+      AWS_STAGING_FRONTEND_URL: ${{ vars.AWS_STAGING_FRONTEND_URL }}
+      AWS_STAGING_BACKEND_URL: ${{ vars.AWS_STAGING_BACKEND_URL }}
       AWS_STAGING_FRONTEND_BUCKET: ${{ vars.AWS_STAGING_FRONTEND_BUCKET }}
       AWS_STAGING_CLOUDFRONT_DISTRIBUTION_ID: >-
         ${{ vars.AWS_STAGING_CLOUDFRONT_DISTRIBUTION_ID }}
-      VITE_HALLIGALLI_BACKEND_URL: https://api.halligalli.games
+      VITE_HALLIGALLI_BACKEND_URL: ${{ vars.AWS_STAGING_BACKEND_URL }}
 
     steps:
       - name: Check out repository
@@ -152,6 +152,7 @@ jobs:
           set -euo pipefail
 
           required=(
+            AWS_STAGING_BACKEND_URL
             AWS_STAGING_FRONTEND_BUCKET
             AWS_STAGING_CLOUDFRONT_DISTRIBUTION_ID
           )
@@ -196,10 +197,11 @@ jobs:
     runs-on: ubuntu-24.04
     environment:
       name: aws-staging
-      url: ${{ env.AWS_STAGING_BACKEND_URL }}
+      url: ${{ vars.AWS_STAGING_BACKEND_URL }}
 
     env:
       AWS_STAGING_ROLE_ARN: ${{ vars.AWS_STAGING_ROLE_ARN }}
+      AWS_STAGING_BACKEND_URL: ${{ vars.AWS_STAGING_BACKEND_URL }}
       AWS_STAGING_ECR_REGISTRY: ${{ vars.AWS_STAGING_ECR_REGISTRY }}
       AWS_STAGING_ECR_REPOSITORY: ${{ vars.AWS_STAGING_ECR_REPOSITORY }}
       AWS_STAGING_ECS_CLUSTER: ${{ vars.AWS_STAGING_ECS_CLUSTER }}
@@ -240,6 +242,7 @@ jobs:
           set -euo pipefail
 
           required=(
+            AWS_STAGING_BACKEND_URL
             AWS_STAGING_ECR_REGISTRY
             AWS_STAGING_ECR_REPOSITORY
             AWS_STAGING_ECS_CLUSTER
@@ -403,8 +406,18 @@ jobs:
     needs: validate
     if: inputs.operation == 'smoke-backend'
     runs-on: ubuntu-24.04
+    environment:
+      name: aws-staging
+      url: ${{ vars.AWS_STAGING_BACKEND_URL }}
+
+    env:
+      AWS_STAGING_BACKEND_URL: ${{ vars.AWS_STAGING_BACKEND_URL }}
 
     steps:
+      - name: Check out repository
+        # v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
       - name: Check readiness and health
         shell: bash
         env:
@@ -412,6 +425,11 @@ jobs:
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
         run: |
           set -euo pipefail
+
+          if [[ -z "${AWS_STAGING_BACKEND_URL}" ]]; then
+            echo "Set AWS_STAGING_BACKEND_URL in the aws-staging GitHub environment." >&2
+            exit 1
+          fi
 
           curl --fail --silent --show-error "${AWS_STAGING_BACKEND_URL}/readyz"
           response="$(curl --fail --silent --show-error "${AWS_STAGING_BACKEND_URL}/health")"

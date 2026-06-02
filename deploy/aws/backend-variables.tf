@@ -1,5 +1,5 @@
 variable "backend_certificate_arn" {
-  description = "Placeholder ACM certificate ARN for the future HTTPS Backend Entry at api.halligalli.games. Supply a real eu-west-1 certificate only when applying staging."
+  description = "ACM certificate ARN for the HTTPS Backend Entry. Supply a real eu-west-1 certificate only in ignored local tfvars."
   type        = string
 
   validation {

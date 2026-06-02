@@ -29,7 +29,7 @@ output "frontend_certificate_validation_records" {
 }
 
 output "frontend_dns_alias_records" {
-  description = "Route 53 alias records reserved for play.halligalli.games when route53_zone_id is provided."
+  description = "Route 53 alias records reserved for the frontend hostname when route53_zone_id is provided."
   value = {
     ipv4 = local.frontend.hostname
     ipv6 = local.frontend.hostname

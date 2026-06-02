@@ -7,11 +7,11 @@ locals {
     Environment   = "staging"
     ManagedBy     = "Terraform"
     Repository    = "Halligalli"
-    TerraformRoot = "deploy/aws-staging"
+    TerraformRoot = "deploy/aws"
     Runtime       = "Node 24"
     Production    = "false"
     CostProfile   = "demo-scale"
-    StateBackend  = "Terraform Cloud"
+    StateBackend  = "configured-outside-git"
   }
 
   cost_guardrails = {

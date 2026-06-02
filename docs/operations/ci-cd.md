@@ -31,7 +31,7 @@ Utility tests run unconditionally in the `Product checks` gate and do not requir
 
 The `AWS Staging Scaffold` workflow only runs through `workflow_dispatch`; it is not attached to push, PR, or Release Tag events. The default `validate` operation only runs release config and Terraform static validation. `deploy-frontend` and `deploy-backend` require the `STAGING_APPLY` confirmation before any AWS-mutating steps run.
 
-AWS Staging/Portfolio changes are Delivery Control. Changes to `deploy/aws-staging/**` and `.github/workflows/aws-staging.yml` make `Product checks` run release utility validation and actionlint, but they do not publish AWS resources and do not change DO Production.
+AWS Staging/Portfolio changes are Delivery Control. Changes to `deploy/aws/**` and `.github/workflows/aws-staging.yml` make `Product checks` run release utility validation and actionlint, but they do not publish AWS resources and do not change DO Production.
 
 AWS Staging operation details are documented in [AWS staging scaffold](aws-staging.md).
 
