@@ -18,7 +18,7 @@ output "frontend_cloudfront_distribution" {
 }
 
 output "frontend_certificate_validation_records" {
-  description = "DNS validation records Terraform will manage when frontend_route53_zone_id is provided."
+  description = "DNS validation records Terraform will manage when route53_zone_id is provided."
   value = {
     for name, record in aws_route53_record.frontend_certificate_validation : name => {
       name  = record.name
@@ -29,7 +29,7 @@ output "frontend_certificate_validation_records" {
 }
 
 output "frontend_dns_alias_records" {
-  description = "Route 53 alias records reserved for play.halligalli.games when frontend_route53_zone_id is provided."
+  description = "Route 53 alias records reserved for play.halligalli.games when route53_zone_id is provided."
   value = {
     ipv4 = local.frontend.hostname
     ipv6 = local.frontend.hostname

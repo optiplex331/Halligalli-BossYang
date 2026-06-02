@@ -15,11 +15,11 @@ PR checks do not publish images and do not change DigitalOcean state. CI uses `p
 
 The check names intentionally stay stable because branch protection depends on them. The work inside each check is routed by `dorny/paths-filter` and `.github/utils/change-filters.yaml`, not by workflow-level path filters. This avoids skipped workflows leaving required checks pending.
 
-Short shell-native workflow orchestration stays in Bash, such as `git`, `docker`, `doctl`, `gh`, `curl`, and environment checks. Structured parsing, reusable JSON validation, Production Manifest release identity handling, drift comparison, and non-trivial inline heredocs belong in dependency-free `.github/utils/*.mjs` scripts covered by Node's built-in `node --test`.
+Short shell-native workflow orchestration stays in Bash, such as `git`, `docker`, `doctl`, `gh`, `curl`, Terraform CLI orchestration, and environment checks. Structured parsing, reusable JSON validation, Production Manifest release identity handling, drift comparison, `/health` JSON validation, and non-trivial inline heredocs belong in dependency-free `.github/utils/*.py` scripts covered by Python's built-in `unittest`.
 
 | Change type | Product checks | Container build and scan |
 |---|---|---|
-| Product/runtime PR | Validate release config and utility tests on Node.js 24, install dependencies, run tests, typecheck, and build. | Build the Node.js 24 production image and run Trivy. |
+| Product/runtime PR | Validate release config and Python utility tests, install dependencies, run tests, typecheck, and build on Node.js 24. | Build the Node.js 24 production image and run Trivy. |
 | Delivery control PR | Validate release config and utility tests, then run actionlint for GitHub Actions workflows. Skip heavy product work. | Skip image build work. |
 | Release PR | Validate release config and utility tests. Skip heavy product work. | Skip image build work. |
 | Production Promotion PR | Validate release config and utility tests, including Production Manifest structure, and require the PR to modify only `deploy/production/app.yaml`. Skip heavy product work. | Skip image build work because the Release Tag already built and scanned the image. |

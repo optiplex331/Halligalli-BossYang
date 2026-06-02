@@ -39,3 +39,8 @@ output "scaffold_resource_model" {
     apply_requires_human_action   = true
   }
 }
+
+output "github_actions_deploy_role_arn" {
+  description = "IAM role ARN for the aws-staging GitHub environment variable AWS_STAGING_ROLE_ARN."
+  value       = aws_iam_role.github_actions_deploy.arn
+}

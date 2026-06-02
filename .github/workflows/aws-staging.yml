@@ -21,12 +21,21 @@ on:
       backend_image_tag:
         description: >-
           Optional ECR image tag for deploy-backend.
-          Defaults to staging-<sha>.
+          Defaults to staging-<sha>-<run-number>.
+        required: false
+        type: string
+      expected_version:
+        description: Optional expected APP_VERSION for smoke-backend health validation.
+        required: false
+        type: string
+      expected_commit:
+        description: Optional expected COMMIT_SHA for smoke-backend health validation.
         required: false
         type: string
 
 permissions:
   contents: read
+  id-token: write
 
 env:
   AWS_REGION: eu-west-1
@@ -96,8 +105,7 @@ jobs:
       url: ${{ env.AWS_STAGING_FRONTEND_URL }}
 
     env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_STAGING_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_STAGING_SECRET_ACCESS_KEY }}
+      AWS_STAGING_ROLE_ARN: ${{ vars.AWS_STAGING_ROLE_ARN }}
       AWS_STAGING_FRONTEND_BUCKET: ${{ vars.AWS_STAGING_FRONTEND_BUCKET }}
       AWS_STAGING_CLOUDFRONT_DISTRIBUTION_ID: >-
         ${{ vars.AWS_STAGING_CLOUDFRONT_DISTRIBUTION_ID }}
@@ -107,6 +115,23 @@ jobs:
       - name: Check out repository
         # v6.0.2
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Validate AWS OIDC role configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${AWS_STAGING_ROLE_ARN}" ]]; then
+            echo "Set AWS_STAGING_ROLE_ARN in the aws-staging GitHub environment." >&2
+            exit 1
+          fi
+
+      - name: Configure AWS credentials
+        # v6.2.0
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        with:
+          role-to-assume: ${{ env.AWS_STAGING_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Set up pnpm
         # v6.0.8
@@ -127,8 +152,6 @@ jobs:
           set -euo pipefail
 
           required=(
-            AWS_ACCESS_KEY_ID
-            AWS_SECRET_ACCESS_KEY
             AWS_STAGING_FRONTEND_BUCKET
             AWS_STAGING_CLOUDFRONT_DISTRIBUTION_ID
           )
@@ -176,8 +199,7 @@ jobs:
       url: ${{ env.AWS_STAGING_BACKEND_URL }}
 
     env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_STAGING_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_STAGING_SECRET_ACCESS_KEY }}
+      AWS_STAGING_ROLE_ARN: ${{ vars.AWS_STAGING_ROLE_ARN }}
       AWS_STAGING_ECR_REGISTRY: ${{ vars.AWS_STAGING_ECR_REGISTRY }}
       AWS_STAGING_ECR_REPOSITORY: ${{ vars.AWS_STAGING_ECR_REPOSITORY }}
       AWS_STAGING_ECS_CLUSTER: ${{ vars.AWS_STAGING_ECS_CLUSTER }}
@@ -190,6 +212,23 @@ jobs:
         # v6.0.2
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
+      - name: Validate AWS OIDC role configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${AWS_STAGING_ROLE_ARN}" ]]; then
+            echo "Set AWS_STAGING_ROLE_ARN in the aws-staging GitHub environment." >&2
+            exit 1
+          fi
+
+      - name: Configure AWS credentials
+        # v6.2.0
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        with:
+          role-to-assume: ${{ env.AWS_STAGING_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
       - name: Set up Docker Buildx
         # v4.1.0
         # yamllint disable-line rule:line-length
@@ -201,8 +240,6 @@ jobs:
           set -euo pipefail
 
           required=(
-            AWS_ACCESS_KEY_ID
-            AWS_SECRET_ACCESS_KEY
             AWS_STAGING_ECR_REGISTRY
             AWS_STAGING_ECR_REPOSITORY
             AWS_STAGING_ECS_CLUSTER
@@ -229,7 +266,7 @@ jobs:
 
           tag="${{ inputs.backend_image_tag }}"
           if [[ -z "${tag}" ]]; then
-            tag="staging-${GITHUB_SHA::7}"
+            tag="staging-${GITHUB_SHA::7}-${GITHUB_RUN_NUMBER}"
           fi
 
           image="${AWS_STAGING_ECR_REGISTRY}/${AWS_STAGING_ECR_REPOSITORY}:${tag}"
@@ -276,6 +313,8 @@ jobs:
         shell: bash
         env:
           IMAGE: ${{ steps.image.outputs.image }}
+          APP_VERSION: ${{ steps.image.outputs.tag }}
+          COMMIT_SHA: ${{ steps.image.outputs.commit_sha }}
         run: |
           set -euo pipefail
 
@@ -287,6 +326,8 @@ jobs:
           jq \
             --arg image "${IMAGE}" \
             --arg container "${AWS_STAGING_CONTAINER_NAME}" \
+            --arg app_version "${APP_VERSION}" \
+            --arg commit_sha "${COMMIT_SHA}" \
             'del(
               .taskDefinitionArn,
               .revision,
@@ -298,7 +339,17 @@ jobs:
             )
             | .containerDefinitions = (
               .containerDefinitions
-              | map(if .name == $container then .image = $image else . end)
+              | map(if .name == $container then
+                  .image = $image
+                  | .environment = (
+                    (.environment // [])
+                    | map(select(.name != "APP_VERSION" and .name != "COMMIT_SHA"))
+                    + [
+                      {"name": "APP_VERSION", "value": $app_version},
+                      {"name": "COMMIT_SHA", "value": $commit_sha}
+                    ]
+                  )
+                else . end)
             )' \
             task-definition.json > next-task-definition.json
 
@@ -356,8 +407,25 @@ jobs:
     steps:
       - name: Check readiness and health
         shell: bash
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
         run: |
           set -euo pipefail
 
           curl --fail --silent --show-error "${AWS_STAGING_BACKEND_URL}/readyz"
-          curl --fail --silent --show-error "${AWS_STAGING_BACKEND_URL}/health"
+          response="$(curl --fail --silent --show-error "${AWS_STAGING_BACKEND_URL}/health")"
+
+          if [[ -n "${EXPECTED_VERSION}" || -n "${EXPECTED_COMMIT}" ]]; then
+            if [[ -z "${EXPECTED_VERSION}" || -z "${EXPECTED_COMMIT}" ]]; then
+              echo "Set both expected_version and expected_commit, or leave both empty." >&2
+              exit 1
+            fi
+
+            export HEALTH_RESPONSE="${response}"
+            export SUCCESS_MESSAGE
+            SUCCESS_MESSAGE="AWS Staging /health matches expected identity."
+            python3 .github/utils/check_health.py
+          else
+            echo "${response}"
+          fi

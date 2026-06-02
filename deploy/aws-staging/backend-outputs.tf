@@ -18,6 +18,11 @@ output "backend_alb_zone_id" {
   value       = aws_lb.backend.zone_id
 }
 
+output "backend_dns_alias_record" {
+  description = "Route 53 alias record reserved for api.halligalli.games when route53_zone_id is provided."
+  value       = local.dns.backend_hostname
+}
+
 output "backend_health_paths" {
   description = "Backend HTTP surfaces expected by AWS Staging smoke checks and ALB target health."
   value = {

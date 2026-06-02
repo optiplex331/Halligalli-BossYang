@@ -397,6 +397,12 @@ resource "aws_ecs_service" "backend" {
     aws_iam_role_policy_attachment.backend_task_execution,
     aws_lb_listener.backend_https,
   ]
+
+  lifecycle {
+    ignore_changes = [
+      task_definition,
+    ]
+  }
 }
 
 check "backend_single_task_default" {

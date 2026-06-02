@@ -41,7 +41,7 @@ image:
 
 Do not use `latest` for production. The release workflow may publish a human-readable version tag, but DigitalOcean should run the digest recorded in Git.
 
-Production Manifest release identity reads and writes in GitHub Actions should go through provider-neutral `.github/utils/*.mjs` helpers. The helpers may understand the current DigitalOcean manifest shape internally, but workflows should not scatter DigitalOcean-specific YAML parsing across shell steps. That keeps a future production provider change localized to the helpers and a small amount of CLI orchestration.
+Production Manifest release identity reads and writes in GitHub Actions should go through provider-neutral `.github/utils/*.py` helpers. The helpers may understand the current DigitalOcean manifest shape internally, but workflows should not scatter DigitalOcean-specific YAML parsing across shell steps. That keeps a future production provider change localized to the helpers and a small amount of CLI orchestration.
 
 ## Release Identity
 
@@ -63,7 +63,7 @@ The server exposes that identity on `/health`:
 }
 ```
 
-`/health` smoke tests and drift checks should reuse the dependency-free Node scripts in `.github/utils/*.mjs`. Simple `curl` calls and retry loops may stay in Bash.
+`/health` smoke tests and drift checks should reuse the dependency-free Python scripts in `.github/utils/*.py`. Simple `curl` calls and retry loops may stay in Bash.
 
 ## Promotion Flow
 

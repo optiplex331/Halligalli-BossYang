@@ -32,4 +32,4 @@ terraform validate -no-color
 
 `-backend=false` keeps validation local and avoids Terraform Cloud credentials. Do not run `terraform plan` or `terraform apply` until the Terraform Cloud organization/workspace, AWS credentials, and cost expectations are explicitly configured.
 
-Real plan/apply also needs frontend DNS settings, a backend ACM certificate ARN, and an image tag that exists in ECR. See `docs/operations/aws-staging.md` for the manual workflow, required GitHub configuration, and teardown guidance.
+Real plan/apply also needs `route53_zone_id`, a backend ACM certificate ARN, and an image tag that exists in ECR. See `docs/operations/aws-staging.md` for the manual workflow, required GitHub configuration, and teardown guidance.

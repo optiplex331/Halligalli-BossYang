@@ -63,3 +63,62 @@ variable "enable_nat_gateway" {
     error_message = "NAT Gateway must stay disabled until a future issue explicitly accepts the cost."
   }
 }
+
+variable "route53_zone_id" {
+  description = "Route 53 hosted zone ID for halligalli.games. Leave null for local scaffold validation; set it when planning/applying public staging DNS."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.route53_zone_id == null || can(regex("^Z[A-Z0-9]+$", var.route53_zone_id))
+    error_message = "Route 53 hosted zone IDs usually start with Z and contain uppercase letters or digits."
+  }
+}
+
+variable "github_repository" {
+  description = "GitHub owner/repository allowed to assume the AWS Staging deploy role through OIDC."
+  type        = string
+  default     = "optiplex331/Halligalli-BossYang"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_repository))
+    error_message = "GitHub repository must use owner/repository format."
+  }
+}
+
+variable "github_oidc_provider_arn" {
+  description = "Existing GitHub Actions OIDC provider ARN. Leave null to let this Terraform root create one for the AWS account."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.github_oidc_provider_arn == null || can(regex("^arn:aws:iam::[0-9]{12}:oidc-provider/token\\.actions\\.githubusercontent\\.com$", var.github_oidc_provider_arn))
+    error_message = "GitHub OIDC provider ARN must point at token.actions.githubusercontent.com."
+  }
+}
+
+variable "github_oidc_thumbprint_list" {
+  description = "Thumbprints used only when this root creates the GitHub Actions OIDC provider."
+  type        = list(string)
+  default     = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+
+  validation {
+    condition = alltrue([
+      for thumbprint in var.github_oidc_thumbprint_list : can(regex("^[0-9a-f]{40}$", thumbprint))
+    ])
+    error_message = "GitHub OIDC thumbprints must be lowercase SHA-1 fingerprints."
+  }
+}
+
+variable "github_oidc_subjects" {
+  description = "GitHub OIDC subject claims allowed to assume the AWS Staging deploy role."
+  type        = list(string)
+  default     = ["repo:optiplex331/Halligalli-BossYang:environment:aws-staging"]
+
+  validation {
+    condition     = length(var.github_oidc_subjects) > 0
+    error_message = "At least one GitHub OIDC subject must be allowed."
+  }
+}

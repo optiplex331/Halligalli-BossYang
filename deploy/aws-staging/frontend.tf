@@ -101,7 +101,7 @@ resource "aws_acm_certificate" "frontend" {
 }
 
 resource "aws_route53_record" "frontend_certificate_validation" {
-  for_each = var.frontend_route53_zone_id == null ? {} : {
+  for_each = var.route53_zone_id == null ? {} : {
     for option in aws_acm_certificate.frontend.domain_validation_options : option.domain_name => {
       name   = option.resource_record_name
       record = option.resource_record_value
@@ -114,12 +114,12 @@ resource "aws_route53_record" "frontend_certificate_validation" {
   records         = [each.value.record]
   ttl             = 60
   type            = each.value.type
-  zone_id         = var.frontend_route53_zone_id
+  zone_id         = var.route53_zone_id
 }
 
 resource "aws_acm_certificate_validation" "frontend" {
   provider = aws.cloudfront_certificate
-  count    = var.frontend_route53_zone_id == null ? 0 : 1
+  count    = var.route53_zone_id == null ? 0 : 1
 
   certificate_arn         = aws_acm_certificate.frontend.arn
   validation_record_fqdns = [for record in aws_route53_record.frontend_certificate_validation : record.fqdn]
@@ -190,8 +190,8 @@ resource "aws_cloudfront_distribution" "frontend" {
 
   lifecycle {
     precondition {
-      condition     = var.frontend_route53_zone_id != null
-      error_message = "Set frontend_route53_zone_id before planning or applying the CloudFront frontend slice so DNS validation can complete."
+      condition     = var.route53_zone_id != null
+      error_message = "Set route53_zone_id before planning or applying the CloudFront frontend slice so DNS validation can complete."
     }
   }
 
@@ -237,11 +237,11 @@ resource "aws_s3_bucket_policy" "frontend_assets" {
 }
 
 resource "aws_route53_record" "frontend_ipv4" {
-  count = var.frontend_route53_zone_id == null ? 0 : 1
+  count = var.route53_zone_id == null ? 0 : 1
 
   name    = local.frontend.hostname
   type    = "A"
-  zone_id = var.frontend_route53_zone_id
+  zone_id = var.route53_zone_id
 
   alias {
     evaluate_target_health = false
@@ -251,11 +251,11 @@ resource "aws_route53_record" "frontend_ipv4" {
 }
 
 resource "aws_route53_record" "frontend_ipv6" {
-  count = var.frontend_route53_zone_id == null ? 0 : 1
+  count = var.route53_zone_id == null ? 0 : 1
 
   name    = local.frontend.hostname
   type    = "AAAA"
-  zone_id = var.frontend_route53_zone_id
+  zone_id = var.route53_zone_id
 
   alias {
     evaluate_target_health = false
