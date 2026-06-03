@@ -1,3 +1,5 @@
+"""Emit release identity from the Git-tracked Production Manifest."""
+
 import os
 import sys
 
@@ -9,6 +11,8 @@ from production_manifest import (
 
 
 def main():
+    """Read SPEC_PATH and write image/version/commit outputs for workflows."""
+
     try:
         identity = read_release_identity(
             os.environ.get("SPEC_PATH", "deploy/production/app.yaml")
