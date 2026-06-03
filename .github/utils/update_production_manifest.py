@@ -1,3 +1,5 @@
+"""Update the Git-tracked Production Manifest with a new release identity."""
+
 import os
 import sys
 
@@ -5,6 +7,8 @@ from production_manifest import ManifestError, write_release_identity
 
 
 def main():
+    """Read VERSION, COMMIT_SHA, and IMAGE_DIGEST from the workflow environment."""
+
     try:
         write_release_identity(
             os.environ.get("SPEC_PATH", "deploy/production/app.yaml"),

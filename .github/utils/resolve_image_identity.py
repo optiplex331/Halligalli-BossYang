@@ -1,3 +1,5 @@
+"""Resolve GHCR image identity for release, master, and pull request builds."""
+
 import re
 import subprocess
 import sys
@@ -10,22 +12,30 @@ RELEASE_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
 
 
 class ImageIdentityError(Exception):
+    """Raised when GitHub context or git history cannot produce an image identity."""
+
     pass
 
 
 def normalize_image(repository):
+    """Convert owner/repo from GitHub context into the canonical GHCR image name."""
+
     if not repository:
         raise ImageIdentityError("GITHUB_REPOSITORY must be set")
     return f"ghcr.io/{repository}".lower()
 
 
 def short_sha(commit_sha):
+    """Return the seven-character identity used for non-publishing PR builds."""
+
     if len(commit_sha) < 7:
         raise ImageIdentityError("Commit SHA must be at least 7 characters")
     return commit_sha[:7]
 
 
 def parse_extended_version(describe):
+    """Convert git-describe output into the development image tag format."""
+
     match = re.fullmatch(r"v([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)-g([0-9a-fA-F]+)", describe)
     if not match:
         raise ImageIdentityError(f"Unexpected git describe output: {describe}")
@@ -35,14 +45,20 @@ def parse_extended_version(describe):
 
 
 def is_release_tag(ref_type, ref_name):
+    """Release tags are the only refs that may open Production Promotion."""
+
     return ref_type == "tag" and RELEASE_TAG_RE.fullmatch(ref_name or "") is not None
 
 
 def is_master_push(event_name, ref_type, ref_name):
+    """Normal master pushes may publish Development GHCR Images."""
+
     return event_name == "push" and ref_type == "branch" and ref_name == "master"
 
 
 def run_git(args, allow_failure=False):
+    """Run git and return trimmed stdout, optionally treating failure as empty."""
+
     result = subprocess.run(
         ["git", *args],
         check=False,
@@ -61,6 +77,8 @@ def run_git(args, allow_failure=False):
 
 
 def resolve_identity(env, git=run_git):
+    """Resolve image tag, version, commit SHA, and publish/promotion decisions."""
+
     image = normalize_image(env.get("GITHUB_REPOSITORY", ""))
     ref_type = env.get("GITHUB_REF_TYPE", "")
     ref_name = env.get("GITHUB_REF_NAME", "")
@@ -70,10 +88,13 @@ def resolve_identity(env, git=run_git):
     should_propose_promotion = False
 
     if is_release_tag(ref_type, ref_name):
+        # Release-tag builds are the canonical production artifacts.
         version = ref_name.removeprefix("v")
         should_push_image = True
         should_propose_promotion = True
     elif is_master_push(event_name, ref_type, ref_name):
+        # If master is already at a release tag, do not duplicate it as a
+        # development image. Otherwise derive a first-parent development tag.
         exact_tag = git(
             [
                 "describe",
@@ -102,6 +123,8 @@ def resolve_identity(env, git=run_git):
             version = parse_extended_version(describe)
             should_push_image = True
     else:
+        # Pull request and other non-publishing contexts still get a stable tag
+        # for logs and local workflow plumbing.
         version = f"pr-{short_sha(env.get('GITHUB_SHA', commit_sha))}"
 
     return {
@@ -115,6 +138,8 @@ def resolve_identity(env, git=run_git):
 
 
 def main():
+    """CLI entry point used by GitHub Actions steps."""
+
     try:
         outputs = resolve_identity(dict(__import__("os").environ))
         for line in append_github_outputs(outputs):

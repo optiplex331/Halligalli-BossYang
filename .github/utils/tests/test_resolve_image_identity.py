@@ -1,3 +1,5 @@
+"""Tests for release, development, and pull request image identity routing."""
+
 import unittest
 
 import sys
@@ -13,6 +15,8 @@ from resolve_image_identity import (  # noqa: E402
 
 
 def fake_git(outputs):
+    """Provide deterministic git command results to the resolver under test."""
+
     def run(args, allow_failure=False):
         key = tuple(args)
         if key in outputs:

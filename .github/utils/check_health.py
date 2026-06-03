@@ -1,3 +1,5 @@
+"""Validate a deployed /health payload against the expected release identity."""
+
 import os
 import sys
 
@@ -5,6 +7,8 @@ from production_manifest import ManifestError, check_health_release_identity
 
 
 def main():
+    """Read HEALTH_RESPONSE and expected identity values from the environment."""
+
     try:
         check_health_release_identity(
             os.environ.get("HEALTH_RESPONSE", ""),
