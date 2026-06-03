@@ -6,7 +6,7 @@ export default defineConfig({
   test: {
     exclude: [
       ...configDefaults.exclude,
-      ".github/utils/__tests__/**/*.test.mjs",
+      ".github/utils/tests/test_*.py",
     ],
   },
   server: {

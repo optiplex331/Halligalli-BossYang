@@ -23,9 +23,10 @@ delivery_control:
   - ".github/actions/**"
   - ".github/workflows/**"
   - ".github/utils/change-filters.yaml"
-  - ".github/utils/*.mjs"
-  - ".github/utils/**/*.mjs"
+  - ".github/utils/*.py"
+  - ".github/utils/**/*.py"
   - ".github/dependabot.yml"
+  - "deploy/aws/**"
 
 release_metadata:
   - ".github/utils/.release-please-manifest.json"

@@ -8,10 +8,12 @@ let socket: HalligalliSocket | null = null;
 
 export function getSocket(): HalligalliSocket {
   if (!socket) {
-    socket = io({
+    const backendUrl = import.meta.env.VITE_HALLIGALLI_BACKEND_URL?.trim();
+    const options = {
       autoConnect: false,
       transports: ["websocket", "polling"],
-    });
+    };
+    socket = backendUrl ? io(backendUrl, options) : io(options);
   }
   return socket;
 }

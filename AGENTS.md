@@ -1,6 +1,6 @@
 ## Project
 
-**Halligalli Web Practice** — browser-based Halligalli trainer with single-player and real-time multiplayer. Tabletop-inspired card flow, configurable difficulty, Boss mode, bilingual UI, local score persistence, match-code rooms. Deployed as a single Node.js service on DigitalOcean App Platform serving both the Vite-built frontend and a socket.io game server.
+**Halligalli Boss Practice** — browser-based Halligalli trainer with single-player and real-time multiplayer. Tabletop-inspired card flow, configurable difficulty, Boss mode, bilingual UI, local score persistence, match-code rooms. Deployed as a single Node.js service on DigitalOcean App Platform serving both the Vite-built frontend and a socket.io game server.
 
 **Core Value:** Open the site → meaningful practice immediately → fast feedback makes the next round better. Multiplayer is opt-in, same-origin, zero-config for the player.
 
@@ -80,7 +80,7 @@ pnpm start            # Serve dist/ + socket.io (production)
 src/
 ├── main.tsx            — mounts App, imports styles
 ├── App.tsx             — all state, game loop, 4-screen render, still shrinking
-├── styles.css          — all styles including 3D animations (~2110 lines)
+├── styles.css          — all styles including 3D animations
 ├── audio/
 │   └── useAudioEngine.ts   — encapsulates AudioContext + tone scheduling; returns {playFeedback, ensureUnlocked}
 ├── game/
@@ -145,36 +145,11 @@ Server → client: `room:created`, `room:joined`, `room:player-update`, `room:er
 
 Host has exclusive `room:start` rights. Disconnects during lobby remove the player; disconnects mid-game mark them offline but keep the game running until all players disconnect.
 
-## Working Efficiency Notes
-
-**Meta rule**: At the end of each milestone or major functional update, add a brief retrospective to this section — one bullet per insight, lead with the rule, end with why. Aim for precision over volume: if a new pattern duplicates an existing one, update rather than append. Keep total Do/Don't lists under ~15 bullets each.
-
-### Do
-- **Parallel read burst first** — run Grep + multiple Read calls in one message to map all touch points before writing anything; one round-trip gives the full picture.
-- **Build before browser** — `pnpm run build` (< 1s) catches syntax errors at near-zero cost; only spin up the dev server after the build is clean.
-- **Batch `evaluate_script`** — verify multiple DOM attributes (aria-*, computed styles, tabIndex) in a single JS call rather than separate queries.
-- **Lighthouse one-shot for a11y** — a single `lighthouse_audit` call covers all four a11y sub-categories at once and beats manual element inspection every time.
-- **Trust the session summary / plan line anchors** — when the previous session's summary names an exact file + offset, go there directly; don't re-grep what's already been located.
-- **All edits in one pass, then verify once** — make every planned edit across a file before running any check; no redundant intermediate verification rounds.
-- **COPY table edits: always touch zh + en in one Edit pair** — `App.tsx`; never add a zh key without the en counterpart in the same message.
-- **Fix test data format bugs before running tests a second time** — if a new test generates date strings, verify they're zero-padded (`2025-06-08` not `2025-06-8`); one read of the failing assertion is enough to diagnose this class of error.
-
-### Don't
-- **Don't create tasks without checking TaskList across session boundaries** — duplicate tasks (M3 created #24–28 while #19–23 still existed) waste 10+ tool calls on cleanup.
-- **Don't load skills speculatively** — skill docs cost 2–4 k context tokens; only load when the plan is genuinely ambiguous and you need the framework's guidance.
-- **Don't re-grep what the session summary already resolved** — if the compacted summary says "L445 `ensureAudioContext`", go to offset 445; searching again is pure waste.
-- **Don't use template-literal date arithmetic in tests** — `` `2025-06-${8 + d}` `` skips zero-padding; always use an explicit string array or `.padStart(2, "0")` when building ISO date strings in tests.
-
----
-
 ## Deployment
 
-- **Target**: DigitalOcean App Platform, Amsterdam (`ams`), `apps-s-1vcpu-0.5gb` instance
-- **URL**: https://halligalli-8xko3.ondigitalocean.app/
-- **App ID**: `a28fcbb5-7581-41f7-8bd6-6c9d0ded0994`
-- **Trigger**: Production Promotion PR changes `deploy/production/app.yaml` on `master`; GitHub Actions `Reconcile DO Production` applies it
-- **Manual redeploy**: dispatch the `Reconcile DO Production` workflow from GitHub Actions
-- **Spec updates**: update `deploy/production/app.yaml` through a Production Promotion PR
-- **Logs**: `doctl apps logs <app-id> --deployment <deployment-id> --type build|run`
-- **Gotcha**: production uses the GHCR Release Image digest from the Production Manifest; do not deploy `latest` or source rebuilds.
-- **Workflow utilities**: keep clear shell-native workflow glue in Bash; move structured parsing, reusable JSON checks, Production Manifest release identity handling, and non-trivial inline heredocs into dependency-free `.github/utils/*.mjs` scripts with `node --test` coverage.
+- DO Production runs on DigitalOcean App Platform in `ams`.
+- Production changes flow through Release Please, Release Tags, GHCR Release Images, Production Promotion PRs, and `deploy/production/app.yaml`.
+- Manual redeploys use the `Reconcile DO Production` workflow.
+- Production must use the GHCR Release Image digest from the Production Manifest; do not deploy `latest` or source rebuilds.
+- Keep structured release parsing and Production Manifest release identity handling in dependency-free `.github/utils/*.py` scripts with Python `unittest` coverage.
+- Operational details live in `docs/operations/`.
