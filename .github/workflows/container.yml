@@ -5,6 +5,8 @@ on:
     branches:
       - master
   push:
+    branches:
+      - master
     tags:
       - "v*.*.*"
   workflow_dispatch:
@@ -25,7 +27,8 @@ jobs:
       image_tag: ${{ steps.release.outputs.image_tag }}
       image_digest: ${{ steps.push.outputs.image_digest }}
       commit_sha: ${{ steps.release.outputs.commit_sha }}
-      should_publish: ${{ steps.release.outputs.should_publish }}
+      should_push_image: ${{ steps.release.outputs.should_push_image }}
+      should_propose_promotion: ${{ steps.release.outputs.should_propose_promotion }}
 
     steps:
       - name: Check out repository
@@ -51,32 +54,7 @@ jobs:
       - name: Resolve image identity
         if: steps.changes.outputs.container_build_required == 'true'
         id: release
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          image="ghcr.io/${GITHUB_REPOSITORY}"
-          image="$(echo "${image}" | tr '[:upper:]' '[:lower:]')"
-          commit_sha="$(git rev-parse HEAD)"
-          should_publish=false
-
-          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            version="${GITHUB_REF_NAME#v}"
-            should_publish=true
-          else
-            version="pr-${GITHUB_SHA::7}"
-          fi
-
-          outputs=(
-            "image=${image}"
-            "version=${version}"
-            "image_tag=${image}:${version}"
-            "commit_sha=${commit_sha}"
-            "should_publish=${should_publish}"
-          )
-
-          printf '%s\n' "${outputs[@]}" >> "${GITHUB_OUTPUT}"
-          printf '%s\n' "${outputs[@]}"
+        run: python3 .github/utils/resolve_image_identity.py
 
       - name: Build image
         if: steps.changes.outputs.container_build_required == 'true'
@@ -105,7 +83,7 @@ jobs:
           severity: HIGH,CRITICAL
 
       - name: Log in to GHCR
-        if: steps.release.outputs.should_publish == 'true'
+        if: steps.release.outputs.should_push_image == 'true'
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ghcr.io
@@ -113,7 +91,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push image
-        if: steps.release.outputs.should_publish == 'true'
+        if: steps.release.outputs.should_push_image == 'true'
         id: push
         shell: bash
         run: |
@@ -138,7 +116,7 @@ jobs:
   propose-production-promotion:
     name: Propose production promotion
     needs: build-scan-publish
-    if: needs.build-scan-publish.outputs.should_publish == 'true'
+    if: needs.build-scan-publish.outputs.should_propose_promotion == 'true'
     runs-on: ubuntu-24.04
 
     steps:
@@ -162,7 +140,7 @@ jobs:
           IMAGE_DIGEST: ${{ needs.build-scan-publish.outputs.image_digest }}
         run: |
           set -euo pipefail
-          node .github/utils/update-production-manifest.mjs
+          python3 .github/utils/update_production_manifest.py
 
       - name: Open promotion PR
         shell: bash

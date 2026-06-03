@@ -32,6 +32,18 @@ coverage/
 *.tmp
 *.temp
 
+# Terraform local state and environment-specific deployment config
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+backend.hcl
+deploy/aws/environments/*/terraform.tfvars
+deploy/aws/environments/*/terraform.tfvars.json
+deploy/aws/environments/*/backend.hcl
+
 # Coding agents
 .claude/
 .codex/

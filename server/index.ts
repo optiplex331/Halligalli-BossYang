@@ -4,7 +4,7 @@ import { readFile, stat } from "fs/promises";
 import { basename, dirname, extname, join } from "path";
 import { fileURLToPath } from "url";
 import { Server } from "socket.io";
-import type { Socket } from "socket.io";
+import type { ServerOptions, Socket } from "socket.io";
 import { Player, Room, generateCode } from "./Room.js";
 import { GameEngine } from "./GameEngine.js";
 import { createHealthPayload } from "./health.js";
@@ -37,14 +37,28 @@ const MIME_TYPES: Record<string, string> = {
   ".webp": "image/webp",
 };
 
+function parseAllowedOrigins(value = ""): string[] {
+  return value
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+}
+
 export function createHalligalliServer() {
   const rooms = new Map<string, Room>();
+  const allowedOrigins = parseAllowedOrigins(process.env.HALLIGALLI_ALLOWED_ORIGINS);
 
   async function serveStatic(req: IncomingMessage, res: ServerResponse) {
     // Health check
     if (req.url === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(createHealthPayload({ roomCount: rooms.size })));
+      return;
+    }
+
+    if (req.url === "/readyz") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ready" }));
       return;
     }
 
@@ -89,7 +103,19 @@ export function createHalligalliServer() {
   }
 
   const httpServer = createServer(serveStatic);
-  const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer);
+  const socketOptions: Partial<ServerOptions> =
+    allowedOrigins.length > 0
+      ? {
+          cors: {
+            origin: allowedOrigins,
+          },
+          allowRequest: (req, callback) => {
+            const origin = req.headers.origin;
+            callback(null, origin === undefined || allowedOrigins.includes(origin));
+          },
+        }
+      : {};
+  const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, socketOptions);
 
   const staleRoomInterval = setInterval(() => {
     for (const [code, room] of rooms) {
