@@ -1,3 +1,5 @@
+"""Validate release metadata and Production Manifest invariants."""
+
 import json
 import sys
 from pathlib import Path
@@ -6,6 +8,8 @@ from production_manifest import ManifestError, validate_production_manifest
 
 
 def read_json(path):
+    """Read a UTF-8 JSON file used by release automation."""
+
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
@@ -15,6 +19,8 @@ def fail(message):
 
 
 def main():
+    """Check that release versioning remains tag-driven, not package-driven."""
+
     release_config = read_json(".github/utils/release-please-config.json")
     release_manifest = read_json(".github/utils/.release-please-manifest.json")
     package_json = read_json("package.json")

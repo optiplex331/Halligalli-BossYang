@@ -1,3 +1,5 @@
+"""Tests for Production Manifest parsing, updates, drift, and health checks."""
+
 import json
 import tempfile
 import unittest
@@ -38,6 +40,8 @@ services:
 
 
 def temp_manifest():
+    """Create an editable manifest fixture while preserving test isolation."""
+
     temp_dir = tempfile.TemporaryDirectory()
     file_path = Path(temp_dir.name) / "app.yaml"
     file_path.write_text(MANIFEST, encoding="utf-8")

@@ -1,3 +1,11 @@
+"""Production Manifest helpers for release and drift workflows.
+
+The manifest is a DigitalOcean App Platform YAML file, but these utilities stay
+dependency-free so they can run on GitHub-hosted runners before the product
+toolchain is installed. The parser below intentionally handles only the small
+manifest shape that the release workflows own.
+"""
+
 import json
 import os
 import re
@@ -8,6 +16,8 @@ DEFAULT_SERVICE_NAME = "web"
 
 
 class ManifestError(RuntimeError):
+    """Raised when the Production Manifest or live production shape is invalid."""
+
     pass
 
 
@@ -31,6 +41,8 @@ def _split_lines(text):
 
 
 def _find_service_range(lines, service_name=DEFAULT_SERVICE_NAME):
+    """Return the line range for the single service owned by release workflows."""
+
     try:
         services_index = next(
             index for index, line in enumerate(lines) if line.strip() == "services:"
@@ -76,6 +88,8 @@ def _find_service_range(lines, service_name=DEFAULT_SERVICE_NAME):
 
 
 def _find_nested_block(lines, block_range, key):
+    """Find a required nested YAML block inside a known parent line range."""
+
     matches = []
 
     for index in range(block_range["start"] + 1, block_range["end"]):
@@ -101,6 +115,8 @@ def _find_nested_block(lines, block_range, key):
 
 
 def _read_scalar_from_block(lines, block, key, required=True):
+    """Read one scalar key from a parsed block and report duplicate/missing keys."""
+
     matches = []
     pattern = re.compile(rf"^\s*{re.escape(key)}:\s*(.*)$")
 
@@ -119,6 +135,11 @@ def _read_scalar_from_block(lines, block, key, required=True):
 
 
 def _find_env_value_line(lines, env_block, key):
+    """Find the value line for a named DO env var entry.
+
+    The updater preserves the rest of the YAML file by replacing only this line.
+    """
+
     matches = []
 
     for index in range(env_block["start"] + 1, env_block["end"]):
@@ -151,6 +172,8 @@ def _find_env_value_line(lines, env_block, key):
 
 
 def read_production_manifest(text):
+    """Read release identity and editable line indexes from manifest text."""
+
     lines = _split_lines(text)
     service = _find_service_range(lines)
     image_block = _find_nested_block(lines, service, "image")
@@ -195,6 +218,8 @@ def read_release_identity(path):
 
 
 def validate_production_manifest(path):
+    """Validate invariants required before a manifest can represent production."""
+
     manifest = read_production_manifest_file(path)
 
     if manifest["image"]["registry_type"] != "GHCR":
@@ -214,6 +239,8 @@ def validate_production_manifest(path):
 
 
 def write_release_identity(path, identity):
+    """Replace only the production image digest and runtime release identity."""
+
     target = Path(path)
     current = target.read_text(encoding="utf-8")
     manifest = read_production_manifest(current)
@@ -253,6 +280,8 @@ def write_release_identity(path, identity):
 
 
 def _web_service(spec):
+    """Return the live web service from either raw or wrapped DO app specs."""
+
     if not isinstance(spec, dict):
         fail("Live production spec must be an object")
 
@@ -273,6 +302,8 @@ def _web_service(spec):
 
 
 def _env_map(service):
+    """Convert DigitalOcean env entries into a key/value map for comparison."""
+
     envs = service.get("envs")
     if not isinstance(envs, list):
         fail("Live production web service must define envs")
@@ -285,6 +316,8 @@ def _json_string(value):
 
 
 def compare_production_manifest_to_live_spec(manifest_text, live_spec):
+    """Compare Git-tracked desired production state with the live DO app spec."""
+
     desired = read_production_manifest(manifest_text)
     live_web = _web_service(live_spec)
     live_image = live_web.get("image") or {}
@@ -309,6 +342,8 @@ def compare_production_manifest_to_live_spec(manifest_text, live_spec):
 
 
 def check_health_release_identity(body, expected):
+    """Assert that a /health response exposes the expected release identity."""
+
     try:
         health = json.loads(body)
     except json.JSONDecodeError:
@@ -338,6 +373,8 @@ def check_health_release_identity(body, expected):
 
 
 def append_github_outputs(outputs, output_path=None):
+    """Append step outputs in GitHub's key=value format and echo them for logs."""
+
     lines = [f"{key}={value}" for key, value in outputs.items()]
     output_path = output_path if output_path is not None else os.environ.get("GITHUB_OUTPUT")
 

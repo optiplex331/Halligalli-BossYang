@@ -1,3 +1,5 @@
+"""Fail the workflow when live DO Production differs from the manifest."""
+
 import json
 import os
 import sys
@@ -11,6 +13,8 @@ from production_manifest import (
 
 
 def main():
+    """Compare SPEC_PATH with LIVE_SPEC_PATH and emit release identity outputs."""
+
     spec_path = os.environ.get("SPEC_PATH", "deploy/production/app.yaml")
     live_spec_path = os.environ.get("LIVE_SPEC_PATH", "live-app-spec.json")
 
