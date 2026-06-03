@@ -58,6 +58,8 @@ ghcr.io/<owner>/<repo>:X.Y.Z-000N-gSHA
 
 Development GHCR Images are for traceability and rollback testing only. They do not update `deploy/production/app.yaml`, do not open Production Promotion PRs, and do not feed AWS Production Scaffold.
 
+If the `master` push is exactly the same commit as a `vX.Y.Z` Release Tag, the workflow does not publish a duplicate `X.Y.Z-0000-gSHA` Development GHCR Image. The release-tagged `X.Y.Z` image is the canonical artifact for that commit.
+
 When the trigger is a `vX.Y.Z` tag, the workflow publishes the production image identity without the `v` prefix:
 
 ```text

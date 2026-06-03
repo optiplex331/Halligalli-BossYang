@@ -1,6 +1,6 @@
 ## Project
 
-**Halligalli Web Practice** — browser-based Halligalli trainer with single-player and real-time multiplayer. Tabletop-inspired card flow, configurable difficulty, Boss mode, bilingual UI, local score persistence, match-code rooms. Deployed as a single Node.js service on DigitalOcean App Platform serving both the Vite-built frontend and a socket.io game server.
+**Halligalli Boss Practice** — browser-based Halligalli trainer with single-player and real-time multiplayer. Tabletop-inspired card flow, configurable difficulty, Boss mode, bilingual UI, local score persistence, match-code rooms. Deployed as a single Node.js service on DigitalOcean App Platform serving both the Vite-built frontend and a socket.io game server.
 
 **Core Value:** Open the site → meaningful practice immediately → fast feedback makes the next round better. Multiplayer is opt-in, same-origin, zero-config for the player.
 
