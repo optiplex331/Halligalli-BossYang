@@ -4,7 +4,7 @@ locals {
     log_retention_days     = local.cost_guardrails.log_retention_days
     dashboard_default      = false
     alarm_default          = false
-    note                   = "Keep backend CloudWatch Logs retention short for demo-friendly staging cost control"
+    note                   = "Keep backend CloudWatch Logs retention short for demo-friendly scaffold cost control"
   }
 }
 

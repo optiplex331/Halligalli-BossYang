@@ -151,5 +151,5 @@ Host has exclusive `room:start` rights. Disconnects during lobby remove the play
 - Production changes flow through Release Please, Release Tags, GHCR Release Images, Production Promotion PRs, and `deploy/production/app.yaml`.
 - Manual redeploys use the `Reconcile DO Production` workflow.
 - Production must use the GHCR Release Image digest from the Production Manifest; do not deploy `latest` or source rebuilds.
-- Keep structured release parsing and Production Manifest release identity handling in dependency-free `.github/utils/*.mjs` scripts with `node --test` coverage.
+- Keep structured release parsing and Production Manifest release identity handling in dependency-free `.github/utils/*.py` scripts with Python `unittest` coverage.
 - Operational details live in `docs/operations/`.

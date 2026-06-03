@@ -27,13 +27,13 @@ Short shell-native workflow orchestration stays in Bash, such as `git`, `docker`
 
 Utility tests run unconditionally in the `Product checks` gate and do not require `pnpm install`. `Container`, `Reconcile DO Production`, and `Production Drift Check` run the specific utilities they need without repeating the full utility test suite.
 
-## AWS Staging Scaffold
+## AWS Production Scaffold
 
-The `AWS Staging Scaffold` workflow only runs through `workflow_dispatch`; it is not attached to push, PR, or Release Tag events. The default `validate` operation only runs release config and Terraform static validation. `deploy-frontend` and `deploy-backend` require the `STAGING_APPLY` confirmation before any AWS-mutating steps run.
+The `AWS Production Scaffold` workflow only runs through `workflow_dispatch`; it is not attached to push, PR, or Release Tag events. The default `validate` operation only runs release config and Terraform static validation. `deploy-frontend` and `deploy-backend` require the `PRODUCTION_SCAFFOLD_APPLY` confirmation before any AWS-mutating steps run.
 
-AWS Staging/Portfolio changes are Delivery Control. Changes to `deploy/aws/**` and `.github/workflows/aws-staging.yml` make `Product checks` run release utility validation and actionlint, but they do not publish AWS resources and do not change DO Production.
+AWS Production Scaffold changes are Delivery Control. Changes to `deploy/aws/**` and `.github/workflows/aws-production-scaffold.yml` make `Product checks` run release utility validation and actionlint, but they do not publish AWS resources and do not change DO Production.
 
-AWS Staging operation details are documented in [AWS staging scaffold](aws-staging.md).
+AWS Production Scaffold operation details are documented in [AWS Production Scaffold](aws-production-scaffold.md).
 
 ## Release PR
 

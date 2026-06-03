@@ -1,6 +1,6 @@
 # AWS Deployment Reference
 
-This Terraform root is a sanitized AWS deployment reference for portfolio review. It shows the intended Halligalli AWS Staging/Portfolio architecture without committing real account-specific configuration.
+This Terraform root is a sanitized AWS deployment reference for portfolio review. It shows the intended Halligalli AWS Production Scaffold architecture without committing real account-specific configuration.
 
 Real AWS account values, GitHub OIDC subjects, Route 53 hosted zone IDs, domain bindings, tfvars, Terraform state, plans, and secrets are intentionally excluded from Git.
 
@@ -14,20 +14,20 @@ Real AWS account values, GitHub OIDC subjects, Route 53 hosted zone IDs, domain 
 
 The committed defaults use `example.com` and `example-owner/example-repo`. Override those only in ignored local files.
 
-## Local Staging Config
+## Local AWS Production Scaffold Config
 
-Create local staging files from the committed examples:
+Create local scaffold files from the committed examples:
 
 ```bash
-mkdir -p environments/staging
-cp terraform.tfvars.example environments/staging/terraform.tfvars
+mkdir -p environments/aws-production-scaffold
+cp terraform.tfvars.example environments/aws-production-scaffold/terraform.tfvars
 ```
 
-Then edit `environments/staging/terraform.tfvars`.
+Then edit `environments/aws-production-scaffold/terraform.tfvars`.
 
 This file is ignored by Git. Keep real domain names, Route 53 zone IDs, ACM certificate ARNs, AWS account IDs, and real GitHub OIDC subjects there.
 
-Terraform state is local for the current AWS Staging/Portfolio phase. Keep `.terraform/`, `terraform.tfstate`, plans, and local tfvars ignored.
+Terraform state is local for the current AWS Production Scaffold phase. Keep `.terraform/`, `terraform.tfstate`, plans, and local tfvars ignored.
 
 ## Static Validation
 
@@ -51,10 +51,10 @@ After filling the ignored local files, initialize and plan deliberately:
 
 ```bash
 terraform init -input=false
-terraform plan -var-file=environments/staging/terraform.tfvars
+terraform plan -var-file=environments/aws-production-scaffold/terraform.tfvars
 ```
 
-Do not run `terraform apply` as a validation shortcut. A real apply creates cost-bearing AWS resources and should happen only after reviewing the plan, local state location, AWS credentials, DNS ownership, certificate setup, and staging lifecycle.
+Do not run `terraform apply` as a validation shortcut. A real apply creates cost-bearing AWS resources and should happen only after reviewing the plan, local state location, AWS credentials, DNS ownership, certificate setup, and scaffold lifecycle.
 
 ## Public Boundary
 

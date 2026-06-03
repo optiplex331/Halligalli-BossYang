@@ -113,7 +113,7 @@ Dark felt palette, gold accent (`--gold-light`), tabular-numeral stat displays, 
 - Node.js 24 + socket.io 4 (WebSocket server)
 - Vitest for unit tests across game logic, persistence, lifecycle, health, socket config, and stats
 - Single-service production deploy on DigitalOcean App Platform
-- Reviewable AWS Staging/Portfolio scaffold for a separated S3/CloudFront frontend and ECR/ECS backend
+- Reviewable AWS Production Scaffold for a separated S3/CloudFront frontend and ECR/ECS backend
 
 ---
 
@@ -191,7 +191,7 @@ server/
 └── GameEngine.ts        — server-authoritative game loop
 
 deploy/production/app.yaml — GitOps Production Manifest
-deploy/aws/        — sanitized AWS Staging/Portfolio Terraform reference
+deploy/aws/        — sanitized AWS Production Scaffold Terraform reference
 scripts/simulate-bell.ts — card-distribution tuning utility
 public/yang-boss.png     — Boss portrait
 ```
@@ -202,7 +202,7 @@ public/yang-boss.png     — Boss portrait
 
 Production is deployed as a single GHCR-backed Node.js service on DigitalOcean App Platform. The server serves the Vite-built static frontend from `dist/` and accepts WebSocket connections on the same origin.
 
-AWS Staging/Portfolio is scaffolded separately for review and future demos. The public Terraform reference models an S3/CloudFront frontend and ECR/ECS backend with example values; real account-specific tfvars, backend config, state, and domain bindings are intentionally excluded from Git. It is manually dispatched, cost-guarded, and does not replace DO Production.
+AWS Production Scaffold is scaffolded separately for review and future demos. The public Terraform reference models an S3/CloudFront frontend and ECR/ECS backend with example values; real account-specific tfvars, backend config, state, and domain bindings are intentionally excluded from Git. It is manually dispatched, cost-guarded, and does not replace DO Production.
 
 - Production manifest: `deploy/production/app.yaml`
 - Release branch: `master`
@@ -217,7 +217,7 @@ Operations docs:
 
 - [CI/CD](docs/operations/ci-cd.md)
 - [DigitalOcean release](docs/operations/digitalocean-release.md)
-- [AWS staging scaffold](docs/operations/aws-staging.md)
+- [AWS Production Scaffold](docs/operations/aws-production-scaffold.md)
 - [Rollback](docs/operations/rollback.md)
 
 ---

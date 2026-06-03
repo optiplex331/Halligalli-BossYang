@@ -15,7 +15,7 @@ locals {
   }
 
   frontend_scaffold = {
-    purpose                = "Serve the Vite static build for AWS Staging/Portfolio"
+    purpose                = "Serve the Vite static build for AWS Production Scaffold"
     hostname               = local.frontend.hostname
     public_url             = local.frontend.public_url
     asset_origin           = "Amazon S3"
@@ -77,7 +77,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "frontend_assets" 
 
 resource "aws_cloudfront_origin_access_control" "frontend_assets" {
   name                              = "${local.name_prefix}-frontend-assets"
-  description                       = "CloudFront access control for the Halligalli AWS Staging Vite asset bucket."
+  description                       = "CloudFront access control for the Halligalli AWS Production Scaffold Vite asset bucket."
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
@@ -127,7 +127,7 @@ resource "aws_acm_certificate_validation" "frontend" {
 
 resource "aws_cloudfront_distribution" "frontend" {
   aliases             = [local.frontend.hostname]
-  comment             = "Halligalli AWS Staging frontend"
+  comment             = "Halligalli AWS Production Scaffold frontend"
   default_root_object = local.frontend.default_root_object
   enabled             = var.frontend_cloudfront_enabled
   http_version        = "http2"

@@ -12,6 +12,6 @@ locals {
 check "nat_gateway_disabled_by_default" {
   assert {
     condition     = local.networking_scaffold.nat_gateway_count == 0 && var.enable_nat_gateway == false
-    error_message = "AWS Staging scaffold must keep NAT Gateway disabled by default."
+    error_message = "AWS Production Scaffold must keep NAT Gateway disabled by default."
   }
 }

@@ -1,27 +1,27 @@
 variable "project_name" {
-  description = "Short project name used in AWS Staging resource names."
+  description = "Short project name used in AWS Production Scaffold resource names."
   type        = string
   default     = "halligalli"
 
   validation {
     condition     = var.project_name == "halligalli"
-    error_message = "This staging root is scoped to the Halligalli Child Repo."
+    error_message = "This scaffold root is scoped to the Halligalli Child Repo."
   }
 }
 
 variable "aws_region" {
-  description = "AWS Staging/Portfolio runtime region."
+  description = "AWS Production Scaffold runtime region."
   type        = string
   default     = "eu-west-1"
 
   validation {
     condition     = var.aws_region == "eu-west-1"
-    error_message = "AWS Staging/Portfolio is fixed to eu-west-1 for this scaffold."
+    error_message = "AWS Production Scaffold is fixed to eu-west-1 for this scaffold."
   }
 }
 
 variable "domain_name" {
-  description = "Public domain used by the AWS Staging/Portfolio reference. Override with a local tfvars file for real environments."
+  description = "Public domain used by the AWS Production Scaffold reference. Override with a local tfvars file for real environments."
   type        = string
   default     = "example.com"
 
@@ -32,7 +32,7 @@ variable "domain_name" {
 }
 
 variable "frontend_subdomain" {
-  description = "Subdomain reserved for the future AWS Staging frontend."
+  description = "Subdomain reserved for the future AWS Production Scaffold frontend."
   type        = string
   default     = "play"
 
@@ -43,7 +43,7 @@ variable "frontend_subdomain" {
 }
 
 variable "backend_subdomain" {
-  description = "Subdomain reserved for the future AWS Staging backend entry."
+  description = "Subdomain reserved for the future AWS Production Scaffold backend entry."
   type        = string
   default     = "api"
 
@@ -54,7 +54,7 @@ variable "backend_subdomain" {
 }
 
 variable "enable_nat_gateway" {
-  description = "Cost guardrail: NAT Gateway is not part of the default AWS Staging shape."
+  description = "Cost guardrail: NAT Gateway is not part of the default AWS Production Scaffold shape."
   type        = bool
   default     = false
 
@@ -65,7 +65,7 @@ variable "enable_nat_gateway" {
 }
 
 variable "route53_zone_id" {
-  description = "Route 53 hosted zone ID for the configured domain. Leave null for local scaffold validation; set it in ignored tfvars when planning/applying real staging DNS."
+  description = "Route 53 hosted zone ID for the configured domain. Leave null for local scaffold validation; set it in ignored tfvars when planning/applying real scaffold DNS."
   type        = string
   default     = null
   nullable    = true
@@ -77,7 +77,7 @@ variable "route53_zone_id" {
 }
 
 variable "github_repository" {
-  description = "GitHub owner/repository allowed to assume the AWS Staging deploy role through OIDC. Override in ignored tfvars for real deployments."
+  description = "GitHub owner/repository allowed to assume the AWS Production Scaffold deploy role through OIDC. Override in ignored tfvars for real deployments."
   type        = string
   default     = "example-owner/example-repo"
 
@@ -113,9 +113,9 @@ variable "github_oidc_thumbprint_list" {
 }
 
 variable "github_oidc_subjects" {
-  description = "GitHub OIDC subject claims allowed to assume the AWS Staging deploy role. Override in ignored tfvars for real deployments."
+  description = "GitHub OIDC subject claims allowed to assume the AWS Production Scaffold deploy role. Override in ignored tfvars for real deployments."
   type        = list(string)
-  default     = ["repo:example-owner/example-repo:environment:aws-staging"]
+  default     = ["repo:example-owner/example-repo:environment:aws-production-scaffold"]
 
   validation {
     condition     = length(var.github_oidc_subjects) > 0
