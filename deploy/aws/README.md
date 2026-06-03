@@ -2,7 +2,7 @@
 
 This Terraform root is a sanitized AWS deployment reference for portfolio review. It shows the intended Halligalli AWS Staging/Portfolio architecture without committing real account-specific configuration.
 
-Real AWS account values, Terraform Cloud workspace settings, GitHub OIDC subjects, Route 53 hosted zone IDs, domain bindings, tfvars, backend config, Terraform state, plans, and secrets are intentionally excluded from Git.
+Real AWS account values, GitHub OIDC subjects, Route 53 hosted zone IDs, domain bindings, tfvars, Terraform state, plans, and secrets are intentionally excluded from Git.
 
 ## Resource Shape
 
@@ -12,7 +12,7 @@ Real AWS account values, Terraform Cloud workspace settings, GitHub OIDC subject
 - Identity: GitHub Actions OIDC provider support and a scoped deploy role.
 - Cost posture: no NAT Gateway by default, short log retention, CloudFront disabled until explicitly enabled.
 
-The committed defaults use `example.com`, `example-owner/example-repo`, and an example Terraform Cloud workspace. Override those only in ignored local files.
+The committed defaults use `example.com` and `example-owner/example-repo`. Override those only in ignored local files.
 
 ## Local Staging Config
 
@@ -21,19 +21,17 @@ Create local staging files from the committed examples:
 ```bash
 mkdir -p environments/staging
 cp terraform.tfvars.example environments/staging/terraform.tfvars
-cp backend.hcl.example environments/staging/backend.hcl
 ```
 
-Then edit:
+Then edit `environments/staging/terraform.tfvars`.
 
-- `environments/staging/terraform.tfvars`
-- `environments/staging/backend.hcl`
+This file is ignored by Git. Keep real domain names, Route 53 zone IDs, ACM certificate ARNs, AWS account IDs, and real GitHub OIDC subjects there.
 
-Both files are ignored by Git. Keep real domain names, Route 53 zone IDs, ACM certificate ARNs, AWS account IDs, Terraform Cloud organization/workspace names, and real GitHub OIDC subjects there.
+Terraform state is local for the current AWS Staging/Portfolio phase. Keep `.terraform/`, `terraform.tfstate`, plans, and local tfvars ignored.
 
 ## Static Validation
 
-These commands do not require AWS credentials or Terraform backend credentials:
+These commands do not require AWS credentials:
 
 ```bash
 terraform fmt -check -recursive
@@ -52,12 +50,12 @@ terraform fmt -recursive
 After filling the ignored local files, initialize and plan deliberately:
 
 ```bash
-terraform init -backend-config=environments/staging/backend.hcl -input=false
+terraform init -input=false
 terraform plan -var-file=environments/staging/terraform.tfvars
 ```
 
-Do not run `terraform apply` as a validation shortcut. A real apply creates cost-bearing AWS resources and should happen only after reviewing the plan, backend, AWS credentials, DNS ownership, certificate setup, and staging lifecycle.
+Do not run `terraform apply` as a validation shortcut. A real apply creates cost-bearing AWS resources and should happen only after reviewing the plan, local state location, AWS credentials, DNS ownership, certificate setup, and staging lifecycle.
 
 ## Public Boundary
 
-Tracked files in this root are the Terraform architecture, variable definitions, examples, and documentation. Ignored files include local environment configuration, backend config, `.terraform/`, state, plan files, and tfvars.
+Tracked files in this root are the Terraform architecture, variable definitions, examples, and documentation. Ignored files include local environment configuration, optional backend config, `.terraform/`, state, plan files, and tfvars.

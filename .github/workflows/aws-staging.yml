@@ -35,7 +35,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 env:
   AWS_REGION: eu-west-1
@@ -98,6 +97,9 @@ jobs:
       inputs.operation == 'deploy-frontend' &&
       inputs.confirm_cost == 'STAGING_APPLY'
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
     environment:
       name: aws-staging
       url: ${{ vars.AWS_STAGING_FRONTEND_URL }}
@@ -195,6 +197,9 @@ jobs:
       inputs.operation == 'deploy-backend' &&
       inputs.confirm_cost == 'STAGING_APPLY'
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
     environment:
       name: aws-staging
       url: ${{ vars.AWS_STAGING_BACKEND_URL }}

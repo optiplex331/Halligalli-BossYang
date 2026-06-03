@@ -1,5 +1,0 @@
-organization = "example-terraform-cloud-org"
-
-workspaces {
-  name = "example-halligalli-aws-staging"
-}
