@@ -48,7 +48,17 @@ Release Please uses `HALLIGALLI_RELEASE_BOT_TOKEN` so the generated PR can trigg
 
 ## Release Image
 
-The `Container` workflow builds and scans images for product/runtime PRs and release tags. When the trigger is a `vX.Y.Z` tag, it also publishes:
+The `Container` workflow builds and scans images for product/runtime PRs, `master` integration pushes, and release tags. Pull request runs do not publish images.
+
+When the trigger is a normal `master` push, the workflow publishes a Development GHCR Image tagged from the latest Release Tag, first-parent commit distance, and short commit hash:
+
+```text
+ghcr.io/<owner>/<repo>:X.Y.Z-000N-gSHA
+```
+
+Development GHCR Images are for traceability and rollback testing only. They do not update `deploy/production/app.yaml`, do not open Production Promotion PRs, and do not feed AWS Production Scaffold.
+
+When the trigger is a `vX.Y.Z` tag, the workflow publishes the production image identity without the `v` prefix:
 
 ```text
 ghcr.io/<owner>/<repo>:X.Y.Z

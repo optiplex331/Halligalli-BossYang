@@ -59,6 +59,10 @@ runs:
         if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
           tag_release=true
         fi
+        master_integration=false
+        if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF_TYPE}" == "branch" && "${GITHUB_REF_NAME}" == "master" ]]; then
+          master_integration=true
+        fi
 
         product_checks_required="${PRODUCT_RUNTIME}"
         delivery_control_checks_required="${DELIVERY_CONTROL}"
@@ -73,9 +77,14 @@ runs:
         if [[ "${tag_release}" == "true" ]]; then
           container_build_required=true
         fi
+        if [[ "${master_integration}" == "true" ]]; then
+          container_build_required=true
+        fi
 
         if [[ "${tag_release}" == "true" ]]; then
           classification="release-tag"
+        elif [[ "${master_integration}" == "true" ]]; then
+          classification="master-integration"
         elif [[ "${PRODUCT_RUNTIME}" == "true" ]]; then
           classification="product-runtime"
         elif [[ "${DELIVERY_CONTROL}" == "true" ]]; then
