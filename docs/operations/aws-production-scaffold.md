@@ -100,12 +100,18 @@ Store real values in the `aws-production-scaffold` GitHub Environment.
 | Variable | `HCP_TERRAFORM_WORKSPACE` | HCP Terraform workspace for remote state. |
 | Variable | `HCP_TERRAFORM_WORKSPACE_URL` | GitHub Environment URL target for infrastructure runs. |
 | Variable | `AWS_PRODUCTION_SCAFFOLD_TERRAFORM_ROLE_ARN` | IAM role assumed by the infrastructure workflow through GitHub OIDC. |
+| Variable | `AWS_PRODUCTION_SCAFFOLD_PROJECT_NAME` | Optional project-name override; defaults to `halligalli`. |
+| Variable | `AWS_PRODUCTION_SCAFFOLD_AWS_REGION` | Optional runtime Region override; currently constrained to `eu-west-1`. |
 | Variable | `AWS_PRODUCTION_SCAFFOLD_DOMAIN_NAME` | Scaffold domain controlled by the operator. |
+| Variable | `AWS_PRODUCTION_SCAFFOLD_FRONTEND_SUBDOMAIN` | Optional frontend subdomain override; defaults to `play`. |
+| Variable | `AWS_PRODUCTION_SCAFFOLD_BACKEND_SUBDOMAIN` | Optional Backend Entry subdomain override; defaults to `api`. |
 | Variable | `AWS_PRODUCTION_SCAFFOLD_ROUTE53_ZONE_ID` | Hosted zone ID for certificate validation and frontend/backend aliases. |
 | Variable | `AWS_PRODUCTION_SCAFFOLD_FRONTEND_CLOUDFRONT_ENABLED` | Enables the CloudFront distribution after the frontend slice is ready to serve traffic. |
 | Variable | `AWS_PRODUCTION_SCAFFOLD_BACKEND_CERTIFICATE_ARN` | ACM certificate ARN in `eu-west-1` for the backend ALB listener. |
 | Variable | `AWS_PRODUCTION_SCAFFOLD_BACKEND_IMAGE_TAG` | Bootstrap/baseline ECR image tag for the Terraform-managed task definition. |
 | Variable | `AWS_PRODUCTION_SCAFFOLD_BACKEND_DESIRED_COUNT` | `0` for bootstrap or scale down, `1` for demos. |
+| Variable | `AWS_PRODUCTION_SCAFFOLD_BACKEND_TASK_CPU` | Optional backend Fargate CPU override; defaults to `256`. |
+| Variable | `AWS_PRODUCTION_SCAFFOLD_BACKEND_TASK_MEMORY` | Optional backend Fargate memory override; defaults to `512`. |
 | Variable | `AWS_PRODUCTION_SCAFFOLD_GITHUB_REPOSITORY` | GitHub owner/repository allowed to assume scaffold roles. |
 | Variable | `AWS_PRODUCTION_SCAFFOLD_GITHUB_OIDC_SUBJECTS` | Allowed GitHub OIDC `sub` claims. JSON array or comma-separated string. |
 | Variable | `AWS_PRODUCTION_SCAFFOLD_GITHUB_OIDC_PROVIDER_ARN` | Optional existing GitHub OIDC provider ARN. |
