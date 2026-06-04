@@ -36,7 +36,7 @@ describe("multiplayer socket Backend Entry", () => {
     });
   });
 
-  it("uses an explicit Backend Entry URL for separated AWS staging", async () => {
+  it("uses an explicit Backend Entry URL for separated AWS production", async () => {
     vi.stubEnv("VITE_HALLIGALLI_BACKEND_URL", " https://api.example.com ");
     const { getSocket } = await import("./socket.js");
 

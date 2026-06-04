@@ -1,6 +1,6 @@
 ## Project
 
-**Halligalli Boss Practice** — browser-based Halligalli trainer with single-player and real-time multiplayer. Tabletop-inspired card flow, configurable difficulty, Boss mode, bilingual UI, local score persistence, match-code rooms. Deployed as a single Node.js service on DigitalOcean App Platform serving both the Vite-built frontend and a socket.io game server.
+**Halligalli Boss Practice** — browser-based Halligalli trainer with single-player and real-time multiplayer. Tabletop-inspired card flow, configurable difficulty, Boss mode, bilingual UI, local score persistence, match-code rooms. AWS Production Scaffold prepares a separated S3/CloudFront frontend and ECR/ECS backend without implying production cutover.
 
 **Core Value:** Open the site → meaningful practice immediately → fast feedback makes the next round better. Multiplayer is opt-in, same-origin, zero-config for the player.
 
@@ -28,7 +28,7 @@ pnpm start            # Serve dist/ + socket.io (production)
 - Use a task branch for non-trivial work; do not make feature or fix changes directly on `master`.
 - Follow Angular commit messages: `<type>(<scope>): <summary>`, for example `fix(game): clamp penalty score`.
 - Keep code and matching documentation changes in the same branch and commit set.
-- Deployment is GitOps-controlled: Release Please opens Release PRs, `vX.Y.Z` tags publish GHCR Release Images, Production Promotion PRs update `deploy/production/app.yaml`, and `Reconcile DO Production` applies that manifest to DigitalOcean.
+- Deployment keeps Release Please and GHCR release images for traceability, while protected manual AWS Production Scaffold workflows own scaffold infrastructure and application deployment.
 
 ## Technology Stack
 
@@ -108,8 +108,8 @@ server/
 └── package.json        — legacy separate manifest (deps now hoisted to root; kept for standalone server dev)
 
 public/yang-boss.png    — Boss portrait
-deploy/production/app.yaml — GitOps Production Manifest applied by Reconcile DO Production
-.github/utils/          — dependency-free GitHub Actions utilities for release config and Production Manifest release identity handling
+deploy/aws/             — sanitized AWS Terraform reference and GitHub Environment template
+.github/utils/          — dependency-free GitHub Actions utilities for release config and health identity checks
 scripts/simulate-bell.ts — Monte Carlo utility for tuning COUNT_DISTRIBUTION (not shipped)
 ```
 
@@ -147,9 +147,9 @@ Host has exclusive `room:start` rights. Disconnects during lobby remove the play
 
 ## Deployment
 
-- DO Production runs on DigitalOcean App Platform in `ams`.
-- Production changes flow through Release Please, Release Tags, GHCR Release Images, Production Promotion PRs, and `deploy/production/app.yaml`.
-- Manual redeploys use the `Reconcile DO Production` workflow.
-- Production must use the GHCR Release Image digest from the Production Manifest; do not deploy `latest` or source rebuilds.
-- Keep structured release parsing and Production Manifest release identity handling in dependency-free `.github/utils/*.py` scripts with Python `unittest` coverage.
+- AWS Production Scaffold uses Terraform under `deploy/aws/` for S3/CloudFront, ECR/ECS, ALB, Route 53, IAM OIDC roles, and CloudWatch Logs.
+- AWS Production Scaffold is separate from the current live production path and does not imply production cutover.
+- AWS resources are not created by PRs, pushes, or release tags. Mutating AWS work requires manual workflow dispatch and explicit confirmation.
+- Real account, domain, HCP Terraform, role, and deployment values belong in the protected `aws-production-scaffold` GitHub Environment, not in Git.
+- Keep structured release parsing and health identity checks in dependency-free `.github/utils/*.py` scripts with Python `unittest` coverage.
 - Operational details live in `docs/operations/`.

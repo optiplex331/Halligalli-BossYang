@@ -35,7 +35,7 @@ class ResolveImageIdentityTest(unittest.TestCase):
             "0.2.0-0048-gc08fdca",
         )
 
-    def test_release_tag_publishes_and_proposes_promotion(self):
+    def test_release_tag_publishes_canonical_release_image(self):
         outputs = resolve_identity(
             {
                 "GITHUB_REPOSITORY": "Optiplex331/Halligalli-Bossyang",
@@ -51,7 +51,6 @@ class ResolveImageIdentityTest(unittest.TestCase):
         self.assertEqual(outputs["version"], "0.3.0")
         self.assertEqual(outputs["image_tag"], "ghcr.io/optiplex331/halligalli-bossyang:0.3.0")
         self.assertEqual(outputs["should_push_image"], "true")
-        self.assertEqual(outputs["should_propose_promotion"], "true")
 
     def test_master_push_publishes_development_image(self):
         outputs = resolve_identity(
@@ -81,7 +80,6 @@ class ResolveImageIdentityTest(unittest.TestCase):
         self.assertEqual(outputs["version"], "0.2.0-0048-gc08fdca")
         self.assertEqual(outputs["image_tag"], "ghcr.io/owner/repo:0.2.0-0048-gc08fdca")
         self.assertEqual(outputs["should_push_image"], "true")
-        self.assertEqual(outputs["should_propose_promotion"], "false")
 
     def test_master_push_on_exact_release_tag_does_not_publish_development_image(self):
         outputs = resolve_identity(
@@ -109,7 +107,6 @@ class ResolveImageIdentityTest(unittest.TestCase):
 
         self.assertEqual(outputs["version"], "0.3.0")
         self.assertEqual(outputs["should_push_image"], "false")
-        self.assertEqual(outputs["should_propose_promotion"], "false")
 
     def test_pull_request_does_not_publish(self):
         outputs = resolve_identity(
@@ -125,7 +122,6 @@ class ResolveImageIdentityTest(unittest.TestCase):
 
         self.assertEqual(outputs["version"], "pr-abc1234")
         self.assertEqual(outputs["should_push_image"], "false")
-        self.assertEqual(outputs["should_propose_promotion"], "false")
 
     def test_master_push_fails_without_prior_release_tag(self):
         with self.assertRaisesRegex(ImageIdentityError, "missing fake git output"):

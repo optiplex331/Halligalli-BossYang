@@ -5,7 +5,7 @@ variable "project_name" {
 
   validation {
     condition     = var.project_name == "halligalli"
-    error_message = "This scaffold root is scoped to the Halligalli Child Repo."
+    error_message = "This Terraform root is scoped to the Halligalli Child Repo."
   }
 }
 
@@ -16,12 +16,12 @@ variable "aws_region" {
 
   validation {
     condition     = var.aws_region == "eu-west-1"
-    error_message = "AWS Production Scaffold is fixed to eu-west-1 for this scaffold."
+    error_message = "AWS Production Scaffold is fixed to eu-west-1."
   }
 }
 
 variable "domain_name" {
-  description = "Public domain used by the AWS Production Scaffold reference. Override with a local tfvars file for real environments."
+  description = "Public domain used by the AWS Production Scaffold reference. Override with GitHub Environment values for real infrastructure operations."
   type        = string
   default     = "example.com"
 
@@ -65,7 +65,7 @@ variable "enable_nat_gateway" {
 }
 
 variable "route53_zone_id" {
-  description = "Route 53 hosted zone ID for the configured domain. Leave null for local scaffold validation; set it in ignored tfvars when planning/applying real scaffold DNS."
+  description = "Route 53 hosted zone ID for the configured domain. Leave null for local validation; set it through GitHub Environment values when planning/applying real DNS."
   type        = string
   default     = null
   nullable    = true

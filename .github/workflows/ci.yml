@@ -29,24 +29,6 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Enforce Production Manifest-only PRs
-        if: github.event_name == 'pull_request' && steps.changes.outputs.production_manifest == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          changed_files="$(git diff --name-only --diff-filter=ACMRT \
-            "${{ github.event.pull_request.base.sha }}" \
-            "${{ github.event.pull_request.head.sha }}")"
-          disallowed_files="$(printf '%s\n' "${changed_files}" | sed '/^deploy\/production\/app.yaml$/d' | sed '/^$/d')"
-
-          if [[ -n "${disallowed_files}" ]]; then
-            echo "Production Manifest PRs must only change deploy/production/app.yaml." >&2
-            echo "Disallowed files:" >&2
-            printf '%s\n' "${disallowed_files}" >&2
-            exit 1
-          fi
-
       - name: Lint GitHub Actions workflows
         if: steps.changes.outputs.delivery_control_checks_required == 'true'
         run: docker run --rm -v "${PWD}:/repo" --workdir /repo rhysd/actionlint:1.7.12 -color

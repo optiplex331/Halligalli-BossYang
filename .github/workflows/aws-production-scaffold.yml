@@ -15,7 +15,7 @@ on:
           - deploy-backend
           - smoke-backend
       confirm_cost:
-        description: Type PRODUCTION_SCAFFOLD_APPLY to allow AWS-mutating deploy operations.
+        description: Type AWS_PRODUCTION_APPLY to allow AWS-mutating deploy operations.
         required: false
         type: string
       backend_image_tag:
@@ -81,13 +81,13 @@ jobs:
     if: >-
       inputs.operation != 'validate' &&
       inputs.operation != 'smoke-backend' &&
-      inputs.confirm_cost != 'PRODUCTION_SCAFFOLD_APPLY'
+      inputs.confirm_cost != 'AWS_PRODUCTION_APPLY'
     runs-on: ubuntu-24.04
     steps:
       - name: Require explicit cost confirmation
         run: |
           echo "AWS Production Scaffold deploy operations are manual and cost-aware." >&2
-          echo "Re-run with confirm_cost set to PRODUCTION_SCAFFOLD_APPLY to continue." >&2
+          echo "Re-run with confirm_cost set to AWS_PRODUCTION_APPLY to continue." >&2
           exit 1
 
   deploy-frontend:
@@ -95,23 +95,23 @@ jobs:
     needs: validate
     if: >-
       inputs.operation == 'deploy-frontend' &&
-      inputs.confirm_cost == 'PRODUCTION_SCAFFOLD_APPLY'
+      inputs.confirm_cost == 'AWS_PRODUCTION_APPLY'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write
     environment:
       name: aws-production-scaffold
-      url: ${{ vars.AWS_PRODUCTION_SCAFFOLD_FRONTEND_URL }}
+      url: ${{ vars.AWS_PRODUCTION_FRONTEND_URL }}
 
     env:
-      AWS_PRODUCTION_SCAFFOLD_ROLE_ARN: ${{ vars.AWS_PRODUCTION_SCAFFOLD_ROLE_ARN }}
-      AWS_PRODUCTION_SCAFFOLD_FRONTEND_URL: ${{ vars.AWS_PRODUCTION_SCAFFOLD_FRONTEND_URL }}
-      AWS_PRODUCTION_SCAFFOLD_BACKEND_URL: ${{ vars.AWS_PRODUCTION_SCAFFOLD_BACKEND_URL }}
-      AWS_PRODUCTION_SCAFFOLD_FRONTEND_BUCKET: ${{ vars.AWS_PRODUCTION_SCAFFOLD_FRONTEND_BUCKET }}
-      AWS_PRODUCTION_SCAFFOLD_CLOUDFRONT_DISTRIBUTION_ID: >-
-        ${{ vars.AWS_PRODUCTION_SCAFFOLD_CLOUDFRONT_DISTRIBUTION_ID }}
-      VITE_HALLIGALLI_BACKEND_URL: ${{ vars.AWS_PRODUCTION_SCAFFOLD_BACKEND_URL }}
+      AWS_PRODUCTION_DEPLOY_ROLE_ARN: ${{ vars.AWS_PRODUCTION_DEPLOY_ROLE_ARN }}
+      AWS_PRODUCTION_FRONTEND_URL: ${{ vars.AWS_PRODUCTION_FRONTEND_URL }}
+      AWS_PRODUCTION_BACKEND_URL: ${{ vars.AWS_PRODUCTION_BACKEND_URL }}
+      AWS_PRODUCTION_FRONTEND_BUCKET: ${{ vars.AWS_PRODUCTION_FRONTEND_BUCKET }}
+      AWS_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID: >-
+        ${{ vars.AWS_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID }}
+      VITE_HALLIGALLI_BACKEND_URL: ${{ vars.AWS_PRODUCTION_BACKEND_URL }}
 
     steps:
       - name: Check out repository
@@ -123,8 +123,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ -z "${AWS_PRODUCTION_SCAFFOLD_ROLE_ARN}" ]]; then
-            echo "Set AWS_PRODUCTION_SCAFFOLD_ROLE_ARN in the aws-production-scaffold GitHub environment." >&2
+          if [[ -z "${AWS_PRODUCTION_DEPLOY_ROLE_ARN}" ]]; then
+            echo "Set AWS_PRODUCTION_DEPLOY_ROLE_ARN in the aws-production-scaffold GitHub environment." >&2
             exit 1
           fi
 
@@ -132,7 +132,7 @@ jobs:
         # v6.2.0
         uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
-          role-to-assume: ${{ env.AWS_PRODUCTION_SCAFFOLD_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_PRODUCTION_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Set up pnpm
@@ -154,9 +154,9 @@ jobs:
           set -euo pipefail
 
           required=(
-            AWS_PRODUCTION_SCAFFOLD_BACKEND_URL
-            AWS_PRODUCTION_SCAFFOLD_FRONTEND_BUCKET
-            AWS_PRODUCTION_SCAFFOLD_CLOUDFRONT_DISTRIBUTION_ID
+            AWS_PRODUCTION_BACKEND_URL
+            AWS_PRODUCTION_FRONTEND_BUCKET
+            AWS_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID
           )
 
           for name in "${required[@]}"; do
@@ -178,7 +178,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          aws s3 sync dist/ "s3://${AWS_PRODUCTION_SCAFFOLD_FRONTEND_BUCKET}/" \
+          aws s3 sync dist/ "s3://${AWS_PRODUCTION_FRONTEND_BUCKET}/" \
             --delete \
             --exclude "server/*"
 
@@ -187,7 +187,7 @@ jobs:
         run: |
           set -euo pipefail
           aws cloudfront create-invalidation \
-            --distribution-id "${AWS_PRODUCTION_SCAFFOLD_CLOUDFRONT_DISTRIBUTION_ID}" \
+            --distribution-id "${AWS_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID}" \
             --paths "/*"
 
   deploy-backend:
@@ -195,24 +195,24 @@ jobs:
     needs: validate
     if: >-
       inputs.operation == 'deploy-backend' &&
-      inputs.confirm_cost == 'PRODUCTION_SCAFFOLD_APPLY'
+      inputs.confirm_cost == 'AWS_PRODUCTION_APPLY'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write
     environment:
       name: aws-production-scaffold
-      url: ${{ vars.AWS_PRODUCTION_SCAFFOLD_BACKEND_URL }}
+      url: ${{ vars.AWS_PRODUCTION_BACKEND_URL }}
 
     env:
-      AWS_PRODUCTION_SCAFFOLD_ROLE_ARN: ${{ vars.AWS_PRODUCTION_SCAFFOLD_ROLE_ARN }}
-      AWS_PRODUCTION_SCAFFOLD_BACKEND_URL: ${{ vars.AWS_PRODUCTION_SCAFFOLD_BACKEND_URL }}
-      AWS_PRODUCTION_SCAFFOLD_ECR_REGISTRY: ${{ vars.AWS_PRODUCTION_SCAFFOLD_ECR_REGISTRY }}
-      AWS_PRODUCTION_SCAFFOLD_ECR_REPOSITORY: ${{ vars.AWS_PRODUCTION_SCAFFOLD_ECR_REPOSITORY }}
-      AWS_PRODUCTION_SCAFFOLD_ECS_CLUSTER: ${{ vars.AWS_PRODUCTION_SCAFFOLD_ECS_CLUSTER }}
-      AWS_PRODUCTION_SCAFFOLD_ECS_SERVICE: ${{ vars.AWS_PRODUCTION_SCAFFOLD_ECS_SERVICE }}
-      AWS_PRODUCTION_SCAFFOLD_TASK_FAMILY: ${{ vars.AWS_PRODUCTION_SCAFFOLD_TASK_FAMILY }}
-      AWS_PRODUCTION_SCAFFOLD_CONTAINER_NAME: ${{ vars.AWS_PRODUCTION_SCAFFOLD_CONTAINER_NAME }}
+      AWS_PRODUCTION_DEPLOY_ROLE_ARN: ${{ vars.AWS_PRODUCTION_DEPLOY_ROLE_ARN }}
+      AWS_PRODUCTION_BACKEND_URL: ${{ vars.AWS_PRODUCTION_BACKEND_URL }}
+      AWS_PRODUCTION_ECR_REGISTRY: ${{ vars.AWS_PRODUCTION_ECR_REGISTRY }}
+      AWS_PRODUCTION_ECR_REPOSITORY: ${{ vars.AWS_PRODUCTION_ECR_REPOSITORY }}
+      AWS_PRODUCTION_ECS_CLUSTER: ${{ vars.AWS_PRODUCTION_ECS_CLUSTER }}
+      AWS_PRODUCTION_ECS_SERVICE: ${{ vars.AWS_PRODUCTION_ECS_SERVICE }}
+      AWS_PRODUCTION_TASK_FAMILY: ${{ vars.AWS_PRODUCTION_TASK_FAMILY }}
+      AWS_PRODUCTION_CONTAINER_NAME: ${{ vars.AWS_PRODUCTION_CONTAINER_NAME }}
 
     steps:
       - name: Check out repository
@@ -224,8 +224,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ -z "${AWS_PRODUCTION_SCAFFOLD_ROLE_ARN}" ]]; then
-            echo "Set AWS_PRODUCTION_SCAFFOLD_ROLE_ARN in the aws-production-scaffold GitHub environment." >&2
+          if [[ -z "${AWS_PRODUCTION_DEPLOY_ROLE_ARN}" ]]; then
+            echo "Set AWS_PRODUCTION_DEPLOY_ROLE_ARN in the aws-production-scaffold GitHub environment." >&2
             exit 1
           fi
 
@@ -233,7 +233,7 @@ jobs:
         # v6.2.0
         uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
-          role-to-assume: ${{ env.AWS_PRODUCTION_SCAFFOLD_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_PRODUCTION_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Set up Docker Buildx
@@ -247,13 +247,13 @@ jobs:
           set -euo pipefail
 
           required=(
-            AWS_PRODUCTION_SCAFFOLD_BACKEND_URL
-            AWS_PRODUCTION_SCAFFOLD_ECR_REGISTRY
-            AWS_PRODUCTION_SCAFFOLD_ECR_REPOSITORY
-            AWS_PRODUCTION_SCAFFOLD_ECS_CLUSTER
-            AWS_PRODUCTION_SCAFFOLD_ECS_SERVICE
-            AWS_PRODUCTION_SCAFFOLD_TASK_FAMILY
-            AWS_PRODUCTION_SCAFFOLD_CONTAINER_NAME
+            AWS_PRODUCTION_BACKEND_URL
+            AWS_PRODUCTION_ECR_REGISTRY
+            AWS_PRODUCTION_ECR_REPOSITORY
+            AWS_PRODUCTION_ECS_CLUSTER
+            AWS_PRODUCTION_ECS_SERVICE
+            AWS_PRODUCTION_TASK_FAMILY
+            AWS_PRODUCTION_CONTAINER_NAME
           )
 
           for name in "${required[@]}"; do
@@ -266,7 +266,7 @@ jobs:
 
           aws --version
 
-      - name: Resolve scaffold image
+      - name: Resolve production image
         id: image
         shell: bash
         run: |
@@ -277,7 +277,7 @@ jobs:
             tag="aws-production-scaffold-${GITHUB_SHA::7}-${GITHUB_RUN_NUMBER}"
           fi
 
-          image="${AWS_PRODUCTION_SCAFFOLD_ECR_REGISTRY}/${AWS_PRODUCTION_SCAFFOLD_ECR_REPOSITORY}:${tag}"
+          image="${AWS_PRODUCTION_ECR_REGISTRY}/${AWS_PRODUCTION_ECR_REPOSITORY}:${tag}"
           commit_sha="$(git rev-parse HEAD)"
 
           {
@@ -293,7 +293,7 @@ jobs:
           aws ecr get-login-password --region "${AWS_REGION}" \
             | docker login \
               --username AWS \
-              --password-stdin "${AWS_PRODUCTION_SCAFFOLD_ECR_REGISTRY}"
+              --password-stdin "${AWS_PRODUCTION_ECR_REGISTRY}"
 
       - name: Build and push backend image
         shell: bash
@@ -327,13 +327,13 @@ jobs:
           set -euo pipefail
 
           aws ecs describe-task-definition \
-            --task-definition "${AWS_PRODUCTION_SCAFFOLD_TASK_FAMILY}" \
+            --task-definition "${AWS_PRODUCTION_TASK_FAMILY}" \
             --query taskDefinition \
             > task-definition.json
 
           jq \
             --arg image "${IMAGE}" \
-            --arg container "${AWS_PRODUCTION_SCAFFOLD_CONTAINER_NAME}" \
+            --arg container "${AWS_PRODUCTION_CONTAINER_NAME}" \
             --arg app_version "${APP_VERSION}" \
             --arg commit_sha "${COMMIT_SHA}" \
             'del(
@@ -374,8 +374,8 @@ jobs:
         run: |
           set -euo pipefail
           aws ecs update-service \
-            --cluster "${AWS_PRODUCTION_SCAFFOLD_ECS_CLUSTER}" \
-            --service "${AWS_PRODUCTION_SCAFFOLD_ECS_SERVICE}" \
+            --cluster "${AWS_PRODUCTION_ECS_CLUSTER}" \
+            --service "${AWS_PRODUCTION_ECS_SERVICE}" \
             --task-definition "${{ steps.task.outputs.task_definition_arn }}" \
             --force-new-deployment
 
@@ -384,8 +384,8 @@ jobs:
         run: |
           set -euo pipefail
           aws ecs wait services-stable \
-            --cluster "${AWS_PRODUCTION_SCAFFOLD_ECS_CLUSTER}" \
-            --services "${AWS_PRODUCTION_SCAFFOLD_ECS_SERVICE}"
+            --cluster "${AWS_PRODUCTION_ECS_CLUSTER}" \
+            --services "${AWS_PRODUCTION_ECS_SERVICE}"
 
       - name: Smoke test backend readiness and health
         shell: bash
@@ -395,11 +395,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          curl --fail --silent --show-error "${AWS_PRODUCTION_SCAFFOLD_BACKEND_URL}/readyz"
+          curl --fail --silent --show-error "${AWS_PRODUCTION_BACKEND_URL}/readyz"
 
           response="$(
             curl --fail --silent --show-error \
-              "${AWS_PRODUCTION_SCAFFOLD_BACKEND_URL}/health"
+              "${AWS_PRODUCTION_BACKEND_URL}/health"
           )"
           export HEALTH_RESPONSE="${response}"
           export SUCCESS_MESSAGE
@@ -413,10 +413,10 @@ jobs:
     runs-on: ubuntu-24.04
     environment:
       name: aws-production-scaffold
-      url: ${{ vars.AWS_PRODUCTION_SCAFFOLD_BACKEND_URL }}
+      url: ${{ vars.AWS_PRODUCTION_BACKEND_URL }}
 
     env:
-      AWS_PRODUCTION_SCAFFOLD_BACKEND_URL: ${{ vars.AWS_PRODUCTION_SCAFFOLD_BACKEND_URL }}
+      AWS_PRODUCTION_BACKEND_URL: ${{ vars.AWS_PRODUCTION_BACKEND_URL }}
 
     steps:
       - name: Check out repository
@@ -431,13 +431,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ -z "${AWS_PRODUCTION_SCAFFOLD_BACKEND_URL}" ]]; then
-            echo "Set AWS_PRODUCTION_SCAFFOLD_BACKEND_URL in the aws-production-scaffold GitHub environment." >&2
+          if [[ -z "${AWS_PRODUCTION_BACKEND_URL}" ]]; then
+            echo "Set AWS_PRODUCTION_BACKEND_URL in the aws-production-scaffold GitHub environment." >&2
             exit 1
           fi
 
-          curl --fail --silent --show-error "${AWS_PRODUCTION_SCAFFOLD_BACKEND_URL}/readyz"
-          response="$(curl --fail --silent --show-error "${AWS_PRODUCTION_SCAFFOLD_BACKEND_URL}/health")"
+          curl --fail --silent --show-error "${AWS_PRODUCTION_BACKEND_URL}/readyz"
+          response="$(curl --fail --silent --show-error "${AWS_PRODUCTION_BACKEND_URL}/health")"
 
           if [[ -n "${EXPECTED_VERSION}" || -n "${EXPECTED_COMMIT}" ]]; then
             if [[ -z "${EXPECTED_VERSION}" || -z "${EXPECTED_COMMIT}" ]]; then
@@ -447,8 +447,8 @@ jobs:
 
             export HEALTH_RESPONSE="${response}"
             export SUCCESS_MESSAGE
-            SUCCESS_MESSAGE="AWS Production Scaffold /health matches expected identity."
-            python3 .github/utils/check_health.py
+          SUCCESS_MESSAGE="AWS Production Scaffold /health matches expected identity."
+          python3 .github/utils/check_health.py
           else
             echo "${response}"
           fi

@@ -1,14 +1,14 @@
-output "aws_production_scaffold_region" {
+output "aws_production_region" {
   description = "Accepted AWS Production Scaffold region."
   value       = var.aws_region
 }
 
-output "aws_production_scaffold_domain" {
+output "aws_production_domain" {
   description = "Accepted AWS Production Scaffold domain."
   value       = var.domain_name
 }
 
-output "aws_production_scaffold_hostnames" {
+output "aws_production_hostnames" {
   description = "Reserved public hostnames for future frontend and backend slices."
   value = {
     frontend = local.dns.frontend_hostname
@@ -27,11 +27,11 @@ output "common_tags" {
 }
 
 output "nat_gateway_default" {
-  description = "Cost guardrail showing NAT Gateway is not part of the default scaffold."
-  value       = local.networking_scaffold.nat_gateway_enabled
+  description = "Cost guardrail showing NAT Gateway is not part of the default AWS Production Scaffold template."
+  value       = local.networking.nat_gateway_enabled
 }
 
-output "scaffold_resource_model" {
+output "aws_production_resource_model" {
   description = "Review boundary for the AWS Production Scaffold Terraform root."
   value = {
     declares_reviewable_resources = true
@@ -41,6 +41,6 @@ output "scaffold_resource_model" {
 }
 
 output "github_actions_deploy_role_arn" {
-  description = "IAM role ARN for the aws-production-scaffold GitHub environment variable AWS_PRODUCTION_SCAFFOLD_ROLE_ARN."
+  description = "IAM role ARN for the aws-production-scaffold GitHub environment variable AWS_PRODUCTION_DEPLOY_ROLE_ARN."
   value       = aws_iam_role.github_actions_deploy.arn
 }

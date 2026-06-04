@@ -1,58 +1,42 @@
 # AWS Production Scaffold Reference
 
-AWS Production Scaffold is a reviewable Stage 2 reference, not a live production environment and not a cutover from DigitalOcean. DO Production remains the active production path through Release PR, Production Promotion, `deploy/production/app.yaml`, and the GitOps Reconciler.
+AWS Production Scaffold is a production-shaped AWS environment for Halligalli portfolio/demo operation. It prepares a future AWS path without implying production cutover. This repository contains the reviewable Terraform shape, workflow wiring, and GitHub Environment value template, but it does not contain real account-specific values and does not create AWS resources by default.
 
-The public repository intentionally contains only sanitized AWS/Terraform deployment architecture. Real account-specific values, tfvars, Terraform state, Terraform plans, GitHub OIDC subjects, Route 53 hosted zone IDs, domain bindings, AWS account wiring, and secrets are excluded from Git.
+The public repository intentionally contains only sanitized AWS/Terraform deployment architecture. Real account-specific values, HCP Terraform workspace wiring, generated tfvars, Terraform state, Terraform plans, GitHub OIDC subjects, Route 53 hosted zone IDs, domain bindings, AWS account wiring, and secrets are excluded from Git.
 
 ## Safety Boundary
 
-Normal pushes and pull requests do not create AWS resources, push ECR images, update ECS, publish frontend assets, change DNS, or alter DO Production.
+Normal pushes and pull requests do not create AWS resources, push ECR images, update ECS, publish frontend assets, or change DNS.
 
 AWS-mutating work requires explicit human action:
 
-1. Copy the example Terraform files into ignored local scaffold config.
-2. Configure local tfvars, AWS credentials, GitHub OIDC to AWS, Route 53, certificates, and GitHub environment values.
-3. Run Terraform plan/apply deliberately from `deploy/aws/` with ignored local state.
-4. Run `.github/workflows/aws-production-scaffold.yml` with `workflow_dispatch`.
-5. For deploy operations, type `PRODUCTION_SCAFFOLD_APPLY` into the `confirm_cost` input.
+1. Bootstrap the dedicated AWS Production Scaffold Terraform Role once outside this Terraform root.
+2. Configure the protected `aws-production-scaffold` GitHub Environment with HCP, AWS, DNS, certificate, domain, OIDC, and runtime values.
+3. Run `.github/workflows/aws-production-scaffold-infra.yml` with `workflow_dispatch`.
+4. For mutating infrastructure operations, type the required confirmation: `AWS_PRODUCTION_APPLY`, `AWS_PRODUCTION_SCALE_DOWN`, or `AWS_PRODUCTION_DESTROY`.
+5. Run `.github/workflows/aws-production-scaffold.yml` separately for frontend/backend application deployment.
 
-Do not commit Terraform state, `.tfvars`, AWS credentials, GitHub secrets, rendered task definitions, or local `.env` files.
+Do not commit Terraform state, `.tfvars`, generated backend config, Terraform plans, AWS credentials, GitHub secrets, rendered task definitions, or local `.env` files. Do not upload those files as workflow artifacts or cache entries.
 
 ## Architecture
 
 | Concern | Reference |
 |---|---|
 | Region | `eu-west-1` |
-| Domain | Example value in Git; real domain comes from ignored local tfvars |
+| Domain | Example value in Git; real domain comes from GitHub Environment values |
 | Frontend | Vite static assets in S3 behind CloudFront |
 | Backend | Node.js 24/socket.io container in ECR and ECS Fargate behind an ALB |
 | DNS | Route 53 records for configured scaffold subdomains |
-| State | Ignored local Terraform state under `deploy/aws/` until AWS becomes the production path |
-| Production | Unchanged DO Production using GHCR Release Images |
+| State | HCP Terraform remote state; Terraform CLI runs on GitHub Actions |
+| Runtime parameters | Protected `aws-production-scaffold` GitHub Environment |
 
-The frontend build uses `VITE_HALLIGALLI_BACKEND_URL` from the configured scaffold backend URL. The backend task uses `HALLIGALLI_ALLOWED_ORIGINS` derived from the configured scaffold frontend URL.
+The frontend build uses `VITE_HALLIGALLI_BACKEND_URL` from the configured backend URL. The backend task uses `HALLIGALLI_ALLOWED_ORIGINS` derived from the configured frontend URL.
 
-`/readyz` is the Readiness Surface for traffic checks. `/health` still reports Release Identity for smoke and drift checks.
-
-## Local Terraform Files
-
-Create ignored local scaffold config from the examples:
-
-```bash
-cd deploy/aws
-mkdir -p environments/aws-production-scaffold
-cp terraform.tfvars.example environments/aws-production-scaffold/terraform.tfvars
-```
-
-Edit `environments/aws-production-scaffold/terraform.tfvars` with the real scaffold domain, Route 53 hosted zone ID, ACM certificate ARN, GitHub repository, OIDC subjects, image tag, desired count, and other environment values.
-
-Terraform state is local for the current AWS Production Scaffold phase. Keep `terraform.tfstate`, `.terraform/`, plans, and local tfvars ignored.
-
-Do not migrate AWS Production Scaffold to remote Terraform state merely because the environment is live. Remote state is deferred until AWS becomes the production path.
+`/readyz` is the Readiness Surface for traffic checks. `/health` reports Release Identity for smoke checks and rollback verification.
 
 ## Local Validation
 
-These commands do not require AWS credentials:
+These commands do not require AWS credentials or HCP Terraform access:
 
 ```bash
 terraform -chdir=deploy/aws fmt -check -recursive
@@ -66,135 +50,134 @@ pnpm run build
 
 Do not use `terraform apply` as a validation shortcut.
 
-## Activating A Real AWS Production Scaffold Environment
+## Infrastructure Operation
 
-Use this order when turning the reference into a live AWS Production Scaffold environment with local Terraform state. Do not skip the bootstrap sequence: the first ECS service cannot run a real task until the ECR repository exists and contains an image.
-
-1. Fill `deploy/aws/environments/aws-production-scaffold/terraform.tfvars`.
-2. Configure local AWS credentials for Terraform infrastructure operations.
-3. Let Terraform create the GitHub OIDC deploy role, or provide an existing GitHub OIDC provider ARN through `github_oidc_provider_arn`.
-4. Run:
-
-```bash
-terraform -chdir=deploy/aws init -input=false
-terraform -chdir=deploy/aws plan \
-  -var-file=environments/aws-production-scaffold/terraform.tfvars
-```
-
-5. Review the cost-bearing resources before apply.
-6. Apply with `backend_desired_count=0` and a placeholder `backend_image_tag` so Terraform can create the base infrastructure and ECR repository without requiring a runnable backend task.
-7. Copy Terraform outputs into the GitHub `aws-production-scaffold` environment variables listed below.
-8. Push a seed backend image to the ECR repository. Use a one-off operator push during first activation, then use the workflow for normal backend deployments after the service can pass smoke checks.
-9. Re-run Terraform with `backend_image_tag` matching the seed image tag and `backend_desired_count=1`, or leave desired count at `0` until a demo window.
-10. Run the `AWS Production Scaffold` workflow with `operation=deploy-backend` and `confirm_cost=PRODUCTION_SCAFFOLD_APPLY`.
-11. Run `operation=deploy-frontend` with `confirm_cost=PRODUCTION_SCAFFOLD_APPLY`.
-12. Run `operation=smoke-backend`, then verify the public frontend, `/readyz`, `/health`, and socket.io multiplayer path.
-
-If the environment is only being prepared for a short portfolio demo, keep `backend_desired_count=0` outside the demo window and scale up deliberately.
-
-## Terraform Variables
-
-The real values below belong in ignored local tfvars, not Git:
-
-| Variable | Required for live apply | Purpose |
-|---|---|---|
-| `domain_name` | Yes | Scaffold domain controlled by the operator. |
-| `route53_zone_id` | Yes | Hosted zone ID for certificate validation and frontend/backend aliases. |
-| `frontend_cloudfront_enabled` | Yes | Enables the CloudFront distribution after the frontend slice is ready to serve traffic. |
-| `backend_certificate_arn` | Yes | ACM certificate ARN in `eu-west-1` for the backend ALB listener. |
-| `backend_image_tag` | Yes | ECR image tag expected by the ECS task definition. |
-| `backend_desired_count` | Yes | `0` for bootstrap/teardown, `1` for demos. Values above `1` are intentionally out of scope. |
-| `github_repository` | Yes | GitHub owner/repository allowed to assume the deploy role. |
-| `github_oidc_provider_arn` | Optional | Existing GitHub OIDC provider ARN. Leave null for this root to create the provider. |
-| `github_oidc_thumbprint_list` | Optional | GitHub OIDC provider thumbprints used only when this root creates the provider. |
-| `github_oidc_subjects` | Yes | Allowed GitHub OIDC `sub` claims, scoped to the `aws-production-scaffold` GitHub environment. |
-| `backend_app_version` | Optional | Placeholder Release Identity in the Terraform-managed task definition. |
-| `backend_commit_sha` | Optional | Placeholder commit SHA in the Terraform-managed task definition. |
-| `backend_task_cpu` | Optional | Small Fargate CPU size for scaffold demos. |
-| `backend_task_memory` | Optional | Small Fargate memory size for scaffold demos. |
-
-Terraform owns the baseline ECS task definition, but normal AWS Production Scaffold image rollout is workflow-owned. The ECS service ignores `task_definition` drift so a later local Terraform apply does not roll the service back from a workflow-deployed image revision. Do not remove that drift guard unless Terraform becomes the owner of AWS Production Scaffold application rollout.
-
-## GitHub Configuration
-
-Future manual deploys use the `aws-production-scaffold` GitHub environment.
-
-| Type | Name | Purpose |
-|---|---|---|
-| Variable | `AWS_PRODUCTION_SCAFFOLD_ROLE_ARN` | IAM role assumed by GitHub Actions through OIDC for manual scaffold deploys. |
-| Variable | `AWS_PRODUCTION_SCAFFOLD_FRONTEND_URL` | Public scaffold frontend URL. |
-| Variable | `AWS_PRODUCTION_SCAFFOLD_BACKEND_URL` | Public scaffold backend URL used by frontend builds and smoke checks. |
-| Variable | `AWS_PRODUCTION_SCAFFOLD_FRONTEND_BUCKET` | S3 bucket created by Terraform for frontend assets. |
-| Variable | `AWS_PRODUCTION_SCAFFOLD_CLOUDFRONT_DISTRIBUTION_ID` | CloudFront distribution to invalidate after frontend sync. |
-| Variable | `AWS_PRODUCTION_SCAFFOLD_ECR_REGISTRY` | ECR registry host, for example `<account>.dkr.ecr.eu-west-1.amazonaws.com`. |
-| Variable | `AWS_PRODUCTION_SCAFFOLD_ECR_REPOSITORY` | ECR repository name for the scaffold backend image. |
-| Variable | `AWS_PRODUCTION_SCAFFOLD_ECS_CLUSTER` | ECS cluster name. |
-| Variable | `AWS_PRODUCTION_SCAFFOLD_ECS_SERVICE` | ECS service name. |
-| Variable | `AWS_PRODUCTION_SCAFFOLD_TASK_FAMILY` | ECS task definition family. |
-| Variable | `AWS_PRODUCTION_SCAFFOLD_CONTAINER_NAME` | ECS container name, currently `backend`. |
-
-The live activation path uses `aws-actions/configure-aws-credentials` to assume `AWS_PRODUCTION_SCAFFOLD_ROLE_ARN` through GitHub OIDC. Do not reintroduce long-lived `AWS_PRODUCTION_SCAFFOLD_ACCESS_KEY_ID` or `AWS_PRODUCTION_SCAFFOLD_SECRET_ACCESS_KEY` secrets for scaffold deploys. OIDC requires `id-token: write`; keep that permission scoped to scaffold deployment automation.
-
-Store real values only in ignored local files or GitHub environment variables. Never commit them, and do not put Terraform state in GitHub Actions artifacts or caches.
-
-## GitHub OIDC Requirements
-
-The AWS IAM role for scaffold deploys should trust only this repository and the `aws-production-scaffold` GitHub environment. The trust boundary should be scoped to `repo:<owner>/<repo>:environment:aws-production-scaffold`, not every branch or workflow in the repository.
-
-Use a permission policy scoped to the deploy behavior:
-
-- S3 object sync for the frontend asset bucket.
-- CloudFront invalidation for the scaffold distribution.
-- ECR login, image layer upload, and image push for the scaffold backend repository.
-- ECS task definition read/register, service update, and service stability checks for the scaffold cluster/service.
-- IAM `PassRole` only for the ECS task execution/task roles created for this scaffold stack.
-
-Do not use an administrator role for portfolio deploys. Keep Terraform infrastructure credentials separate from GitHub Actions deploy credentials.
-
-## Manual Workflow
-
-`AWS Production Scaffold` supports these manual operations:
+`AWS Production Scaffold Infrastructure` supports these manual operations:
 
 | Operation | Behavior |
 |---|---|
-| `validate` | Runs release config validation and Terraform static validation only. |
-| `deploy-frontend` | Builds with `VITE_HALLIGALLI_BACKEND_URL`, syncs static assets to S3, and invalidates CloudFront. Requires `PRODUCTION_SCAFFOLD_APPLY`. |
-| `deploy-backend` | Builds and pushes an ECR image, updates ECS to a new task definition revision, waits for stability, then checks `/readyz` and `/health`. Requires `PRODUCTION_SCAFFOLD_APPLY`. |
-| `smoke-backend` | Checks `/readyz` and `/health` against the configured backend URL. It prints the `/health` JSON by default, and validates release identity with `.github/utils/check_health.py` when both expected version and expected commit inputs are provided. |
+| `plan` | Generates a real Terraform plan from GitHub Environment values, AWS account state, and HCP Terraform remote state. |
+| `apply` | Generates a fresh saved plan and applies it in the same workflow run. Requires `AWS_PRODUCTION_APPLY`. |
+| `scale-down` | Generates a fresh saved plan with `backend_desired_count=0` and applies it. Requires `AWS_PRODUCTION_SCALE_DOWN`. |
+| `destroy` | Generates a fresh destroy plan and applies it. Requires `AWS_PRODUCTION_DESTROY`. |
 
-Normal CI/CD required checks remain `Product checks` and `Container build and scan`. AWS Production Scaffold infrastructure changes are classified as Delivery Control, so the PR still reports stable required checks without deploying AWS resources.
+The workflow runs Terraform CLI on the GitHub Actions runner. HCP Terraform stores remote state and state versions; it does not execute Terraform runs for this project phase.
 
-## Live Acceptance Checklist
+The workflow generates private files under the runner temp directory:
 
-Stage 2.1 is complete only when all of these are true:
+- `backend.hcl`
+- `terraform.auto.tfvars.json`
+- `tfplan`
 
-- Local Terraform state is ignored, and no state or `.tfvars` are committed to Git.
-- GitHub deploy jobs authenticate to AWS through OIDC, not long-lived access keys.
-- The configured scaffold frontend serves over HTTPS.
-- The configured scaffold backend returns readiness through the ALB.
-- The configured scaffold backend `/health` returns the expected scaffold image tag and commit SHA.
+These files are not committed, cached, or uploaded as artifacts.
+
+## First Activation
+
+Use this order when activating the AWS Production Scaffold environment. Do not skip the bootstrap sequence: the first ECS service cannot run a real task until the ECR repository exists and contains an image.
+
+1. Bootstrap the AWS Production Scaffold Terraform Role so GitHub OIDC can assume it.
+2. Configure the `aws-production-scaffold` GitHub Environment values listed below.
+3. Run `AWS Production Scaffold Infrastructure` with `operation=plan`.
+4. Review the cost-bearing resources.
+5. Run `operation=apply` with `confirm=AWS_PRODUCTION_APPLY`, using `backend_desired_count=0` and a placeholder `backend_image_tag` so Terraform can create the base infrastructure and ECR repository without requiring a runnable backend task.
+6. Copy Terraform outputs into the GitHub Environment variables used by the application deployment workflow.
+7. Push a seed backend image to the ECR repository. Use a one-off operator push during first activation, then use the workflow for normal backend deployments after the service can pass smoke checks.
+8. Run `operation=apply` again with `backend_desired_count=1` when ready to serve traffic, or keep the backend scaled down.
+9. Run `AWS Production Scaffold` with `operation=deploy-backend` and `confirm_cost=AWS_PRODUCTION_APPLY`.
+10. Run `operation=deploy-frontend` with `confirm_cost=AWS_PRODUCTION_APPLY`.
+11. Run `operation=smoke-backend`, then verify the public frontend, `/readyz`, `/health`, and socket.io multiplayer path.
+
+## GitHub Environment Values
+
+Store real values in the `aws-production-scaffold` GitHub Environment. Use `deploy/aws/github-environment.example` as the key template.
+
+### Infrastructure Workflow
+
+| Type | Name | Purpose |
+|---|---|---|
+| Secret | `HCP_TERRAFORM_TOKEN` | Terraform CLI credential for HCP Terraform remote state. |
+| Variable | `HCP_TERRAFORM_ORGANIZATION` | HCP Terraform organization for generated backend config. |
+| Variable | `HCP_TERRAFORM_WORKSPACE` | HCP Terraform workspace for remote state. |
+| Variable | `HCP_TERRAFORM_WORKSPACE_URL` | GitHub Environment URL target for infrastructure runs. |
+| Variable | `AWS_PRODUCTION_TERRAFORM_ROLE_ARN` | IAM role assumed by the infrastructure workflow through GitHub OIDC. |
+| Variable | `AWS_PRODUCTION_PROJECT_NAME` | Optional project-name override; defaults to `halligalli`. |
+| Variable | `AWS_PRODUCTION_AWS_REGION` | Optional runtime Region override; currently constrained to `eu-west-1`. |
+| Variable | `AWS_PRODUCTION_DOMAIN_NAME` | Scaffold domain controlled by the operator. |
+| Variable | `AWS_PRODUCTION_FRONTEND_SUBDOMAIN` | Optional frontend subdomain override; defaults to `play`. |
+| Variable | `AWS_PRODUCTION_BACKEND_SUBDOMAIN` | Optional Backend Entry subdomain override; defaults to `api`. |
+| Variable | `AWS_PRODUCTION_ROUTE53_ZONE_ID` | Hosted zone ID for certificate validation and frontend/backend aliases. |
+| Variable | `AWS_PRODUCTION_FRONTEND_CLOUDFRONT_ENABLED` | Enables the CloudFront distribution after the frontend slice is ready to serve traffic. |
+| Variable | `AWS_PRODUCTION_BACKEND_CERTIFICATE_ARN` | ACM certificate ARN in `eu-west-1` for the backend ALB listener. |
+| Variable | `AWS_PRODUCTION_BACKEND_IMAGE_TAG` | Bootstrap/baseline ECR image tag for the Terraform-managed task definition. |
+| Variable | `AWS_PRODUCTION_BACKEND_DESIRED_COUNT` | `0` for bootstrap or scale down, `1` to serve traffic. |
+| Variable | `AWS_PRODUCTION_BACKEND_TASK_CPU` | Optional backend Fargate CPU override; defaults to `256`. |
+| Variable | `AWS_PRODUCTION_BACKEND_TASK_MEMORY` | Optional backend Fargate memory override; defaults to `512`. |
+| Variable | `AWS_PRODUCTION_GITHUB_REPOSITORY` | GitHub owner/repository allowed to assume AWS Production Scaffold roles. |
+| Variable | `AWS_PRODUCTION_GITHUB_OIDC_SUBJECTS` | Allowed GitHub OIDC `sub` claims. JSON array or comma-separated string. |
+| Variable | `AWS_PRODUCTION_GITHUB_OIDC_PROVIDER_ARN` | Optional existing GitHub OIDC provider ARN. |
+| Variable | `AWS_PRODUCTION_BACKEND_APP_VERSION` | Optional baseline Release Identity in the Terraform-managed task definition. |
+| Variable | `AWS_PRODUCTION_BACKEND_COMMIT_SHA` | Optional baseline commit SHA in the Terraform-managed task definition. |
+
+### Deployment Workflow
+
+| Type | Name | Purpose |
+|---|---|---|
+| Variable | `AWS_PRODUCTION_DEPLOY_ROLE_ARN` | Narrow IAM role assumed by GitHub Actions through OIDC for manual deploys. |
+| Variable | `AWS_PRODUCTION_FRONTEND_URL` | Public frontend URL. |
+| Variable | `AWS_PRODUCTION_BACKEND_URL` | Public backend URL used by frontend builds and smoke checks. |
+| Variable | `AWS_PRODUCTION_FRONTEND_BUCKET` | S3 bucket created by Terraform for frontend assets. |
+| Variable | `AWS_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID` | CloudFront distribution to invalidate after frontend sync. |
+| Variable | `AWS_PRODUCTION_ECR_REGISTRY` | ECR registry host, for example `<account>.dkr.ecr.eu-west-1.amazonaws.com`. |
+| Variable | `AWS_PRODUCTION_ECR_REPOSITORY` | ECR repository name for the backend image. |
+| Variable | `AWS_PRODUCTION_ECS_CLUSTER` | ECS cluster name. |
+| Variable | `AWS_PRODUCTION_ECS_SERVICE` | ECS service name. |
+| Variable | `AWS_PRODUCTION_TASK_FAMILY` | ECS task definition family. |
+| Variable | `AWS_PRODUCTION_CONTAINER_NAME` | ECS container name, currently `backend`. |
+
+## Ownership Boundary
+
+Terraform owns the infrastructure shape and remote state. It may change ECS desired count for lifecycle operations.
+
+The deployment workflow owns normal application artifact rollout:
+
+- frontend build, S3 sync, and CloudFront invalidation
+- backend image build and ECR push
+- ECS task definition revision registration
+- ECS service update and smoke checks
+
+Terraform owns the baseline ECS task definition, but normal AWS Production Scaffold image rollout is workflow-owned. The ECS service ignores `task_definition` drift so a later Terraform apply does not roll the service back from a workflow-deployed image revision. Do not remove that drift guard unless Terraform becomes the owner of AWS Production Scaffold application rollout.
+
+## GitHub OIDC Requirements
+
+The AWS IAM trust boundary should be scoped to this repository and the `aws-production-scaffold` GitHub Environment, not every branch or workflow in the repository.
+
+Use two roles:
+
+- Terraform role: manages AWS Production Scaffold infrastructure through Terraform.
+- Deploy role: publishes application artifacts to existing AWS resources.
+
+Do not use an administrator role. Do not reintroduce long-lived AWS access key secrets. OIDC requires `id-token: write`; keep that permission scoped to AWS Production Scaffold automation.
+
+## Activation Checklist
+
+AWS Production Scaffold is ready only when all of these are true:
+
+- HCP Terraform remote state works, and no state, plan, generated backend config, generated tfvars, or secrets are committed to Git.
+- GitHub infrastructure jobs authenticate to AWS through the Terraform role.
+- GitHub deploy jobs authenticate to AWS through the deploy role.
+- The configured frontend serves over HTTPS.
+- The configured backend returns readiness through the ALB.
+- The configured backend `/health` returns the expected image tag and commit SHA.
 - Browser multiplayer works from the AWS Production Scaffold frontend over WSS/socket.io.
-- `AWS Production Scaffold` can deploy frontend and backend separately through manual dispatch.
+- The infrastructure workflow can run `plan`, `apply`, `scale-down`, and `destroy` through manual dispatch.
+- The deployment workflow can deploy frontend and backend separately through manual dispatch.
 - CloudWatch Logs contain backend startup and request logs useful for basic debugging.
-- Terraform can recreate the environment from the committed root plus ignored local configuration.
-- The documented teardown or scale-down path has been tested.
-- DO Production remains available and unchanged by AWS Production Scaffold activation.
 
 ## Cost And Lifecycle
 
-The intended lifecycle is demo-oriented:
+The template is cost-aware before activation:
 
-1. Apply or scale up only when preparing a portfolio demo.
-2. Demo the frontend, backend, `/readyz`, `/health`, and socket.io multiplayer path.
-3. Destroy or scale down afterward.
-
-Cost risks to watch:
-
-- ALB hourly charges.
-- Public IPv4 charges for public load balancer and Fargate task networking.
-- Fargate task runtime while `backend_desired_count = 1`.
-- CloudFront/S3 request and transfer costs.
-- CloudWatch Logs ingestion and retention.
-- NAT Gateway is intentionally not part of the default scaffold; do not add it without a separate cost decision.
-
-For teardown, prefer Terraform-managed destroy for temporary demo infrastructure. If keeping the stack, set the backend desired count to `0` when not showing it and keep CloudWatch retention short.
+1. Keep `backend_desired_count=0` while bootstrapping infrastructure.
+2. Set `backend_desired_count=1` only when ready to serve traffic.
+3. Use `scale-down` when AWS Production Scaffold does not need to be online.
+4. Run `destroy` only when intentionally tearing down the environment.

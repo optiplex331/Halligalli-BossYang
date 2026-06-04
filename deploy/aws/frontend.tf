@@ -2,7 +2,7 @@ locals {
   frontend = {
     hostname            = local.dns.frontend_hostname
     public_url          = "https://${local.dns.frontend_hostname}"
-    backend_url         = local.backend_scaffold.backend_entry
+    backend_url         = local.backend_runtime.backend_entry
     bucket_prefix       = "${local.name_prefix}-frontend-"
     s3_origin_id        = "${local.name_prefix}-frontend-s3"
     certificate_region  = local.dns.cloudfront_certificate_region
@@ -10,11 +10,11 @@ locals {
     default_root_object = "index.html"
 
     vite_environment = {
-      VITE_HALLIGALLI_BACKEND_URL = local.backend_scaffold.backend_entry
+      VITE_HALLIGALLI_BACKEND_URL = local.backend_runtime.backend_entry
     }
   }
 
-  frontend_scaffold = {
+  frontend_static = {
     purpose                = "Serve the Vite static build for AWS Production Scaffold"
     hostname               = local.frontend.hostname
     public_url             = local.frontend.public_url

@@ -1,0 +1,5 @@
+organization = "example-org"
+
+workspaces {
+  name = "aws-production-scaffold"
+}

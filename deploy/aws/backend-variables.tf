@@ -1,5 +1,5 @@
 variable "backend_certificate_arn" {
-  description = "ACM certificate ARN for the HTTPS Backend Entry. Supply a real eu-west-1 certificate only in ignored local tfvars."
+  description = "ACM certificate ARN for the HTTPS Backend Entry. Supply a real eu-west-1 certificate through GitHub Environment values."
   type        = string
 
   validation {
@@ -37,7 +37,7 @@ variable "backend_task_cpu" {
 
   validation {
     condition     = contains([256, 512, 1024], var.backend_task_cpu)
-    error_message = "Backend task CPU must use a small Fargate size suitable for scaffold demos."
+    error_message = "Backend task CPU must use an accepted small Fargate size."
   }
 }
 
@@ -48,7 +48,7 @@ variable "backend_task_memory" {
 
   validation {
     condition     = contains([512, 1024, 2048], var.backend_task_memory)
-    error_message = "Backend task memory must use a small Fargate size suitable for scaffold demos."
+    error_message = "Backend task memory must use an accepted small Fargate size."
   }
 }
 

@@ -1,5 +1,5 @@
 locals {
-  backend_scaffold = {
+  backend_runtime = {
     purpose                    = "Run the Node.js 24 socket.io backend for AWS Production Scaffold"
     hostname                   = local.dns.backend_hostname
     image_registry             = "Amazon ECR"
@@ -64,7 +64,7 @@ resource "aws_ecr_lifecycle_policy" "backend" {
 }
 
 resource "aws_vpc" "backend" {
-  cidr_block           = local.networking_scaffold.vpc_cidr
+  cidr_block           = local.networking.vpc_cidr
   enable_dns_hostnames = true
   enable_dns_support   = true
 
@@ -78,7 +78,7 @@ data "aws_availability_zones" "backend_available" {
 }
 
 resource "aws_subnet" "backend_public" {
-  count = local.networking_scaffold.public_subnet_count
+  count = local.networking.public_subnet_count
 
   vpc_id                  = aws_vpc.backend.id
   availability_zone       = data.aws_availability_zones.backend_available.names[count.index]
@@ -161,8 +161,8 @@ resource "aws_vpc_security_group_egress_rule" "backend_alb_to_task" {
   security_group_id            = aws_security_group.backend_alb.id
   description                  = "Forward HTTP traffic to backend tasks"
   ip_protocol                  = "tcp"
-  from_port                    = local.backend_scaffold.container_port
-  to_port                      = local.backend_scaffold.container_port
+  from_port                    = local.backend_runtime.container_port
+  to_port                      = local.backend_runtime.container_port
   referenced_security_group_id = aws_security_group.backend_task.id
 }
 
@@ -170,8 +170,8 @@ resource "aws_vpc_security_group_ingress_rule" "backend_task_from_alb" {
   security_group_id            = aws_security_group.backend_task.id
   description                  = "Accept backend traffic from the ALB"
   ip_protocol                  = "tcp"
-  from_port                    = local.backend_scaffold.container_port
-  to_port                      = local.backend_scaffold.container_port
+  from_port                    = local.backend_runtime.container_port
+  to_port                      = local.backend_runtime.container_port
   referenced_security_group_id = aws_security_group.backend_alb.id
 }
 
@@ -200,14 +200,14 @@ resource "aws_lb" "backend" {
 
 resource "aws_lb_target_group" "backend" {
   name        = "${local.name_prefix}-backend"
-  port        = local.backend_scaffold.container_port
+  port        = local.backend_runtime.container_port
   protocol    = "HTTP"
   target_type = "ip"
   vpc_id      = aws_vpc.backend.id
 
   health_check {
     enabled             = true
-    path                = local.backend_scaffold.readiness_path
+    path                = local.backend_runtime.readiness_path
     protocol            = "HTTP"
     matcher             = "200"
     interval            = 30
@@ -314,14 +314,14 @@ resource "aws_ecs_task_definition" "backend" {
 
   container_definitions = jsonencode([
     {
-      name      = local.backend_scaffold.container_name
+      name      = local.backend_runtime.container_name
       image     = "${aws_ecr_repository.backend.repository_url}:${var.backend_image_tag}"
       essential = true
 
       portMappings = [
         {
-          containerPort = local.backend_scaffold.container_port
-          hostPort      = local.backend_scaffold.container_port
+          containerPort = local.backend_runtime.container_port
+          hostPort      = local.backend_runtime.container_port
           protocol      = "tcp"
           appProtocol   = "http"
         },
@@ -334,11 +334,11 @@ resource "aws_ecs_task_definition" "backend" {
         },
         {
           name  = "PORT"
-          value = tostring(local.backend_scaffold.container_port)
+          value = tostring(local.backend_runtime.container_port)
         },
         {
           name  = "HALLIGALLI_ALLOWED_ORIGINS"
-          value = local.backend_scaffold.allowed_origins
+          value = local.backend_runtime.allowed_origins
         },
         {
           name  = "APP_VERSION"
@@ -351,7 +351,7 @@ resource "aws_ecs_task_definition" "backend" {
       ]
 
       healthCheck = {
-        command     = ["CMD-SHELL", "wget -qO- http://127.0.0.1:${local.backend_scaffold.container_port}${local.backend_scaffold.readiness_path} >/dev/null || exit 1"]
+        command     = ["CMD-SHELL", "wget -qO- http://127.0.0.1:${local.backend_runtime.container_port}${local.backend_runtime.readiness_path} >/dev/null || exit 1"]
         interval    = 30
         timeout     = 5
         retries     = 3
@@ -363,7 +363,7 @@ resource "aws_ecs_task_definition" "backend" {
         options = {
           awslogs-group         = aws_cloudwatch_log_group.backend.name
           awslogs-region        = var.aws_region
-          awslogs-stream-prefix = local.backend_scaffold.container_name
+          awslogs-stream-prefix = local.backend_runtime.container_name
         }
       }
     },
@@ -378,7 +378,7 @@ resource "aws_ecs_service" "backend" {
   launch_type                        = "FARGATE"
   health_check_grace_period_seconds  = 60
   deployment_minimum_healthy_percent = 0
-  deployment_maximum_percent         = local.backend_scaffold.deployment_maximum_percent
+  deployment_maximum_percent         = local.backend_runtime.deployment_maximum_percent
   wait_for_steady_state              = false
 
   network_configuration {
@@ -389,8 +389,8 @@ resource "aws_ecs_service" "backend" {
 
   load_balancer {
     target_group_arn = aws_lb_target_group.backend.arn
-    container_name   = local.backend_scaffold.container_name
-    container_port   = local.backend_scaffold.container_port
+    container_name   = local.backend_runtime.container_name
+    container_port   = local.backend_runtime.container_port
   }
 
   depends_on = [
@@ -414,7 +414,7 @@ check "backend_single_task_default" {
 
 check "backend_readiness_surface" {
   assert {
-    condition     = local.backend_scaffold.readiness_path == "/readyz"
+    condition     = local.backend_runtime.readiness_path == "/readyz"
     error_message = "AWS Production Scaffold backend readiness checks must use /readyz."
   }
 }
