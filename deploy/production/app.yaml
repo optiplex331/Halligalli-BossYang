@@ -6,7 +6,7 @@ services:
     registry_type: GHCR
     registry: optiplex331
     repository: halligalli-bossyang
-    digest: sha256:f6adeabd5007292b4785e80b145d3ee512ff54b84cde19144cb81ffb73ae1766
+    digest: sha256:1a73be44170a112c1a50b2234bcb4cdcb6368fc2d220d16569428a72aea4b8f3
   instance_count: 1
   instance_size_slug: apps-s-1vcpu-0.5gb
   http_port: 3001
@@ -14,6 +14,6 @@ services:
   - key: NODE_ENV
     value: production
   - key: APP_VERSION
-    value: 0.2.0
+    value: 0.3.0
   - key: COMMIT_SHA
-    value: 8ac2bdf60ee386bd78346e8cfea01071f95f16ad
+    value: e9b2b6eed02a21b6f037b7ae514d3387ba94c298
