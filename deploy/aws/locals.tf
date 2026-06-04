@@ -15,7 +15,7 @@ locals {
   }
 
   cost_guardrails = {
-    live_production_provider    = "DigitalOcean"
+    live_production_provider    = "current-production-path"
     production_lifecycle        = "AWS scaffold manual activation; scale down outside demo windows"
     automatic_apply             = false
     deletion_protection_default = false
