@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate private Terraform config files for AWS Production CI."""
+"""Generate private Terraform config files for AWS Production Scaffold CI."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 def required(name: str) -> str:
     value = os.environ.get(name, "").strip()
     if not value:
-        raise SystemExit(f"Set {name} in the aws-production GitHub environment.")
+        raise SystemExit(f"Set {name} in the aws-production-scaffold GitHub environment.")
     return value
 
 

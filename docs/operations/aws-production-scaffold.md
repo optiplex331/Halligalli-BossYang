@@ -1,6 +1,6 @@
-# AWS Production Reference
+# AWS Production Scaffold Reference
 
-AWS Production is the target production environment for Halligalli. This repository contains the reviewable Terraform shape, workflow wiring, and GitHub Environment value template, but it does not contain real account-specific values and does not create AWS resources by default.
+AWS Production Scaffold is a production-shaped AWS environment for Halligalli portfolio/demo operation. It prepares a future AWS path without implying production cutover. This repository contains the reviewable Terraform shape, workflow wiring, and GitHub Environment value template, but it does not contain real account-specific values and does not create AWS resources by default.
 
 The public repository intentionally contains only sanitized AWS/Terraform deployment architecture. Real account-specific values, HCP Terraform workspace wiring, generated tfvars, Terraform state, Terraform plans, GitHub OIDC subjects, Route 53 hosted zone IDs, domain bindings, AWS account wiring, and secrets are excluded from Git.
 
@@ -10,11 +10,11 @@ Normal pushes and pull requests do not create AWS resources, push ECR images, up
 
 AWS-mutating work requires explicit human action:
 
-1. Bootstrap the dedicated AWS Production Terraform Role once outside this Terraform root.
-2. Configure the protected `aws-production` GitHub Environment with HCP, AWS, DNS, certificate, domain, OIDC, and runtime values.
-3. Run `.github/workflows/aws-production-infra.yml` with `workflow_dispatch`.
+1. Bootstrap the dedicated AWS Production Scaffold Terraform Role once outside this Terraform root.
+2. Configure the protected `aws-production-scaffold` GitHub Environment with HCP, AWS, DNS, certificate, domain, OIDC, and runtime values.
+3. Run `.github/workflows/aws-production-scaffold-infra.yml` with `workflow_dispatch`.
 4. For mutating infrastructure operations, type the required confirmation: `AWS_PRODUCTION_APPLY`, `AWS_PRODUCTION_SCALE_DOWN`, or `AWS_PRODUCTION_DESTROY`.
-5. Run `.github/workflows/aws-production.yml` separately for frontend/backend application deployment.
+5. Run `.github/workflows/aws-production-scaffold.yml` separately for frontend/backend application deployment.
 
 Do not commit Terraform state, `.tfvars`, generated backend config, Terraform plans, AWS credentials, GitHub secrets, rendered task definitions, or local `.env` files. Do not upload those files as workflow artifacts or cache entries.
 
@@ -26,9 +26,9 @@ Do not commit Terraform state, `.tfvars`, generated backend config, Terraform pl
 | Domain | Example value in Git; real domain comes from GitHub Environment values |
 | Frontend | Vite static assets in S3 behind CloudFront |
 | Backend | Node.js 24/socket.io container in ECR and ECS Fargate behind an ALB |
-| DNS | Route 53 records for configured production subdomains |
+| DNS | Route 53 records for configured scaffold subdomains |
 | State | HCP Terraform remote state; Terraform CLI runs on GitHub Actions |
-| Runtime parameters | Protected `aws-production` GitHub Environment |
+| Runtime parameters | Protected `aws-production-scaffold` GitHub Environment |
 
 The frontend build uses `VITE_HALLIGALLI_BACKEND_URL` from the configured backend URL. The backend task uses `HALLIGALLI_ALLOWED_ORIGINS` derived from the configured frontend URL.
 
@@ -52,7 +52,7 @@ Do not use `terraform apply` as a validation shortcut.
 
 ## Infrastructure Operation
 
-`AWS Production Infrastructure` supports these manual operations:
+`AWS Production Scaffold Infrastructure` supports these manual operations:
 
 | Operation | Behavior |
 |---|---|
@@ -73,23 +73,23 @@ These files are not committed, cached, or uploaded as artifacts.
 
 ## First Activation
 
-Use this order when turning the template into a live AWS Production environment. Do not skip the bootstrap sequence: the first ECS service cannot run a real task until the ECR repository exists and contains an image.
+Use this order when activating the AWS Production Scaffold environment. Do not skip the bootstrap sequence: the first ECS service cannot run a real task until the ECR repository exists and contains an image.
 
-1. Bootstrap the AWS Production Terraform Role so GitHub OIDC can assume it.
-2. Configure the `aws-production` GitHub Environment values listed below.
-3. Run `AWS Production Infrastructure` with `operation=plan`.
+1. Bootstrap the AWS Production Scaffold Terraform Role so GitHub OIDC can assume it.
+2. Configure the `aws-production-scaffold` GitHub Environment values listed below.
+3. Run `AWS Production Scaffold Infrastructure` with `operation=plan`.
 4. Review the cost-bearing resources.
 5. Run `operation=apply` with `confirm=AWS_PRODUCTION_APPLY`, using `backend_desired_count=0` and a placeholder `backend_image_tag` so Terraform can create the base infrastructure and ECR repository without requiring a runnable backend task.
 6. Copy Terraform outputs into the GitHub Environment variables used by the application deployment workflow.
 7. Push a seed backend image to the ECR repository. Use a one-off operator push during first activation, then use the workflow for normal backend deployments after the service can pass smoke checks.
 8. Run `operation=apply` again with `backend_desired_count=1` when ready to serve traffic, or keep the backend scaled down.
-9. Run `AWS Production` with `operation=deploy-backend` and `confirm_cost=AWS_PRODUCTION_APPLY`.
+9. Run `AWS Production Scaffold` with `operation=deploy-backend` and `confirm_cost=AWS_PRODUCTION_APPLY`.
 10. Run `operation=deploy-frontend` with `confirm_cost=AWS_PRODUCTION_APPLY`.
 11. Run `operation=smoke-backend`, then verify the public frontend, `/readyz`, `/health`, and socket.io multiplayer path.
 
 ## GitHub Environment Values
 
-Store real values in the `aws-production` GitHub Environment. Use `deploy/aws/github-environment.example` as the key template.
+Store real values in the `aws-production-scaffold` GitHub Environment. Use `deploy/aws/github-environment.example` as the key template.
 
 ### Infrastructure Workflow
 
@@ -102,7 +102,7 @@ Store real values in the `aws-production` GitHub Environment. Use `deploy/aws/gi
 | Variable | `AWS_PRODUCTION_TERRAFORM_ROLE_ARN` | IAM role assumed by the infrastructure workflow through GitHub OIDC. |
 | Variable | `AWS_PRODUCTION_PROJECT_NAME` | Optional project-name override; defaults to `halligalli`. |
 | Variable | `AWS_PRODUCTION_AWS_REGION` | Optional runtime Region override; currently constrained to `eu-west-1`. |
-| Variable | `AWS_PRODUCTION_DOMAIN_NAME` | Production domain controlled by the operator. |
+| Variable | `AWS_PRODUCTION_DOMAIN_NAME` | Scaffold domain controlled by the operator. |
 | Variable | `AWS_PRODUCTION_FRONTEND_SUBDOMAIN` | Optional frontend subdomain override; defaults to `play`. |
 | Variable | `AWS_PRODUCTION_BACKEND_SUBDOMAIN` | Optional Backend Entry subdomain override; defaults to `api`. |
 | Variable | `AWS_PRODUCTION_ROUTE53_ZONE_ID` | Hosted zone ID for certificate validation and frontend/backend aliases. |
@@ -112,7 +112,7 @@ Store real values in the `aws-production` GitHub Environment. Use `deploy/aws/gi
 | Variable | `AWS_PRODUCTION_BACKEND_DESIRED_COUNT` | `0` for bootstrap or scale down, `1` to serve traffic. |
 | Variable | `AWS_PRODUCTION_BACKEND_TASK_CPU` | Optional backend Fargate CPU override; defaults to `256`. |
 | Variable | `AWS_PRODUCTION_BACKEND_TASK_MEMORY` | Optional backend Fargate memory override; defaults to `512`. |
-| Variable | `AWS_PRODUCTION_GITHUB_REPOSITORY` | GitHub owner/repository allowed to assume AWS production roles. |
+| Variable | `AWS_PRODUCTION_GITHUB_REPOSITORY` | GitHub owner/repository allowed to assume AWS Production Scaffold roles. |
 | Variable | `AWS_PRODUCTION_GITHUB_OIDC_SUBJECTS` | Allowed GitHub OIDC `sub` claims. JSON array or comma-separated string. |
 | Variable | `AWS_PRODUCTION_GITHUB_OIDC_PROVIDER_ARN` | Optional existing GitHub OIDC provider ARN. |
 | Variable | `AWS_PRODUCTION_BACKEND_APP_VERSION` | Optional baseline Release Identity in the Terraform-managed task definition. |
@@ -145,22 +145,22 @@ The deployment workflow owns normal application artifact rollout:
 - ECS task definition revision registration
 - ECS service update and smoke checks
 
-Terraform owns the baseline ECS task definition, but normal AWS Production image rollout is workflow-owned. The ECS service ignores `task_definition` drift so a later Terraform apply does not roll the service back from a workflow-deployed image revision. Do not remove that drift guard unless Terraform becomes the owner of AWS Production application rollout.
+Terraform owns the baseline ECS task definition, but normal AWS Production Scaffold image rollout is workflow-owned. The ECS service ignores `task_definition` drift so a later Terraform apply does not roll the service back from a workflow-deployed image revision. Do not remove that drift guard unless Terraform becomes the owner of AWS Production Scaffold application rollout.
 
 ## GitHub OIDC Requirements
 
-The AWS IAM trust boundary should be scoped to this repository and the `aws-production` GitHub Environment, not every branch or workflow in the repository.
+The AWS IAM trust boundary should be scoped to this repository and the `aws-production-scaffold` GitHub Environment, not every branch or workflow in the repository.
 
 Use two roles:
 
-- Terraform role: manages AWS Production infrastructure through Terraform.
+- Terraform role: manages AWS Production Scaffold infrastructure through Terraform.
 - Deploy role: publishes application artifacts to existing AWS resources.
 
-Do not use an administrator role. Do not reintroduce long-lived AWS access key secrets. OIDC requires `id-token: write`; keep that permission scoped to AWS production automation.
+Do not use an administrator role. Do not reintroduce long-lived AWS access key secrets. OIDC requires `id-token: write`; keep that permission scoped to AWS Production Scaffold automation.
 
 ## Activation Checklist
 
-AWS Production is ready only when all of these are true:
+AWS Production Scaffold is ready only when all of these are true:
 
 - HCP Terraform remote state works, and no state, plan, generated backend config, generated tfvars, or secrets are committed to Git.
 - GitHub infrastructure jobs authenticate to AWS through the Terraform role.
@@ -168,7 +168,7 @@ AWS Production is ready only when all of these are true:
 - The configured frontend serves over HTTPS.
 - The configured backend returns readiness through the ALB.
 - The configured backend `/health` returns the expected image tag and commit SHA.
-- Browser multiplayer works from the AWS Production frontend over WSS/socket.io.
+- Browser multiplayer works from the AWS Production Scaffold frontend over WSS/socket.io.
 - The infrastructure workflow can run `plan`, `apply`, `scale-down`, and `destroy` through manual dispatch.
 - The deployment workflow can deploy frontend and backend separately through manual dispatch.
 - CloudWatch Logs contain backend startup and request logs useful for basic debugging.
@@ -179,5 +179,5 @@ The template is cost-aware before activation:
 
 1. Keep `backend_desired_count=0` while bootstrapping infrastructure.
 2. Set `backend_desired_count=1` only when ready to serve traffic.
-3. Use `scale-down` when AWS production does not need to be online.
+3. Use `scale-down` when AWS Production Scaffold does not need to be online.
 4. Run `destroy` only when intentionally tearing down the environment.

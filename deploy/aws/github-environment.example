@@ -1,4 +1,4 @@
-# Public template for the protected GitHub Environment named aws-production.
+# Public template for the protected GitHub Environment named aws-production-scaffold.
 # Do not put real values in Git. Copy the key names into GitHub Environment
 # variables/secrets after the AWS account, domain, and state backend are chosen.
 
@@ -7,9 +7,9 @@ HCP_TERRAFORM_TOKEN="<set-in-github-environment>"
 
 [variables.infrastructure]
 HCP_TERRAFORM_ORGANIZATION="example-org"
-HCP_TERRAFORM_WORKSPACE="aws-production"
-HCP_TERRAFORM_WORKSPACE_URL="https://app.terraform.io/app/example-org/workspaces/aws-production"
-AWS_PRODUCTION_TERRAFORM_ROLE_ARN="arn:aws:iam::123456789012:role/halligalli-aws-production-terraform"
+HCP_TERRAFORM_WORKSPACE="aws-production-scaffold"
+HCP_TERRAFORM_WORKSPACE_URL="https://app.terraform.io/app/example-org/workspaces/aws-production-scaffold"
+AWS_PRODUCTION_TERRAFORM_ROLE_ARN="arn:aws:iam::123456789012:role/halligalli-aws-production-scaffold-terraform"
 AWS_PRODUCTION_PROJECT_NAME="halligalli"
 AWS_PRODUCTION_AWS_REGION="eu-west-1"
 AWS_PRODUCTION_DOMAIN_NAME="example.com"
@@ -18,25 +18,25 @@ AWS_PRODUCTION_BACKEND_SUBDOMAIN="api"
 AWS_PRODUCTION_ROUTE53_ZONE_ID="Z0123456789EXAMPLE"
 AWS_PRODUCTION_FRONTEND_CLOUDFRONT_ENABLED="false"
 AWS_PRODUCTION_BACKEND_CERTIFICATE_ARN="arn:aws:acm:eu-west-1:123456789012:certificate/00000000-0000-0000-0000-000000000000"
-AWS_PRODUCTION_BACKEND_IMAGE_TAG="aws-production-placeholder"
+AWS_PRODUCTION_BACKEND_IMAGE_TAG="aws-production-scaffold-placeholder"
 AWS_PRODUCTION_BACKEND_DESIRED_COUNT="0"
 AWS_PRODUCTION_BACKEND_TASK_CPU="256"
 AWS_PRODUCTION_BACKEND_TASK_MEMORY="512"
-AWS_PRODUCTION_BACKEND_APP_VERSION="aws-production-placeholder"
+AWS_PRODUCTION_BACKEND_APP_VERSION="aws-production-scaffold-placeholder"
 AWS_PRODUCTION_BACKEND_COMMIT_SHA="0000000000000000000000000000000000000000"
 AWS_PRODUCTION_GITHUB_REPOSITORY="example-owner/example-repo"
-AWS_PRODUCTION_GITHUB_OIDC_SUBJECTS="[\"repo:example-owner/example-repo:environment:aws-production\"]"
+AWS_PRODUCTION_GITHUB_OIDC_SUBJECTS="[\"repo:example-owner/example-repo:environment:aws-production-scaffold\"]"
 AWS_PRODUCTION_GITHUB_OIDC_PROVIDER_ARN=""
 
 [variables.deployment]
-AWS_PRODUCTION_DEPLOY_ROLE_ARN="arn:aws:iam::123456789012:role/halligalli-aws-production-deploy"
+AWS_PRODUCTION_DEPLOY_ROLE_ARN="arn:aws:iam::123456789012:role/halligalli-aws-production-scaffold-deploy"
 AWS_PRODUCTION_FRONTEND_URL="https://play.example.com"
 AWS_PRODUCTION_BACKEND_URL="https://api.example.com"
-AWS_PRODUCTION_FRONTEND_BUCKET="halligalli-aws-production-frontend"
+AWS_PRODUCTION_FRONTEND_BUCKET="halligalli-aws-production-scaffold-frontend"
 AWS_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID="E0000000000000"
 AWS_PRODUCTION_ECR_REGISTRY="123456789012.dkr.ecr.eu-west-1.amazonaws.com"
-AWS_PRODUCTION_ECR_REPOSITORY="halligalli-aws-production-backend"
-AWS_PRODUCTION_ECS_CLUSTER="halligalli-aws-production"
-AWS_PRODUCTION_ECS_SERVICE="halligalli-aws-production-backend"
-AWS_PRODUCTION_TASK_FAMILY="halligalli-aws-production-backend"
+AWS_PRODUCTION_ECR_REPOSITORY="halligalli-aws-production-scaffold-backend"
+AWS_PRODUCTION_ECS_CLUSTER="halligalli-aws-production-scaffold"
+AWS_PRODUCTION_ECS_SERVICE="halligalli-aws-production-scaffold-backend"
+AWS_PRODUCTION_TASK_FAMILY="halligalli-aws-production-scaffold-backend"
 AWS_PRODUCTION_CONTAINER_NAME="backend"

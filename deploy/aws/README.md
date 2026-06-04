@@ -1,6 +1,6 @@
 # AWS Deployment Reference
 
-This Terraform root is a sanitized AWS deployment reference for portfolio review. It shows the intended Halligalli AWS Production architecture without committing real account-specific configuration.
+This Terraform root is a sanitized AWS deployment reference for portfolio review. It shows the intended Halligalli AWS Production Scaffold architecture without committing real account-specific configuration.
 
 Real AWS account values, HCP Terraform workspace wiring, GitHub OIDC subjects, Route 53 hosted zone IDs, domain bindings, generated tfvars, Terraform state, plans, and secrets are intentionally excluded from Git.
 
@@ -12,7 +12,7 @@ Real AWS account values, HCP Terraform workspace wiring, GitHub OIDC subjects, R
 - Identity: GitHub Actions OIDC provider support, a Terraform role, and a narrower deploy role.
 - Cost posture: no NAT Gateway by default, short log retention, CloudFront disabled until explicitly enabled.
 
-The committed defaults use `example.com` and `example-owner/example-repo`. Override real values through the protected `aws-production` GitHub Environment.
+The committed defaults use `example.com` and `example-owner/example-repo`. Override real values through the protected `aws-production-scaffold` GitHub Environment.
 
 ## Private Runtime Config
 
@@ -21,7 +21,7 @@ The public repo keeps only examples:
 - `terraform.tfvars.example` shows the Terraform value shape.
 - `backend.hcl.example` shows the HCP Terraform remote-state backend shape.
 
-The operating path is the manual `AWS Production Infrastructure` workflow. It reads private values from the `aws-production` GitHub Environment, writes temporary `backend.hcl` and `terraform.auto.tfvars.json` files under the runner temp directory, and runs Terraform CLI on the GitHub Actions runner.
+The operating path is the manual `AWS Production Scaffold Infrastructure` workflow. It reads private values from the `aws-production-scaffold` GitHub Environment, writes temporary `backend.hcl` and `terraform.auto.tfvars.json` files under the runner temp directory, and runs Terraform CLI on the GitHub Actions runner.
 
 HCP Terraform stores remote state and state versions. It does not execute Terraform runs for this project phase.
 
@@ -45,7 +45,7 @@ terraform fmt -recursive
 
 ## Operating A Real Environment
 
-Use `.github/workflows/aws-production-infra.yml`:
+Use `.github/workflows/aws-production-scaffold-infra.yml`:
 
 - `plan` reads HCP remote state and AWS account state without changing resources.
 - `apply` creates or changes infrastructure after protected approval and `AWS_PRODUCTION_APPLY`.

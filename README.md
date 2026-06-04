@@ -2,7 +2,7 @@
 
 A browser-based Halligalli trainer built to feel as close to the physical card game as possible. Players sit around a virtual felt table, flip cards clockwise, and race to ring the bell the moment any fruit totals exactly five. Available in single-player practice mode and real-time multiplayer rooms.
 
-**Live**: AWS production URL to be configured after infrastructure activation.
+**Live**: AWS Production Scaffold URL to be configured after scaffold activation.
 
 ---
 
@@ -112,7 +112,7 @@ Dark felt palette, gold accent (`--gold-light`), tabular-numeral stat displays, 
 - React 19 + Vite 8 + TypeScript + plain CSS (frontend)
 - Node.js 24 + socket.io 4 (WebSocket server)
 - Vitest for unit tests across game logic, persistence, lifecycle, health, socket config, and stats
-- AWS production template for a separated S3/CloudFront frontend and ECR/ECS backend
+- AWS Production Scaffold template for a separated S3/CloudFront frontend and ECR/ECS backend
 - Manual, confirmation-gated AWS infrastructure and application deployment workflows
 
 ---
@@ -190,7 +190,7 @@ server/
 ├── Room.ts              — room/player model, match codes, host transfer
 └── GameEngine.ts        — server-authoritative game loop
 
-deploy/aws/        — sanitized AWS Production Terraform reference and environment template
+deploy/aws/        — sanitized AWS Production Scaffold Terraform reference and environment template
 scripts/simulate-bell.ts — card-distribution tuning utility
 public/yang-boss.png     — Boss portrait
 ```
@@ -199,20 +199,20 @@ public/yang-boss.png     — Boss portrait
 
 ## Deployment and Operations
 
-Production is moving to AWS. The public Terraform reference models an S3/CloudFront frontend and ECR/ECS backend with example values; real account-specific tfvars, backend config, state, and domain bindings are intentionally excluded from Git. AWS resources are created only by manually dispatching the protected AWS workflows with explicit confirmation.
+AWS Production Scaffold prepares a future AWS path without implying production cutover. The public Terraform reference models an S3/CloudFront frontend and ECR/ECS backend with example values; real account-specific tfvars, backend config, state, and domain bindings are intentionally excluded from Git. AWS scaffold resources are created only by manually dispatching the protected AWS workflows with explicit confirmation.
 
 - Release branch: `master`
 - Versioning: Release Please creates human-merged release PRs and `vX.Y.Z` tags
 - Release image: release tags build, scan, and publish immutable GHCR release images for traceability
-- AWS infrastructure: `.github/workflows/aws-production-infra.yml` runs manual Terraform `plan`, `apply`, `scale-down`, and `destroy`
-- AWS deployment: `.github/workflows/aws-production.yml` runs manual frontend/backend deploy and backend smoke checks
+- AWS infrastructure: `.github/workflows/aws-production-scaffold-infra.yml` runs manual Terraform `plan`, `apply`, `scale-down`, and `destroy`
+- AWS deployment: `.github/workflows/aws-production-scaffold.yml` runs manual frontend/backend deploy and backend smoke checks
 - Health check: `/health` reports status, active rooms, release version, and commit SHA
 - Readiness check: `/readyz` reports traffic readiness without release identity
 
 Operations docs:
 
 - [CI/CD](docs/operations/ci-cd.md)
-- [AWS Production](docs/operations/aws-production.md)
+- [AWS Production Scaffold](docs/operations/aws-production-scaffold.md)
 - [Rollback](docs/operations/rollback.md)
 
 ---

@@ -2,7 +2,7 @@ locals {
   github_oidc = {
     issuer_url  = "https://token.actions.githubusercontent.com"
     audience    = "sts.amazonaws.com"
-    environment = "aws-production"
+    environment = "aws-production-scaffold"
   }
 }
 

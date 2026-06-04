@@ -1,11 +1,11 @@
 ---
-name: AWS Production
+name: AWS Production Scaffold
 
 on:
   workflow_dispatch:
     inputs:
       operation:
-        description: AWS Production operation to run manually.
+        description: AWS Production Scaffold operation to run manually.
         required: true
         default: validate
         type: choice
@@ -21,7 +21,7 @@ on:
       backend_image_tag:
         description: >-
           Optional ECR image tag for deploy-backend.
-          Defaults to aws-production-<sha>-<run-number>.
+          Defaults to aws-production-scaffold-<sha>-<run-number>.
         required: false
         type: string
       expected_version:
@@ -41,7 +41,7 @@ env:
 
 jobs:
   validate:
-    name: Validate AWS Production
+    name: Validate AWS Production Scaffold
     runs-on: ubuntu-24.04
 
     steps:
@@ -86,12 +86,12 @@ jobs:
     steps:
       - name: Require explicit cost confirmation
         run: |
-          echo "AWS Production deploy operations are manual and cost-aware." >&2
+          echo "AWS Production Scaffold deploy operations are manual and cost-aware." >&2
           echo "Re-run with confirm_cost set to AWS_PRODUCTION_APPLY to continue." >&2
           exit 1
 
   deploy-frontend:
-    name: Deploy AWS Production frontend
+    name: Deploy AWS Production Scaffold frontend
     needs: validate
     if: >-
       inputs.operation == 'deploy-frontend' &&
@@ -101,7 +101,7 @@ jobs:
       contents: read
       id-token: write
     environment:
-      name: aws-production
+      name: aws-production-scaffold
       url: ${{ vars.AWS_PRODUCTION_FRONTEND_URL }}
 
     env:
@@ -124,7 +124,7 @@ jobs:
           set -euo pipefail
 
           if [[ -z "${AWS_PRODUCTION_DEPLOY_ROLE_ARN}" ]]; then
-            echo "Set AWS_PRODUCTION_DEPLOY_ROLE_ARN in the aws-production GitHub environment." >&2
+            echo "Set AWS_PRODUCTION_DEPLOY_ROLE_ARN in the aws-production-scaffold GitHub environment." >&2
             exit 1
           fi
 
@@ -161,7 +161,7 @@ jobs:
 
           for name in "${required[@]}"; do
             if [[ -z "${!name}" ]]; then
-              printf 'Set %s in the aws-production GitHub environment.\n' \
+              printf 'Set %s in the aws-production-scaffold GitHub environment.\n' \
                 "${name}" >&2
               exit 1
             fi
@@ -169,7 +169,7 @@ jobs:
 
           aws --version
 
-      - name: Build frontend for AWS Production
+      - name: Build frontend for AWS Production Scaffold
         run: |
           pnpm install --frozen-lockfile
           pnpm run build
@@ -191,7 +191,7 @@ jobs:
             --paths "/*"
 
   deploy-backend:
-    name: Deploy AWS Production backend
+    name: Deploy AWS Production Scaffold backend
     needs: validate
     if: >-
       inputs.operation == 'deploy-backend' &&
@@ -201,7 +201,7 @@ jobs:
       contents: read
       id-token: write
     environment:
-      name: aws-production
+      name: aws-production-scaffold
       url: ${{ vars.AWS_PRODUCTION_BACKEND_URL }}
 
     env:
@@ -225,7 +225,7 @@ jobs:
           set -euo pipefail
 
           if [[ -z "${AWS_PRODUCTION_DEPLOY_ROLE_ARN}" ]]; then
-            echo "Set AWS_PRODUCTION_DEPLOY_ROLE_ARN in the aws-production GitHub environment." >&2
+            echo "Set AWS_PRODUCTION_DEPLOY_ROLE_ARN in the aws-production-scaffold GitHub environment." >&2
             exit 1
           fi
 
@@ -258,7 +258,7 @@ jobs:
 
           for name in "${required[@]}"; do
             if [[ -z "${!name}" ]]; then
-              printf 'Set %s in the aws-production GitHub environment.\n' \
+              printf 'Set %s in the aws-production-scaffold GitHub environment.\n' \
                 "${name}" >&2
               exit 1
             fi
@@ -274,7 +274,7 @@ jobs:
 
           tag="${{ inputs.backend_image_tag }}"
           if [[ -z "${tag}" ]]; then
-            tag="aws-production-${GITHUB_SHA::7}-${GITHUB_RUN_NUMBER}"
+            tag="aws-production-scaffold-${GITHUB_SHA::7}-${GITHUB_RUN_NUMBER}"
           fi
 
           image="${AWS_PRODUCTION_ECR_REGISTRY}/${AWS_PRODUCTION_ECR_REPOSITORY}:${tag}"
@@ -403,16 +403,16 @@ jobs:
           )"
           export HEALTH_RESPONSE="${response}"
           export SUCCESS_MESSAGE
-          SUCCESS_MESSAGE="AWS Production /health matches deployed identity."
+          SUCCESS_MESSAGE="AWS Production Scaffold /health matches deployed identity."
           python3 .github/utils/check_health.py
 
   smoke-backend:
-    name: Smoke AWS Production backend
+    name: Smoke AWS Production Scaffold backend
     needs: validate
     if: inputs.operation == 'smoke-backend'
     runs-on: ubuntu-24.04
     environment:
-      name: aws-production
+      name: aws-production-scaffold
       url: ${{ vars.AWS_PRODUCTION_BACKEND_URL }}
 
     env:
@@ -432,7 +432,7 @@ jobs:
           set -euo pipefail
 
           if [[ -z "${AWS_PRODUCTION_BACKEND_URL}" ]]; then
-            echo "Set AWS_PRODUCTION_BACKEND_URL in the aws-production GitHub environment." >&2
+            echo "Set AWS_PRODUCTION_BACKEND_URL in the aws-production-scaffold GitHub environment." >&2
             exit 1
           fi
 
@@ -447,7 +447,7 @@ jobs:
 
             export HEALTH_RESPONSE="${response}"
             export SUCCESS_MESSAGE
-          SUCCESS_MESSAGE="AWS Production /health matches expected identity."
+          SUCCESS_MESSAGE="AWS Production Scaffold /health matches expected identity."
           python3 .github/utils/check_health.py
           else
             echo "${response}"

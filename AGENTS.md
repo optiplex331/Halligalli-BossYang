@@ -1,6 +1,6 @@
 ## Project
 
-**Halligalli Boss Practice** — browser-based Halligalli trainer with single-player and real-time multiplayer. Tabletop-inspired card flow, configurable difficulty, Boss mode, bilingual UI, local score persistence, match-code rooms. Production is moving to AWS with a separated S3/CloudFront frontend and ECR/ECS backend.
+**Halligalli Boss Practice** — browser-based Halligalli trainer with single-player and real-time multiplayer. Tabletop-inspired card flow, configurable difficulty, Boss mode, bilingual UI, local score persistence, match-code rooms. AWS Production Scaffold prepares a separated S3/CloudFront frontend and ECR/ECS backend without implying production cutover.
 
 **Core Value:** Open the site → meaningful practice immediately → fast feedback makes the next round better. Multiplayer is opt-in, same-origin, zero-config for the player.
 
@@ -28,7 +28,7 @@ pnpm start            # Serve dist/ + socket.io (production)
 - Use a task branch for non-trivial work; do not make feature or fix changes directly on `master`.
 - Follow Angular commit messages: `<type>(<scope>): <summary>`, for example `fix(game): clamp penalty score`.
 - Keep code and matching documentation changes in the same branch and commit set.
-- Deployment is AWS-first: Release Please opens Release PRs, `vX.Y.Z` tags publish GHCR release images for traceability, and protected manual AWS workflows own infrastructure and application deployment.
+- Deployment keeps Release Please and GHCR release images for traceability, while protected manual AWS Production Scaffold workflows own scaffold infrastructure and application deployment.
 
 ## Technology Stack
 
@@ -147,8 +147,9 @@ Host has exclusive `room:start` rights. Disconnects during lobby remove the play
 
 ## Deployment
 
-- AWS Production uses Terraform under `deploy/aws/` for S3/CloudFront, ECR/ECS, ALB, Route 53, IAM OIDC roles, and CloudWatch Logs.
+- AWS Production Scaffold uses Terraform under `deploy/aws/` for S3/CloudFront, ECR/ECS, ALB, Route 53, IAM OIDC roles, and CloudWatch Logs.
+- AWS Production Scaffold is separate from the current live production path and does not imply production cutover.
 - AWS resources are not created by PRs, pushes, or release tags. Mutating AWS work requires manual workflow dispatch and explicit confirmation.
-- Real account, domain, HCP Terraform, role, and deployment values belong in the protected `aws-production` GitHub Environment, not in Git.
+- Real account, domain, HCP Terraform, role, and deployment values belong in the protected `aws-production-scaffold` GitHub Environment, not in Git.
 - Keep structured release parsing and health identity checks in dependency-free `.github/utils/*.py` scripts with Python `unittest` coverage.
 - Operational details live in `docs/operations/`.

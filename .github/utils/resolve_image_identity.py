@@ -87,8 +87,8 @@ def resolve_identity(env, git=run_git):
     should_push_image = False
 
     if is_release_tag(ref_type, ref_name):
-        # Release-tag builds are canonical release artifacts. AWS production
-        # rollout is manual through the AWS Production workflow.
+        # Release-tag builds are canonical release artifacts. AWS scaffold
+        # rollout is manual through the AWS Production Scaffold workflow.
         version = ref_name.removeprefix("v")
         should_push_image = True
     elif is_master_push(event_name, ref_type, ref_name):

@@ -2,12 +2,12 @@
 
 Halligalli uses GitHub Actions as the delivery control plane. Pull requests and normal pushes validate code, release metadata, delivery control files, and container images, but they do not create AWS resources or deploy application artifacts.
 
-AWS Production is operated through protected manual workflows:
+AWS Production Scaffold is operated through protected manual workflows:
 
-- `.github/workflows/aws-production-infra.yml` for Terraform `plan`, `apply`, `scale-down`, and `destroy`
-- `.github/workflows/aws-production.yml` for frontend deploy, backend deploy, and backend smoke checks
+- `.github/workflows/aws-production-scaffold-infra.yml` for Terraform `plan`, `apply`, `scale-down`, and `destroy`
+- `.github/workflows/aws-production-scaffold.yml` for frontend deploy, backend deploy, and backend smoke checks
 
-Real AWS, HCP Terraform, DNS, certificate, and runtime values belong in the protected `aws-production` GitHub Environment. The public template is `deploy/aws/github-environment.example`.
+Real AWS, HCP Terraform, DNS, certificate, and runtime values belong in the protected `aws-production-scaffold` GitHub Environment. The public template is `deploy/aws/github-environment.example`.
 
 ## Pull Request Gates
 
@@ -33,9 +33,9 @@ Short shell-native workflow orchestration stays in Bash, such as `git`, `docker`
 
 Utility tests run unconditionally in the `Product checks` gate and do not require `pnpm install`.
 
-## AWS Production
+## AWS Production Scaffold
 
-AWS Production workflows only run through `workflow_dispatch`; they are not attached to push, PR, or Release Tag events.
+AWS Production Scaffold workflows only run through `workflow_dispatch`; they are not attached to push, PR, or Release Tag events.
 
 The infrastructure workflow supports:
 
@@ -51,9 +51,9 @@ The deployment workflow supports:
 - `deploy-backend` with `confirm_cost=AWS_PRODUCTION_APPLY`
 - `smoke-backend`
 
-AWS Production changes are Delivery Control. Changes to `deploy/aws/**`, `.github/workflows/aws-production.yml`, and `.github/workflows/aws-production-infra.yml` make `Product checks` run release utility validation and actionlint, but they do not publish AWS resources during PR checks.
+AWS Production Scaffold changes are Delivery Control. Changes to `deploy/aws/**`, `.github/workflows/aws-production-scaffold.yml`, and `.github/workflows/aws-production-scaffold-infra.yml` make `Product checks` run release utility validation and actionlint, but they do not publish AWS resources during PR checks.
 
-AWS Production operation details are documented in [AWS Production](aws-production.md).
+AWS Production Scaffold operation details are documented in [AWS Production Scaffold](aws-production-scaffold.md).
 
 ## Release PR
 
@@ -76,7 +76,7 @@ When the trigger is a normal `master` push, the workflow publishes a Development
 ghcr.io/<owner>/<repo>:X.Y.Z-000N-gSHA
 ```
 
-Development GHCR Images are for traceability and rollback testing only. They do not deploy AWS Production.
+Development GHCR Images are for traceability and rollback testing only. They do not deploy AWS Production Scaffold.
 
 If the `master` push is exactly the same commit as a `vX.Y.Z` Release Tag, the workflow does not publish a duplicate `X.Y.Z-0000-gSHA` Development GHCR Image. The release-tagged `X.Y.Z` image is the canonical artifact for that commit.
 
@@ -86,7 +86,7 @@ When the trigger is a `vX.Y.Z` tag, the workflow publishes the release image ide
 ghcr.io/<owner>/<repo>:X.Y.Z
 ```
 
-It does not publish `latest`. AWS backend deployment builds and pushes the selected code revision to ECR through the manual AWS Production workflow.
+It does not publish `latest`. AWS backend deployment builds and pushes the selected code revision to ECR through the manual AWS Production Scaffold workflow.
 
 ## Branch Protection
 
@@ -95,7 +95,7 @@ The protected `master` ruleset should require:
 - `Product checks`
 - `Container build and scan`
 
-Do not add separate required checks for release metadata or production deployment. Production deployment is manually approved through the protected `aws-production` GitHub Environment and explicit workflow confirmation strings.
+Do not add separate required checks for release metadata or scaffold deployment. AWS Production Scaffold deployment is manually approved through the protected `aws-production-scaffold` GitHub Environment and explicit workflow confirmation strings.
 
 ## Dependency Updates
 

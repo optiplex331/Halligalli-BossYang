@@ -1,6 +1,6 @@
 locals {
   backend_runtime = {
-    purpose                    = "Run the Node.js 24 socket.io backend for AWS Production"
+    purpose                    = "Run the Node.js 24 socket.io backend for AWS Production Scaffold"
     hostname                   = local.dns.backend_hostname
     image_registry             = "Amazon ECR"
     runtime_platform           = "ECS Fargate"
@@ -14,7 +14,7 @@ locals {
     default_desired_count      = 1
     deployment_maximum_percent = 200
     manual_scale_note          = "Keep the multiplayer backend at one task for demos; use desired_count 0 only for teardown"
-    release_identity_note      = "APP_VERSION and COMMIT_SHA are placeholders until the manual AWS Production deployment workflow injects release identity"
+    release_identity_note      = "APP_VERSION and COMMIT_SHA are placeholders until the manual AWS Production Scaffold deployment workflow injects release identity"
   }
 }
 
@@ -35,10 +35,10 @@ resource "aws_ecr_lifecycle_policy" "backend" {
     rules = [
       {
         rulePriority = 1
-        description  = "Keep the most recent demo images for AWS Production"
+        description  = "Keep the most recent demo images for AWS Production Scaffold"
         selection = {
           tagStatus     = "tagged"
-          tagPrefixList = ["aws-production-"]
+          tagPrefixList = ["aws-production-scaffold-"]
           countType     = "imageCountMoreThan"
           countNumber   = 10
         }
@@ -121,7 +121,7 @@ resource "aws_route_table_association" "backend_public" {
 
 resource "aws_security_group" "backend_alb" {
   name        = "${local.name_prefix}-backend-alb"
-  description = "Public HTTPS entry for the AWS Production backend"
+  description = "Public HTTPS entry for the AWS Production Scaffold backend"
   vpc_id      = aws_vpc.backend.id
 
   tags = {
@@ -408,13 +408,13 @@ resource "aws_ecs_service" "backend" {
 check "backend_single_task_default" {
   assert {
     condition     = var.backend_desired_count <= 1
-    error_message = "AWS Production backend must not imply multiplayer horizontal scaling."
+    error_message = "AWS Production Scaffold backend must not imply multiplayer horizontal scaling."
   }
 }
 
 check "backend_readiness_surface" {
   assert {
     condition     = local.backend_runtime.readiness_path == "/readyz"
-    error_message = "AWS Production backend readiness checks must use /readyz."
+    error_message = "AWS Production Scaffold backend readiness checks must use /readyz."
   }
 }

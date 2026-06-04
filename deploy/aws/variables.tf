@@ -1,5 +1,5 @@
 variable "project_name" {
-  description = "Short project name used in AWS Production resource names."
+  description = "Short project name used in AWS Production Scaffold resource names."
   type        = string
   default     = "halligalli"
 
@@ -10,18 +10,18 @@ variable "project_name" {
 }
 
 variable "aws_region" {
-  description = "AWS Production runtime region."
+  description = "AWS Production Scaffold runtime region."
   type        = string
   default     = "eu-west-1"
 
   validation {
     condition     = var.aws_region == "eu-west-1"
-    error_message = "AWS Production is fixed to eu-west-1."
+    error_message = "AWS Production Scaffold is fixed to eu-west-1."
   }
 }
 
 variable "domain_name" {
-  description = "Public domain used by the AWS Production reference. Override with GitHub Environment values for real infrastructure operations."
+  description = "Public domain used by the AWS Production Scaffold reference. Override with GitHub Environment values for real infrastructure operations."
   type        = string
   default     = "example.com"
 
@@ -32,7 +32,7 @@ variable "domain_name" {
 }
 
 variable "frontend_subdomain" {
-  description = "Subdomain reserved for the future AWS Production frontend."
+  description = "Subdomain reserved for the future AWS Production Scaffold frontend."
   type        = string
   default     = "play"
 
@@ -43,7 +43,7 @@ variable "frontend_subdomain" {
 }
 
 variable "backend_subdomain" {
-  description = "Subdomain reserved for the future AWS Production backend entry."
+  description = "Subdomain reserved for the future AWS Production Scaffold backend entry."
   type        = string
   default     = "api"
 
@@ -54,7 +54,7 @@ variable "backend_subdomain" {
 }
 
 variable "enable_nat_gateway" {
-  description = "Cost guardrail: NAT Gateway is not part of the default AWS Production shape."
+  description = "Cost guardrail: NAT Gateway is not part of the default AWS Production Scaffold shape."
   type        = bool
   default     = false
 
@@ -77,7 +77,7 @@ variable "route53_zone_id" {
 }
 
 variable "github_repository" {
-  description = "GitHub owner/repository allowed to assume the AWS Production deploy role through OIDC. Override in ignored tfvars for real deployments."
+  description = "GitHub owner/repository allowed to assume the AWS Production Scaffold deploy role through OIDC. Override in ignored tfvars for real deployments."
   type        = string
   default     = "example-owner/example-repo"
 
@@ -113,9 +113,9 @@ variable "github_oidc_thumbprint_list" {
 }
 
 variable "github_oidc_subjects" {
-  description = "GitHub OIDC subject claims allowed to assume the AWS Production deploy role. Override in ignored tfvars for real deployments."
+  description = "GitHub OIDC subject claims allowed to assume the AWS Production Scaffold deploy role. Override in ignored tfvars for real deployments."
   type        = list(string)
-  default     = ["repo:example-owner/example-repo:environment:aws-production"]
+  default     = ["repo:example-owner/example-repo:environment:aws-production-scaffold"]
 
   validation {
     condition     = length(var.github_oidc_subjects) > 0

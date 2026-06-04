@@ -1,10 +1,10 @@
 output "backend_entry" {
-  description = "Future secure Backend Entry for AWS Production HTTP, readiness, health, and socket.io traffic."
+  description = "Future secure Backend Entry for AWS Production Scaffold HTTP, readiness, health, and socket.io traffic."
   value       = local.backend_runtime.backend_entry
 }
 
 output "backend_ecr_repository_url" {
-  description = "AWS Production Image repository for the backend container."
+  description = "AWS Production Scaffold Image repository for the backend container."
   value       = aws_ecr_repository.backend.repository_url
 }
 
@@ -24,7 +24,7 @@ output "backend_dns_alias_record" {
 }
 
 output "backend_health_paths" {
-  description = "Backend HTTP surfaces expected by AWS Production smoke checks and ALB target health."
+  description = "Backend HTTP surfaces expected by AWS Production Scaffold smoke checks and ALB target health."
   value = {
     health    = local.backend_runtime.health_path
     readiness = local.backend_runtime.readiness_path
@@ -33,7 +33,7 @@ output "backend_health_paths" {
 }
 
 output "backend_runtime_environment" {
-  description = "Non-secret runtime environment represented in the AWS Production backend task definition."
+  description = "Non-secret runtime environment represented in the AWS Production Scaffold backend task definition."
   value = {
     HALLIGALLI_ALLOWED_ORIGINS = local.backend_runtime.allowed_origins
     APP_VERSION                = var.backend_app_version
@@ -42,11 +42,11 @@ output "backend_runtime_environment" {
 }
 
 output "backend_default_desired_count" {
-  description = "Single-task AWS Production backend default; values above one are intentionally rejected."
+  description = "Single-task AWS Production Scaffold backend default; values above one are intentionally rejected."
   value       = local.backend_runtime.default_desired_count
 }
 
 output "backend_log_group_name" {
-  description = "CloudWatch Logs group for AWS Production backend container logs."
+  description = "CloudWatch Logs group for AWS Production Scaffold backend container logs."
   value       = aws_cloudwatch_log_group.backend.name
 }

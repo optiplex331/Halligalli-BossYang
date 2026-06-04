@@ -1,5 +1,5 @@
 ---
-name: AWS Production Infrastructure
+name: AWS Production Scaffold Infrastructure
 
 on:
   workflow_dispatch:
@@ -30,7 +30,7 @@ env:
 
 jobs:
   validate:
-    name: Validate AWS Production Terraform
+    name: Validate AWS Production Scaffold Terraform
     runs-on: ubuntu-24.04
 
     steps:
@@ -66,14 +66,14 @@ jobs:
             validate -no-color
 
   infrastructure:
-    name: Run AWS Production Terraform
+    name: Run AWS Production Scaffold Terraform
     needs: validate
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write
     environment:
-      name: aws-production
+      name: aws-production-scaffold
       url: ${{ vars.HCP_TERRAFORM_WORKSPACE_URL }}
 
     env:
@@ -141,12 +141,12 @@ jobs:
           set -euo pipefail
 
           if [[ -z "${AWS_PRODUCTION_TERRAFORM_ROLE_ARN}" ]]; then
-            echo "Set AWS_PRODUCTION_TERRAFORM_ROLE_ARN in the aws-production GitHub environment." >&2
+            echo "Set AWS_PRODUCTION_TERRAFORM_ROLE_ARN in the aws-production-scaffold GitHub environment." >&2
             exit 1
           fi
 
           if [[ -z "${TF_TOKEN_app_terraform_io}" ]]; then
-            echo "Set HCP_TERRAFORM_TOKEN as an aws-production GitHub environment secret." >&2
+            echo "Set HCP_TERRAFORM_TOKEN as an aws-production-scaffold GitHub environment secret." >&2
             exit 1
           fi
 
