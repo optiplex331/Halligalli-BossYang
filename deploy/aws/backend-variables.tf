@@ -1,5 +1,5 @@
 variable "backend_certificate_arn" {
-  description = "ACM certificate ARN for the HTTPS Backend Entry. Supply a real eu-west-1 certificate only in ignored local tfvars."
+  description = "ACM certificate ARN for the HTTPS Backend Entry. Supply a real eu-west-1 certificate through GitHub Environment values."
   type        = string
 
   validation {

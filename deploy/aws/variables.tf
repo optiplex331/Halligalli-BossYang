@@ -21,7 +21,7 @@ variable "aws_region" {
 }
 
 variable "domain_name" {
-  description = "Public domain used by the AWS Production Scaffold reference. Override with a local tfvars file for real environments."
+  description = "Public domain used by the AWS Production Scaffold reference. Override with GitHub Environment values for real infrastructure operations."
   type        = string
   default     = "example.com"
 

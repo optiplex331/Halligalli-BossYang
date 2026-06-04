@@ -41,6 +41,6 @@ output "scaffold_resource_model" {
 }
 
 output "github_actions_deploy_role_arn" {
-  description = "IAM role ARN for the aws-production-scaffold GitHub environment variable AWS_PRODUCTION_SCAFFOLD_ROLE_ARN."
+  description = "IAM role ARN for the aws-production-scaffold GitHub environment variable AWS_PRODUCTION_SCAFFOLD_DEPLOY_ROLE_ARN."
   value       = aws_iam_role.github_actions_deploy.arn
 }

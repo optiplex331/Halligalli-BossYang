@@ -29,9 +29,9 @@ Utility tests run unconditionally in the `Product checks` gate and do not requir
 
 ## AWS Production Scaffold
 
-The `AWS Production Scaffold` workflow only runs through `workflow_dispatch`; it is not attached to push, PR, or Release Tag events. The default `validate` operation only runs release config and Terraform static validation. `deploy-frontend` and `deploy-backend` require the `PRODUCTION_SCAFFOLD_APPLY` confirmation before any AWS-mutating steps run.
+AWS Production Scaffold workflows only run through `workflow_dispatch`; they are not attached to push, PR, or Release Tag events. The infrastructure workflow supports manual `plan`, `apply`, `scale-down`, and `destroy` with HCP Terraform remote state. The deployment workflow supports manual `validate`, `deploy-frontend`, `deploy-backend`, and `smoke-backend`.
 
-AWS Production Scaffold changes are Delivery Control. Changes to `deploy/aws/**` and `.github/workflows/aws-production-scaffold.yml` make `Product checks` run release utility validation and actionlint, but they do not publish AWS resources and do not change DO Production.
+AWS Production Scaffold changes are Delivery Control. Changes to `deploy/aws/**`, `.github/workflows/aws-production-scaffold.yml`, and `.github/workflows/aws-production-scaffold-infra.yml` make `Product checks` run release utility validation and actionlint, but they do not publish AWS resources and do not change DO Production during PR checks.
 
 AWS Production Scaffold operation details are documented in [AWS Production Scaffold](aws-production-scaffold.md).
 

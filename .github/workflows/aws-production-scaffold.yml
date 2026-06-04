@@ -105,7 +105,7 @@ jobs:
       url: ${{ vars.AWS_PRODUCTION_SCAFFOLD_FRONTEND_URL }}
 
     env:
-      AWS_PRODUCTION_SCAFFOLD_ROLE_ARN: ${{ vars.AWS_PRODUCTION_SCAFFOLD_ROLE_ARN }}
+      AWS_PRODUCTION_SCAFFOLD_DEPLOY_ROLE_ARN: ${{ vars.AWS_PRODUCTION_SCAFFOLD_DEPLOY_ROLE_ARN }}
       AWS_PRODUCTION_SCAFFOLD_FRONTEND_URL: ${{ vars.AWS_PRODUCTION_SCAFFOLD_FRONTEND_URL }}
       AWS_PRODUCTION_SCAFFOLD_BACKEND_URL: ${{ vars.AWS_PRODUCTION_SCAFFOLD_BACKEND_URL }}
       AWS_PRODUCTION_SCAFFOLD_FRONTEND_BUCKET: ${{ vars.AWS_PRODUCTION_SCAFFOLD_FRONTEND_BUCKET }}
@@ -123,8 +123,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ -z "${AWS_PRODUCTION_SCAFFOLD_ROLE_ARN}" ]]; then
-            echo "Set AWS_PRODUCTION_SCAFFOLD_ROLE_ARN in the aws-production-scaffold GitHub environment." >&2
+          if [[ -z "${AWS_PRODUCTION_SCAFFOLD_DEPLOY_ROLE_ARN}" ]]; then
+            echo "Set AWS_PRODUCTION_SCAFFOLD_DEPLOY_ROLE_ARN in the aws-production-scaffold GitHub environment." >&2
             exit 1
           fi
 
@@ -132,7 +132,7 @@ jobs:
         # v6.2.0
         uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
-          role-to-assume: ${{ env.AWS_PRODUCTION_SCAFFOLD_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_PRODUCTION_SCAFFOLD_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Set up pnpm
@@ -205,7 +205,7 @@ jobs:
       url: ${{ vars.AWS_PRODUCTION_SCAFFOLD_BACKEND_URL }}
 
     env:
-      AWS_PRODUCTION_SCAFFOLD_ROLE_ARN: ${{ vars.AWS_PRODUCTION_SCAFFOLD_ROLE_ARN }}
+      AWS_PRODUCTION_SCAFFOLD_DEPLOY_ROLE_ARN: ${{ vars.AWS_PRODUCTION_SCAFFOLD_DEPLOY_ROLE_ARN }}
       AWS_PRODUCTION_SCAFFOLD_BACKEND_URL: ${{ vars.AWS_PRODUCTION_SCAFFOLD_BACKEND_URL }}
       AWS_PRODUCTION_SCAFFOLD_ECR_REGISTRY: ${{ vars.AWS_PRODUCTION_SCAFFOLD_ECR_REGISTRY }}
       AWS_PRODUCTION_SCAFFOLD_ECR_REPOSITORY: ${{ vars.AWS_PRODUCTION_SCAFFOLD_ECR_REPOSITORY }}
@@ -224,8 +224,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ -z "${AWS_PRODUCTION_SCAFFOLD_ROLE_ARN}" ]]; then
-            echo "Set AWS_PRODUCTION_SCAFFOLD_ROLE_ARN in the aws-production-scaffold GitHub environment." >&2
+          if [[ -z "${AWS_PRODUCTION_SCAFFOLD_DEPLOY_ROLE_ARN}" ]]; then
+            echo "Set AWS_PRODUCTION_SCAFFOLD_DEPLOY_ROLE_ARN in the aws-production-scaffold GitHub environment." >&2
             exit 1
           fi
 
@@ -233,7 +233,7 @@ jobs:
         # v6.2.0
         uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
-          role-to-assume: ${{ env.AWS_PRODUCTION_SCAFFOLD_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_PRODUCTION_SCAFFOLD_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Set up Docker Buildx

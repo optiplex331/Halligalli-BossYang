@@ -1,6 +1,9 @@
 project_name = "halligalli"
 aws_region   = "eu-west-1"
 
+# Public example only. Real values are generated in GitHub Actions from the
+# protected aws-production-scaffold GitHub Environment.
+
 domain_name       = "example.com"
 frontend_subdomain = "play"
 backend_subdomain  = "api"
