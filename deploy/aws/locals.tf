@@ -14,14 +14,4 @@ locals {
     StateBackend  = "configured-outside-git"
   }
 
-  cost_guardrails = {
-    live_production_provider    = "current-production-path"
-    production_lifecycle        = "AWS scaffold manual activation; scale down outside demo windows"
-    automatic_apply             = false
-    deletion_protection_default = false
-    always_on_capacity_default  = false
-    nat_gateway_default         = false
-    public_ipv4_minimize        = true
-    log_retention_days          = 14
-  }
 }
