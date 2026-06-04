@@ -1,43 +1,40 @@
 # Rollback
 
-Rollback should change the Git-tracked Production Manifest rather than manually changing the live DigitalOcean app. The rollback unit is the image digest and release identity in `deploy/production/app.yaml`.
+Rollback for AWS Production is an application deployment operation. Terraform should not be used for ordinary application rollback unless the infrastructure itself is broken.
 
 ## Preferred Rollback
 
-1. Find a known-good release from GitHub Releases, historical Production Promotion PRs, or `deploy/production/app.yaml` history.
-2. Revert the broken Production Promotion PR, or open a new PR that restores the known-good image digest, `APP_VERSION`, and `COMMIT_SHA`.
-3. Wait for `Product checks` and `Container build and scan`.
-4. Merge the rollback Production Promotion PR.
-5. Confirm `Reconcile DO Production` completes.
-6. Check `/health` and confirm the version and commit match the restored manifest.
-
-This makes `master`, GitHub Actions, GHCR, and DO Production converge again.
+1. Find a known-good GitHub Release, commit SHA, or previously deployed ECR image tag from workflow logs.
+2. Run `AWS Production` with `operation=deploy-backend`, `backend_image_tag=<known-good-tag>`, and `confirm_cost=AWS_PRODUCTION_APPLY` if the backend image is already in ECR.
+3. If the known-good image is not in ECR, check out the known-good commit and run `deploy-backend` to build and push a fresh ECR image from that revision.
+4. Run `operation=deploy-frontend` if frontend assets also need to roll back.
+5. Run `operation=smoke-backend` with `expected_version` and `expected_commit` when those values are known.
+6. Check the public frontend, `/readyz`, `/health`, and a socket.io multiplayer room.
 
 ## Emergency Containment
 
-If production must recover before a PR can merge, temporarily update DigitalOcean to a known-good digest or use App Platform deployment controls to restore a previous known-good deployment. Treat this as temporary containment, then still follow the preferred rollback path so Git and DO Production converge again.
+If production must recover before a clean redeploy can complete, use AWS console or CLI controls to point the ECS service at a previous healthy task definition revision, then follow with a normal `AWS Production` workflow run so GitHub Actions logs capture the restored runtime identity.
 
 ## What Not To Do
 
 - Do not push directly to `master`.
 - Do not deploy `latest`.
-- Do not switch DigitalOcean back to source-based deploys during normal rollback.
-- Do not bypass PR checks during normal rollback.
-- Do not record or use AWS, Kubernetes, GitOps controller, PostgreSQL, or Redis rollback steps for this DigitalOcean App Platform flow.
+- Do not run Terraform `destroy` as application rollback.
+- Do not use untracked local `.env`, tfvars, task definition JSON, or AWS credentials as the source of truth.
+- Do not bypass the protected `aws-production` GitHub Environment for normal rollback.
 
 ## Verification
 
 After rollback, run:
 
 ```bash
-curl --fail --silent --show-error "$DO_PRODUCTION_URL/health"
+curl --fail --silent --show-error "$AWS_PRODUCTION_BACKEND_URL/readyz"
+curl --fail --silent --show-error "$AWS_PRODUCTION_BACKEND_URL/health"
 ```
 
-The response should report:
+The `/health` response should report:
 
 - `status: "ok"`
-- the `version` from the restored manifest
-- the `commit` from the restored manifest
+- the expected `version`
+- the expected `commit`
 - a reasonable `rooms` count
-
-After rollback reconcile completes, the scheduled `Production Drift Check` should also pass.

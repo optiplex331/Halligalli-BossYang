@@ -3,7 +3,7 @@
 import os
 import sys
 
-from production_manifest import ManifestError, check_health_release_identity
+from release_utils import ReleaseUtilityError, check_health_release_identity
 
 
 def main():
@@ -21,7 +21,7 @@ def main():
         success_message = os.environ.get("SUCCESS_MESSAGE")
         if success_message:
             print(success_message)
-    except ManifestError as error:
+    except ReleaseUtilityError as error:
         print(error, file=sys.stderr)
         sys.exit(1)
 

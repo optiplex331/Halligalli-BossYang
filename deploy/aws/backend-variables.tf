@@ -9,9 +9,9 @@ variable "backend_certificate_arn" {
 }
 
 variable "backend_image_tag" {
-  description = "AWS Production Scaffold Image tag expected in the ECR backend repository."
+  description = "AWS Production Image tag expected in the ECR backend repository."
   type        = string
-  default     = "aws-production-scaffold-placeholder"
+  default     = "aws-production-placeholder"
 
   validation {
     condition     = can(regex("^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$", var.backend_image_tag))
@@ -31,31 +31,31 @@ variable "backend_desired_count" {
 }
 
 variable "backend_task_cpu" {
-  description = "Fargate CPU units for the single AWS Production Scaffold backend task."
+  description = "Fargate CPU units for the single AWS Production backend task."
   type        = number
   default     = 256
 
   validation {
     condition     = contains([256, 512, 1024], var.backend_task_cpu)
-    error_message = "Backend task CPU must use a small Fargate size suitable for scaffold demos."
+    error_message = "Backend task CPU must use an accepted small Fargate size."
   }
 }
 
 variable "backend_task_memory" {
-  description = "Fargate memory MiB for the single AWS Production Scaffold backend task."
+  description = "Fargate memory MiB for the single AWS Production backend task."
   type        = number
   default     = 512
 
   validation {
     condition     = contains([512, 1024, 2048], var.backend_task_memory)
-    error_message = "Backend task memory must use a small Fargate size suitable for scaffold demos."
+    error_message = "Backend task memory must use an accepted small Fargate size."
   }
 }
 
 variable "backend_app_version" {
-  description = "Release Identity placeholder for APP_VERSION until the manual AWS Production Scaffold deployment workflow injects a release value."
+  description = "Release Identity placeholder for APP_VERSION until the manual AWS Production deployment workflow injects a release value."
   type        = string
-  default     = "aws-production-scaffold-placeholder"
+  default     = "aws-production-placeholder"
 
   validation {
     condition     = length(trimspace(var.backend_app_version)) > 0
@@ -64,7 +64,7 @@ variable "backend_app_version" {
 }
 
 variable "backend_commit_sha" {
-  description = "Release Identity placeholder for COMMIT_SHA until the manual AWS Production Scaffold deployment workflow injects a commit SHA."
+  description = "Release Identity placeholder for COMMIT_SHA until the manual AWS Production deployment workflow injects a commit SHA."
   type        = string
   default     = "0000000000000000000000000000000000000000"
 

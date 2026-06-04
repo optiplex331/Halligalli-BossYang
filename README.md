@@ -2,7 +2,7 @@
 
 A browser-based Halligalli trainer built to feel as close to the physical card game as possible. Players sit around a virtual felt table, flip cards clockwise, and race to ring the bell the moment any fruit totals exactly five. Available in single-player practice mode and real-time multiplayer rooms.
 
-**Live**: https://halligalli-8xko3.ondigitalocean.app/
+**Live**: AWS production URL to be configured after infrastructure activation.
 
 ---
 
@@ -112,8 +112,8 @@ Dark felt palette, gold accent (`--gold-light`), tabular-numeral stat displays, 
 - React 19 + Vite 8 + TypeScript + plain CSS (frontend)
 - Node.js 24 + socket.io 4 (WebSocket server)
 - Vitest for unit tests across game logic, persistence, lifecycle, health, socket config, and stats
-- Single-service production deploy on DigitalOcean App Platform
-- Reviewable AWS Production Scaffold for a separated S3/CloudFront frontend and ECR/ECS backend
+- AWS production template for a separated S3/CloudFront frontend and ECR/ECS backend
+- Manual, confirmation-gated AWS infrastructure and application deployment workflows
 
 ---
 
@@ -190,8 +190,7 @@ server/
 ├── Room.ts              — room/player model, match codes, host transfer
 └── GameEngine.ts        — server-authoritative game loop
 
-deploy/production/app.yaml — GitOps Production Manifest
-deploy/aws/        — sanitized AWS Production Scaffold Terraform reference
+deploy/aws/        — sanitized AWS Production Terraform reference and environment template
 scripts/simulate-bell.ts — card-distribution tuning utility
 public/yang-boss.png     — Boss portrait
 ```
@@ -200,24 +199,20 @@ public/yang-boss.png     — Boss portrait
 
 ## Deployment and Operations
 
-Production is deployed as a single GHCR-backed Node.js service on DigitalOcean App Platform. The server serves the Vite-built static frontend from `dist/` and accepts WebSocket connections on the same origin.
+Production is moving to AWS. The public Terraform reference models an S3/CloudFront frontend and ECR/ECS backend with example values; real account-specific tfvars, backend config, state, and domain bindings are intentionally excluded from Git. AWS resources are created only by manually dispatching the protected AWS workflows with explicit confirmation.
 
-AWS Production Scaffold is scaffolded separately for review and future demos. The public Terraform reference models an S3/CloudFront frontend and ECR/ECS backend with example values; real account-specific tfvars, backend config, state, and domain bindings are intentionally excluded from Git. It is manually dispatched, cost-guarded, and does not replace DO Production.
-
-- Production manifest: `deploy/production/app.yaml`
 - Release branch: `master`
 - Versioning: Release Please creates human-merged release PRs and `vX.Y.Z` tags
-- Promotion: release tags build and scan GHCR images, then open human-merged production promotion PRs
-- Reconcile: GitHub Actions applies `deploy/production/app.yaml` to DigitalOcean after that manifest changes on `master`
+- Release image: release tags build, scan, and publish immutable GHCR release images for traceability
+- AWS infrastructure: `.github/workflows/aws-production-infra.yml` runs manual Terraform `plan`, `apply`, `scale-down`, and `destroy`
+- AWS deployment: `.github/workflows/aws-production.yml` runs manual frontend/backend deploy and backend smoke checks
 - Health check: `/health` reports status, active rooms, release version, and commit SHA
 - Readiness check: `/readyz` reports traffic readiness without release identity
-- Drift check: scheduled GitHub Actions compare Git, DigitalOcean, and `/health`
 
 Operations docs:
 
 - [CI/CD](docs/operations/ci-cd.md)
-- [DigitalOcean release](docs/operations/digitalocean-release.md)
-- [AWS Production Scaffold](docs/operations/aws-production-scaffold.md)
+- [AWS Production](docs/operations/aws-production.md)
 - [Rollback](docs/operations/rollback.md)
 
 ---

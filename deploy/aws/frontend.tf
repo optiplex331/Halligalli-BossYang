@@ -2,7 +2,7 @@ locals {
   frontend = {
     hostname            = local.dns.frontend_hostname
     public_url          = "https://${local.dns.frontend_hostname}"
-    backend_url         = local.backend_scaffold.backend_entry
+    backend_url         = local.backend_runtime.backend_entry
     bucket_prefix       = "${local.name_prefix}-frontend-"
     s3_origin_id        = "${local.name_prefix}-frontend-s3"
     certificate_region  = local.dns.cloudfront_certificate_region
@@ -10,12 +10,12 @@ locals {
     default_root_object = "index.html"
 
     vite_environment = {
-      VITE_HALLIGALLI_BACKEND_URL = local.backend_scaffold.backend_entry
+      VITE_HALLIGALLI_BACKEND_URL = local.backend_runtime.backend_entry
     }
   }
 
-  frontend_scaffold = {
-    purpose                = "Serve the Vite static build for AWS Production Scaffold"
+  frontend_static = {
+    purpose                = "Serve the Vite static build for AWS Production"
     hostname               = local.frontend.hostname
     public_url             = local.frontend.public_url
     asset_origin           = "Amazon S3"
@@ -77,7 +77,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "frontend_assets" 
 
 resource "aws_cloudfront_origin_access_control" "frontend_assets" {
   name                              = "${local.name_prefix}-frontend-assets"
-  description                       = "CloudFront access control for the Halligalli AWS Production Scaffold Vite asset bucket."
+  description                       = "CloudFront access control for the Halligalli AWS Production Vite asset bucket."
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
@@ -127,7 +127,7 @@ resource "aws_acm_certificate_validation" "frontend" {
 
 resource "aws_cloudfront_distribution" "frontend" {
   aliases             = [local.frontend.hostname]
-  comment             = "Halligalli AWS Production Scaffold frontend"
+  comment             = "Halligalli AWS Production frontend"
   default_root_object = local.frontend.default_root_object
   enabled             = var.frontend_cloudfront_enabled
   http_version        = "http2"

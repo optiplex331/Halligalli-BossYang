@@ -1,5 +1,5 @@
 ---
-name: AWS Production Scaffold Infrastructure
+name: AWS Production Infrastructure
 
 on:
   workflow_dispatch:
@@ -16,8 +16,8 @@ on:
           - destroy
       confirm:
         description: >-
-          Type PRODUCTION_SCAFFOLD_APPLY, PRODUCTION_SCAFFOLD_SCALE_DOWN,
-          or PRODUCTION_SCAFFOLD_DESTROY for mutating operations.
+          Type AWS_PRODUCTION_APPLY, AWS_PRODUCTION_SCALE_DOWN,
+          or AWS_PRODUCTION_DESTROY for mutating operations.
         required: false
         type: string
 
@@ -30,7 +30,7 @@ env:
 
 jobs:
   validate:
-    name: Validate AWS Production Scaffold Terraform
+    name: Validate AWS Production Terraform
     runs-on: ubuntu-24.04
 
     steps:
@@ -66,37 +66,37 @@ jobs:
             validate -no-color
 
   infrastructure:
-    name: Run AWS Production Scaffold Terraform
+    name: Run AWS Production Terraform
     needs: validate
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write
     environment:
-      name: aws-production-scaffold
+      name: aws-production
       url: ${{ vars.HCP_TERRAFORM_WORKSPACE_URL }}
 
     env:
-      AWS_PRODUCTION_SCAFFOLD_TERRAFORM_OPERATION: ${{ inputs.operation }}
-      AWS_PRODUCTION_SCAFFOLD_TERRAFORM_ROLE_ARN: ${{ vars.AWS_PRODUCTION_SCAFFOLD_TERRAFORM_ROLE_ARN }}
-      AWS_PRODUCTION_SCAFFOLD_PROJECT_NAME: ${{ vars.AWS_PRODUCTION_SCAFFOLD_PROJECT_NAME }}
-      AWS_PRODUCTION_SCAFFOLD_AWS_REGION: ${{ vars.AWS_PRODUCTION_SCAFFOLD_AWS_REGION }}
-      AWS_PRODUCTION_SCAFFOLD_DOMAIN_NAME: ${{ vars.AWS_PRODUCTION_SCAFFOLD_DOMAIN_NAME }}
-      AWS_PRODUCTION_SCAFFOLD_FRONTEND_SUBDOMAIN: ${{ vars.AWS_PRODUCTION_SCAFFOLD_FRONTEND_SUBDOMAIN }}
-      AWS_PRODUCTION_SCAFFOLD_BACKEND_SUBDOMAIN: ${{ vars.AWS_PRODUCTION_SCAFFOLD_BACKEND_SUBDOMAIN }}
-      AWS_PRODUCTION_SCAFFOLD_ROUTE53_ZONE_ID: ${{ vars.AWS_PRODUCTION_SCAFFOLD_ROUTE53_ZONE_ID }}
-      AWS_PRODUCTION_SCAFFOLD_FRONTEND_CLOUDFRONT_ENABLED: >-
-        ${{ vars.AWS_PRODUCTION_SCAFFOLD_FRONTEND_CLOUDFRONT_ENABLED }}
-      AWS_PRODUCTION_SCAFFOLD_BACKEND_CERTIFICATE_ARN: ${{ vars.AWS_PRODUCTION_SCAFFOLD_BACKEND_CERTIFICATE_ARN }}
-      AWS_PRODUCTION_SCAFFOLD_BACKEND_IMAGE_TAG: ${{ vars.AWS_PRODUCTION_SCAFFOLD_BACKEND_IMAGE_TAG }}
-      AWS_PRODUCTION_SCAFFOLD_BACKEND_DESIRED_COUNT: ${{ vars.AWS_PRODUCTION_SCAFFOLD_BACKEND_DESIRED_COUNT }}
-      AWS_PRODUCTION_SCAFFOLD_BACKEND_TASK_CPU: ${{ vars.AWS_PRODUCTION_SCAFFOLD_BACKEND_TASK_CPU }}
-      AWS_PRODUCTION_SCAFFOLD_BACKEND_TASK_MEMORY: ${{ vars.AWS_PRODUCTION_SCAFFOLD_BACKEND_TASK_MEMORY }}
-      AWS_PRODUCTION_SCAFFOLD_BACKEND_APP_VERSION: ${{ vars.AWS_PRODUCTION_SCAFFOLD_BACKEND_APP_VERSION }}
-      AWS_PRODUCTION_SCAFFOLD_BACKEND_COMMIT_SHA: ${{ vars.AWS_PRODUCTION_SCAFFOLD_BACKEND_COMMIT_SHA }}
-      AWS_PRODUCTION_SCAFFOLD_GITHUB_REPOSITORY: ${{ vars.AWS_PRODUCTION_SCAFFOLD_GITHUB_REPOSITORY }}
-      AWS_PRODUCTION_SCAFFOLD_GITHUB_OIDC_PROVIDER_ARN: ${{ vars.AWS_PRODUCTION_SCAFFOLD_GITHUB_OIDC_PROVIDER_ARN }}
-      AWS_PRODUCTION_SCAFFOLD_GITHUB_OIDC_SUBJECTS: ${{ vars.AWS_PRODUCTION_SCAFFOLD_GITHUB_OIDC_SUBJECTS }}
+      AWS_PRODUCTION_TERRAFORM_OPERATION: ${{ inputs.operation }}
+      AWS_PRODUCTION_TERRAFORM_ROLE_ARN: ${{ vars.AWS_PRODUCTION_TERRAFORM_ROLE_ARN }}
+      AWS_PRODUCTION_PROJECT_NAME: ${{ vars.AWS_PRODUCTION_PROJECT_NAME }}
+      AWS_PRODUCTION_AWS_REGION: ${{ vars.AWS_PRODUCTION_AWS_REGION }}
+      AWS_PRODUCTION_DOMAIN_NAME: ${{ vars.AWS_PRODUCTION_DOMAIN_NAME }}
+      AWS_PRODUCTION_FRONTEND_SUBDOMAIN: ${{ vars.AWS_PRODUCTION_FRONTEND_SUBDOMAIN }}
+      AWS_PRODUCTION_BACKEND_SUBDOMAIN: ${{ vars.AWS_PRODUCTION_BACKEND_SUBDOMAIN }}
+      AWS_PRODUCTION_ROUTE53_ZONE_ID: ${{ vars.AWS_PRODUCTION_ROUTE53_ZONE_ID }}
+      AWS_PRODUCTION_FRONTEND_CLOUDFRONT_ENABLED: >-
+        ${{ vars.AWS_PRODUCTION_FRONTEND_CLOUDFRONT_ENABLED }}
+      AWS_PRODUCTION_BACKEND_CERTIFICATE_ARN: ${{ vars.AWS_PRODUCTION_BACKEND_CERTIFICATE_ARN }}
+      AWS_PRODUCTION_BACKEND_IMAGE_TAG: ${{ vars.AWS_PRODUCTION_BACKEND_IMAGE_TAG }}
+      AWS_PRODUCTION_BACKEND_DESIRED_COUNT: ${{ vars.AWS_PRODUCTION_BACKEND_DESIRED_COUNT }}
+      AWS_PRODUCTION_BACKEND_TASK_CPU: ${{ vars.AWS_PRODUCTION_BACKEND_TASK_CPU }}
+      AWS_PRODUCTION_BACKEND_TASK_MEMORY: ${{ vars.AWS_PRODUCTION_BACKEND_TASK_MEMORY }}
+      AWS_PRODUCTION_BACKEND_APP_VERSION: ${{ vars.AWS_PRODUCTION_BACKEND_APP_VERSION }}
+      AWS_PRODUCTION_BACKEND_COMMIT_SHA: ${{ vars.AWS_PRODUCTION_BACKEND_COMMIT_SHA }}
+      AWS_PRODUCTION_GITHUB_REPOSITORY: ${{ vars.AWS_PRODUCTION_GITHUB_REPOSITORY }}
+      AWS_PRODUCTION_GITHUB_OIDC_PROVIDER_ARN: ${{ vars.AWS_PRODUCTION_GITHUB_OIDC_PROVIDER_ARN }}
+      AWS_PRODUCTION_GITHUB_OIDC_SUBJECTS: ${{ vars.AWS_PRODUCTION_GITHUB_OIDC_SUBJECTS }}
       HCP_TERRAFORM_ORGANIZATION: ${{ vars.HCP_TERRAFORM_ORGANIZATION }}
       HCP_TERRAFORM_WORKSPACE: ${{ vars.HCP_TERRAFORM_WORKSPACE }}
       TF_TOKEN_app_terraform_io: ${{ secrets.HCP_TERRAFORM_TOKEN }}
@@ -120,13 +120,13 @@ jobs:
               exit 0
               ;;
             apply)
-              expected="PRODUCTION_SCAFFOLD_APPLY"
+              expected="AWS_PRODUCTION_APPLY"
               ;;
             scale-down)
-              expected="PRODUCTION_SCAFFOLD_SCALE_DOWN"
+              expected="AWS_PRODUCTION_SCALE_DOWN"
               ;;
             destroy)
-              expected="PRODUCTION_SCAFFOLD_DESTROY"
+              expected="AWS_PRODUCTION_DESTROY"
               ;;
           esac
 
@@ -140,13 +140,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ -z "${AWS_PRODUCTION_SCAFFOLD_TERRAFORM_ROLE_ARN}" ]]; then
-            echo "Set AWS_PRODUCTION_SCAFFOLD_TERRAFORM_ROLE_ARN in the aws-production-scaffold GitHub environment." >&2
+          if [[ -z "${AWS_PRODUCTION_TERRAFORM_ROLE_ARN}" ]]; then
+            echo "Set AWS_PRODUCTION_TERRAFORM_ROLE_ARN in the aws-production GitHub environment." >&2
             exit 1
           fi
 
           if [[ -z "${TF_TOKEN_app_terraform_io}" ]]; then
-            echo "Set HCP_TERRAFORM_TOKEN as an aws-production-scaffold GitHub environment secret." >&2
+            echo "Set HCP_TERRAFORM_TOKEN as an aws-production GitHub environment secret." >&2
             exit 1
           fi
 
@@ -154,7 +154,7 @@ jobs:
         # v6.2.0
         uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
-          role-to-assume: ${{ env.AWS_PRODUCTION_SCAFFOLD_TERRAFORM_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_PRODUCTION_TERRAFORM_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Generate private Terraform config
@@ -164,7 +164,7 @@ jobs:
           TERRAFORM_TFVARS_JSON_PATH: ${{ runner.temp }}/terraform.auto.tfvars.json
         run: |
           set -euo pipefail
-          python3 .github/utils/write_terraform_scaffold_config.py
+          python3 .github/utils/write_terraform_production_config.py
 
       - name: Terraform init with HCP remote state
         run: |

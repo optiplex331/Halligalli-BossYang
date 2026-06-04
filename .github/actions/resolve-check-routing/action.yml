@@ -19,9 +19,6 @@ outputs:
   release_metadata:
     description: Whether release metadata files changed.
     value: ${{ steps.routing.outputs.release_metadata }}
-  production_manifest:
-    description: Whether the production manifest changed.
-    value: ${{ steps.routing.outputs.production_manifest }}
   product_checks_required:
     description: Whether heavy product checks are required.
     value: ${{ steps.routing.outputs.product_checks_required }}
@@ -51,7 +48,6 @@ runs:
         PRODUCT_RUNTIME: ${{ steps.paths.outputs.product_runtime || 'false' }}
         DELIVERY_CONTROL: ${{ steps.paths.outputs.delivery_control || 'false' }}
         RELEASE_METADATA: ${{ steps.paths.outputs.release_metadata || 'false' }}
-        PRODUCTION_MANIFEST: ${{ steps.paths.outputs.production_manifest || 'false' }}
       run: |
         set -euo pipefail
 
@@ -89,10 +85,6 @@ runs:
           classification="product-runtime"
         elif [[ "${DELIVERY_CONTROL}" == "true" ]]; then
           classification="delivery-control"
-        elif [[ "${PRODUCTION_MANIFEST}" == "true" && "${RELEASE_METADATA}" == "true" ]]; then
-          classification="release-and-production-metadata"
-        elif [[ "${PRODUCTION_MANIFEST}" == "true" ]]; then
-          classification="production-manifest"
         elif [[ "${RELEASE_METADATA}" == "true" ]]; then
           classification="release-metadata"
         else
@@ -104,7 +96,6 @@ runs:
           "product_runtime=${PRODUCT_RUNTIME}"
           "delivery_control=${DELIVERY_CONTROL}"
           "release_metadata=${RELEASE_METADATA}"
-          "production_manifest=${PRODUCTION_MANIFEST}"
           "product_checks_required=${product_checks_required}"
           "delivery_control_checks_required=${delivery_control_checks_required}"
           "container_build_required=${container_build_required}"

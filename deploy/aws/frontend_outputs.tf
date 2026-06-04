@@ -1,5 +1,5 @@
 output "frontend_public_url" {
-  description = "Future public AWS Production Scaffold frontend address."
+  description = "Future public AWS Production frontend address."
   value       = local.frontend.public_url
 }
 
@@ -37,6 +37,6 @@ output "frontend_dns_alias_records" {
 }
 
 output "frontend_vite_build_environment" {
-  description = "Environment values expected when building the AWS Production Scaffold Vite frontend assets."
+  description = "Environment values expected when building the AWS Production Vite frontend assets."
   value       = local.frontend.vite_environment
 }

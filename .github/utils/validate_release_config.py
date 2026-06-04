@@ -1,11 +1,8 @@
-"""Validate release metadata and Production Manifest invariants."""
+"""Validate release metadata invariants."""
 
 import json
 import sys
 from pathlib import Path
-
-from production_manifest import ManifestError, validate_production_manifest
-
 
 def read_json(path):
     """Read a UTF-8 JSON file used by release automation."""
@@ -36,11 +33,6 @@ def main():
 
     if "version" in package_json:
         fail("package.json must not be a release version source")
-
-    try:
-        validate_production_manifest("deploy/production/app.yaml")
-    except ManifestError as error:
-        fail(str(error))
 
 
 if __name__ == "__main__":

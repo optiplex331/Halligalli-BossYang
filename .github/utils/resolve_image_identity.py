@@ -4,7 +4,7 @@ import re
 import subprocess
 import sys
 
-from production_manifest import append_github_outputs
+from release_utils import append_github_outputs
 
 
 RELEASE_TAG_PATTERN = "v[0-9]*.[0-9]*.[0-9]*"
@@ -45,7 +45,7 @@ def parse_extended_version(describe):
 
 
 def is_release_tag(ref_type, ref_name):
-    """Release tags are the only refs that may open Production Promotion."""
+    """Release tags are the only refs that may publish canonical release images."""
 
     return ref_type == "tag" and RELEASE_TAG_RE.fullmatch(ref_name or "") is not None
 
@@ -85,13 +85,12 @@ def resolve_identity(env, git=run_git):
     event_name = env.get("GITHUB_EVENT_NAME", "")
     commit_sha = git(["rev-parse", "HEAD"])
     should_push_image = False
-    should_propose_promotion = False
 
     if is_release_tag(ref_type, ref_name):
-        # Release-tag builds are the canonical production artifacts.
+        # Release-tag builds are canonical release artifacts. AWS production
+        # rollout is manual through the AWS Production workflow.
         version = ref_name.removeprefix("v")
         should_push_image = True
-        should_propose_promotion = True
     elif is_master_push(event_name, ref_type, ref_name):
         # If master is already at a release tag, do not duplicate it as a
         # development image. Otherwise derive a first-parent development tag.
@@ -133,7 +132,6 @@ def resolve_identity(env, git=run_git):
         "image_tag": f"{image}:{version}",
         "commit_sha": commit_sha,
         "should_push_image": str(should_push_image).lower(),
-        "should_propose_promotion": str(should_propose_promotion).lower(),
     }
 
 

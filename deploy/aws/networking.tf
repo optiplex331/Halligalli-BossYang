@@ -1,5 +1,5 @@
 locals {
-  networking_scaffold = {
+  networking = {
     vpc_cidr                = "10.42.0.0/16"
     public_subnet_count     = 2
     private_subnet_count    = 0
@@ -11,7 +11,7 @@ locals {
 
 check "nat_gateway_disabled_by_default" {
   assert {
-    condition     = local.networking_scaffold.nat_gateway_count == 0 && var.enable_nat_gateway == false
-    error_message = "AWS Production Scaffold must keep NAT Gateway disabled by default."
+    condition     = local.networking.nat_gateway_count == 0 && var.enable_nat_gateway == false
+    error_message = "AWS Production must keep NAT Gateway disabled by default."
   }
 }

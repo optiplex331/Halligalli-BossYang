@@ -32,6 +32,3 @@ release_metadata:
   - ".github/utils/.release-please-manifest.json"
   - ".github/utils/release-please-config.json"
   - "CHANGELOG.md"
-
-production_manifest:
-  - "deploy/production/app.yaml"
