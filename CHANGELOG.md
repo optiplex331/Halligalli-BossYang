@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.3.0...v0.4.0) (2026-06-04)
+
+
+### Features
+
+* **deploy:** switch production templates to AWS ([#30](https://github.com/optiplex331/Halligalli-BossYang/issues/30)) ([91605af](https://github.com/optiplex331/Halligalli-BossYang/commit/91605afda7377dc5d6186bdadd1df94d6b2e4978))
+
 ## [0.3.0](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.2.0...v0.3.0) (2026-06-03)
 
 
