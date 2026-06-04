@@ -165,7 +165,7 @@ describe("socket CORS", () => {
 
   it("allows configured frontend origins from a comma-separated allow-list", async () => {
     process.env.HALLIGALLI_ALLOWED_ORIGINS =
-      "https://staging.example.com, https://preview.example.com";
+      "https://development.example.com, https://preview.example.com";
     const server = createHalligalliServer();
 
     try {
@@ -186,7 +186,7 @@ describe("socket CORS", () => {
   });
 
   it("rejects unlisted frontend origins when the allow-list is configured", async () => {
-    process.env.HALLIGALLI_ALLOWED_ORIGINS = "https://staging.example.com";
+    process.env.HALLIGALLI_ALLOWED_ORIGINS = "https://development.example.com";
     const server = createHalligalliServer();
 
     try {
