@@ -1,0 +1,193 @@
+---
+name: Azure Production Scaffold Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Terraform infrastructure operation to run manually.
+        required: true
+        default: plan
+        type: choice
+        options:
+          - plan
+          - apply
+          - scale-down
+          - destroy
+      confirm:
+        description: >-
+          Type AZURE_PRODUCTION_APPLY, AZURE_PRODUCTION_SCALE_DOWN,
+          or AZURE_PRODUCTION_DESTROY for mutating operations.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  TERRAFORM_VERSION: 1.15.4
+
+jobs:
+  validate:
+    name: Validate Azure Production Scaffold Terraform
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Run release utility validation
+        run: python3 .github/utils/validate_release_config.py
+
+      - name: Terraform format check
+        run: terraform -chdir=deploy/azure fmt -check -recursive
+
+      - name: Terraform init without backend
+        run: terraform -chdir=deploy/azure init -backend=false -input=false
+
+      - name: Terraform validate
+        run: terraform -chdir=deploy/azure validate -no-color
+
+  infrastructure:
+    name: Run Azure Production Scaffold Terraform
+    needs: validate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: azure-production-scaffold
+      url: ${{ vars.HCP_TERRAFORM_WORKSPACE_URL }}
+
+    env:
+      AZURE_PRODUCTION_TERRAFORM_OPERATION: ${{ inputs.operation }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_TERRAFORM_CLIENT_ID: ${{ vars.AZURE_TERRAFORM_CLIENT_ID }}
+      AZURE_DEPLOY_PRINCIPAL_ID: ${{ vars.AZURE_DEPLOY_PRINCIPAL_ID }}
+      AZURE_PRODUCTION_PROJECT_NAME: ${{ vars.AZURE_PRODUCTION_PROJECT_NAME }}
+      AZURE_PRODUCTION_REGION: ${{ vars.AZURE_PRODUCTION_REGION }}
+      AZURE_PRODUCTION_STATIC_WEB_APP_LOCATION: >-
+        ${{ vars.AZURE_PRODUCTION_STATIC_WEB_APP_LOCATION }}
+      AZURE_PRODUCTION_DOMAIN_NAME: ${{ vars.AZURE_PRODUCTION_DOMAIN_NAME }}
+      AZURE_PRODUCTION_FRONTEND_SUBDOMAIN: ${{ vars.AZURE_PRODUCTION_FRONTEND_SUBDOMAIN }}
+      AZURE_PRODUCTION_BACKEND_SUBDOMAIN: ${{ vars.AZURE_PRODUCTION_BACKEND_SUBDOMAIN }}
+      AZURE_PRODUCTION_RESOURCE_GROUP_NAME: ${{ vars.AZURE_PRODUCTION_RESOURCE_GROUP_NAME }}
+      AZURE_PRODUCTION_STATIC_WEB_APP_NAME: ${{ vars.AZURE_PRODUCTION_STATIC_WEB_APP_NAME }}
+      AZURE_PRODUCTION_BACKEND_IMAGE: ${{ vars.AZURE_PRODUCTION_BACKEND_IMAGE }}
+      AZURE_PRODUCTION_BACKEND_MIN_REPLICAS: ${{ vars.AZURE_PRODUCTION_BACKEND_MIN_REPLICAS }}
+      AZURE_PRODUCTION_BACKEND_MAX_REPLICAS: ${{ vars.AZURE_PRODUCTION_BACKEND_MAX_REPLICAS }}
+      AZURE_PRODUCTION_BACKEND_APP_VERSION: ${{ vars.AZURE_PRODUCTION_BACKEND_APP_VERSION }}
+      AZURE_PRODUCTION_BACKEND_COMMIT_SHA: ${{ vars.AZURE_PRODUCTION_BACKEND_COMMIT_SHA }}
+      AZURE_PRODUCTION_GITHUB_REPOSITORY: ${{ vars.AZURE_PRODUCTION_GITHUB_REPOSITORY }}
+      HCP_TERRAFORM_ORGANIZATION: ${{ vars.HCP_TERRAFORM_ORGANIZATION }}
+      HCP_TERRAFORM_WORKSPACE: ${{ vars.HCP_TERRAFORM_WORKSPACE }}
+      TF_TOKEN_app_terraform_io: ${{ secrets.HCP_TERRAFORM_TOKEN }}
+      ARM_USE_OIDC: true
+      ARM_CLIENT_ID: ${{ vars.AZURE_TERRAFORM_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Require explicit confirmation
+        shell: bash
+        env:
+          CONFIRM_INPUT: ${{ inputs.confirm }}
+          OPERATION_INPUT: ${{ inputs.operation }}
+        run: |
+          set -euo pipefail
+
+          expected=""
+          case "${OPERATION_INPUT}" in
+            plan)
+              exit 0
+              ;;
+            apply)
+              expected="AZURE_PRODUCTION_APPLY"
+              ;;
+            scale-down)
+              expected="AZURE_PRODUCTION_SCALE_DOWN"
+              ;;
+            destroy)
+              expected="AZURE_PRODUCTION_DESTROY"
+              ;;
+          esac
+
+          if [[ "${CONFIRM_INPUT}" != "${expected}" ]]; then
+            echo "Re-run with confirm set to ${expected}." >&2
+            exit 1
+          fi
+
+      - name: Validate workload identity and state configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          required=(
+            AZURE_TENANT_ID
+            AZURE_SUBSCRIPTION_ID
+            AZURE_TERRAFORM_CLIENT_ID
+            HCP_TERRAFORM_ORGANIZATION
+            HCP_TERRAFORM_WORKSPACE
+            TF_TOKEN_app_terraform_io
+          )
+
+          for name in "${required[@]}"; do
+            if [[ -z "${!name}" ]]; then
+              printf 'Set %s in the azure-production-scaffold GitHub environment.\n' \
+                "${name}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Generate private Terraform config
+        shell: bash
+        env:
+          TERRAFORM_BACKEND_CONFIG_PATH: ${{ runner.temp }}/backend.hcl
+          TERRAFORM_TFVARS_JSON_PATH: ${{ runner.temp }}/terraform.auto.tfvars.json
+        run: python3 .github/utils/write_azure_terraform_config.py
+
+      - name: Terraform init with HCP remote state
+        run: >-
+          terraform -chdir=deploy/azure init
+          -backend-config="${RUNNER_TEMP}/backend.hcl"
+          -input=false
+
+      - name: Terraform plan
+        if: inputs.operation == 'plan'
+        run: >-
+          terraform -chdir=deploy/azure plan
+          -no-color
+          -var-file="${RUNNER_TEMP}/terraform.auto.tfvars.json"
+
+      - name: Terraform apply saved plan
+        if: inputs.operation == 'apply' || inputs.operation == 'scale-down'
+        run: |
+          terraform -chdir=deploy/azure plan \
+            -no-color \
+            -out="${RUNNER_TEMP}/tfplan" \
+            -var-file="${RUNNER_TEMP}/terraform.auto.tfvars.json"
+          terraform -chdir=deploy/azure apply -no-color "${RUNNER_TEMP}/tfplan"
+
+      - name: Terraform destroy saved plan
+        if: inputs.operation == 'destroy'
+        run: |
+          terraform -chdir=deploy/azure plan \
+            -destroy \
+            -no-color \
+            -out="${RUNNER_TEMP}/tfplan" \
+            -var-file="${RUNNER_TEMP}/terraform.auto.tfvars.json"
+          terraform -chdir=deploy/azure apply -no-color "${RUNNER_TEMP}/tfplan"
