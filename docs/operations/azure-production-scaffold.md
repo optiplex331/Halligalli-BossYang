@@ -147,6 +147,8 @@ Store real values in the `azure-production-scaffold` GitHub Environment. Use `de
 
 `halligalli.games` remains on Name.com nameservers. Do not migrate DNS authority to Azure DNS for this scaffold.
 
+Terraform manages the Static Web Apps custom-domain binding and outputs the Container Apps ingress hostname. The `api.halligalli.games` Container Apps custom-domain/certificate activation is an external activation step in Azure, followed by the required Name.com verification and routing records.
+
 Configure or confirm these records during activation:
 
 | Hostname | Record | Value |
@@ -168,13 +170,13 @@ Use this order when activating Azure Production Scaffold:
 4. Review the cost-bearing resources: Static Web Apps, Log Analytics, Container Apps environment, Container App, and role assignments.
 5. Run `operation=apply` with `confirm=AZURE_PRODUCTION_APPLY`, using `backend_min_replicas=0` and the placeholder backend image so Terraform can create the base infrastructure.
 6. Copy Terraform outputs into the GitHub Environment variables used by the deployment workflow.
-7. Add required custom-domain verification and routing records in Name.com.
+7. Complete Container Apps custom-domain/certificate activation for `api.halligalli.games`, then add required custom-domain verification and routing records in Name.com.
 8. Run `Azure Production Scaffold` with `operation=deploy-backend` and `confirm_cost=AZURE_PRODUCTION_APPLY` from a Release Tag after the GHCR Release Image for that tag exists and is public to Azure Container Apps.
 9. Run `operation=deploy-frontend` with `confirm_cost=AZURE_PRODUCTION_APPLY`.
 10. Run `operation=smoke-backend`, then verify the public frontend, `/readyz`, `/health`, and socket.io multiplayer path over WSS.
 
 ## Cost And Lifecycle
 
-Use `scale-down` when Azure Production Scaffold does not need to serve demos. It preserves Static Web Apps, Log Analytics, custom-domain bindings, Name.com records, and Terraform state while setting backend minimum replicas to zero.
+Use `scale-down` when Azure Production Scaffold does not need to serve demos. It preserves Static Web Apps, Log Analytics, existing custom-domain bindings, Name.com records, and Terraform state while setting backend minimum replicas to zero.
 
 Use `destroy` only when intentionally tearing down Azure-managed scaffold resources. After destroy, manually remove stale Name.com DNS records and GitHub Environment values that should no longer be used.

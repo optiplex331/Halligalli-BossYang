@@ -16,6 +16,8 @@ Real Azure subscription IDs, Microsoft Entra app IDs, HCP Terraform tokens, Stat
 
 The committed defaults are safe placeholders except for the public Halligalli scaffold hostnames. Override real account values through the protected `azure-production-scaffold` GitHub Environment.
 
+This root manages the Static Web Apps custom-domain binding and emits the Container Apps ingress hostname for Name.com routing. It does not create the Container Apps backend custom-domain/certificate binding for `api.halligalli.games`; that is completed during external Azure activation before backend smoke checks use the custom Backend Entry.
+
 ## Private Runtime Config
 
 The public repo keeps only examples:
