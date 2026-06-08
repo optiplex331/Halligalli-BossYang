@@ -447,8 +447,8 @@ jobs:
 
             export HEALTH_RESPONSE="${response}"
             export SUCCESS_MESSAGE
-          SUCCESS_MESSAGE="AWS Production Scaffold /health matches expected identity."
-          python3 .github/utils/check_health.py
+            SUCCESS_MESSAGE="AWS Production Scaffold /health matches expected identity."
+            python3 .github/utils/check_health.py
           else
             echo "${response}"
           fi

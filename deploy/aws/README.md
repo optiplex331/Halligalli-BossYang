@@ -9,7 +9,7 @@ Real AWS account values, HCP Terraform workspace wiring, GitHub OIDC subjects, R
 - Frontend: private S3 bucket, CloudFront, Origin Access Control, ACM certificate in `us-east-1`, and optional Route 53 alias records.
 - Backend: ECR repository, public ALB, ECS Fargate service, one backend task, and CloudWatch Logs.
 - DNS: Route 53 records for configurable frontend and backend hostnames.
-- Identity: GitHub Actions OIDC provider support, a Terraform role, and a narrower deploy role.
+- Identity: GitHub Actions OIDC provider support and the narrower deploy role. The Terraform role is bootstrapped once outside this root.
 - Cost posture: no NAT Gateway by default, short log retention, CloudFront disabled until explicitly enabled.
 
 The committed defaults use `example.com` and `example-owner/example-repo`. Override real values through the protected `aws-production-scaffold` GitHub Environment.
