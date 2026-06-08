@@ -1,13 +1,13 @@
 # CI/CD
 
-Halligalli uses GitHub Actions as the delivery control plane. Pull requests and normal pushes validate code, release metadata, delivery control files, and container images, but they do not create AWS resources or deploy application artifacts.
+Halligalli uses GitHub Actions as the delivery control plane. Pull requests and normal pushes validate code, release metadata, delivery control files, and container images, but they do not create Azure resources or deploy application artifacts.
 
-AWS Production Scaffold is operated through protected manual workflows:
+Azure Production Scaffold is operated through protected manual workflows:
 
-- `.github/workflows/aws-production-scaffold-infra.yml` for Terraform `plan`, `apply`, `scale-down`, and `destroy`
-- `.github/workflows/aws-production-scaffold.yml` for frontend deploy, backend deploy, and backend smoke checks
+- `.github/workflows/azure-production-scaffold-infra.yml` for Terraform `plan`, `apply`, `scale-down`, and `destroy`
+- `.github/workflows/azure-production-scaffold.yml` for frontend deploy, backend deploy, and backend smoke checks
 
-Real AWS, HCP Terraform, DNS, certificate, and runtime values belong in the protected `aws-production-scaffold` GitHub Environment. The public template is `deploy/aws/github-environment.example`.
+Real Azure, HCP Terraform, Static Web Apps deployment token, Container Apps, DNS, and runtime values belong in the protected `azure-production-scaffold` GitHub Environment. The public template is `deploy/azure/github-environment.example`.
 
 ## Pull Request Gates
 
@@ -18,11 +18,11 @@ Every pull request targeting `master` runs these required checks:
 | Product checks | `CI` | `Product checks` | The change received the right product, metadata, or control-plane validation for its type. |
 | Container build and scan | `Container` | `Container build and scan` | The change received the right image validation for its type. |
 
-PR checks do not publish images and do not mutate AWS. CI uses `package.json` as the `actions/setup-node` version source; the current product runtime baseline is Node.js 24.
+PR checks do not publish images and do not mutate Azure. CI uses `package.json` as the `actions/setup-node` version source; the current product runtime baseline is Node.js 24.
 
 The check names intentionally stay stable because branch protection depends on them. The work inside each check is routed by `dorny/paths-filter` and `.github/utils/change-filters.yaml`, not by workflow-level path filters. This avoids skipped workflows leaving required checks pending.
 
-Short shell-native workflow orchestration stays in Bash, such as `git`, `docker`, `gh`, `curl`, Terraform CLI orchestration, AWS CLI calls, and environment checks. Structured release validation, GitHub output formatting, `/health` JSON validation, and non-trivial inline heredocs belong in dependency-free `.github/utils/*.py` scripts covered by Python's built-in `unittest`.
+Short shell-native workflow orchestration stays in Bash, such as `git`, `docker`, `gh`, `curl`, Terraform CLI orchestration, Azure CLI calls, and environment checks. Structured release validation, GitHub output formatting, `/health` JSON validation, and non-trivial inline heredocs belong in dependency-free `.github/utils/*.py` scripts covered by Python's built-in `unittest`.
 
 | Change type | Product checks | Container build and scan |
 |---|---|---|
@@ -33,27 +33,27 @@ Short shell-native workflow orchestration stays in Bash, such as `git`, `docker`
 
 Utility tests run unconditionally in the `Product checks` gate and do not require `pnpm install`.
 
-## AWS Production Scaffold
+## Azure Production Scaffold
 
-AWS Production Scaffold workflows only run through `workflow_dispatch`; they are not attached to push, PR, or Release Tag events.
+Azure Production Scaffold workflows only run through `workflow_dispatch`; they are not attached to push, PR, or Release Tag events.
 
 The infrastructure workflow supports:
 
 - `plan`
-- `apply` with `confirm=AWS_PRODUCTION_APPLY`
-- `scale-down` with `confirm=AWS_PRODUCTION_SCALE_DOWN`
-- `destroy` with `confirm=AWS_PRODUCTION_DESTROY`
+- `apply` with `confirm=AZURE_PRODUCTION_APPLY`
+- `scale-down` with `confirm=AZURE_PRODUCTION_SCALE_DOWN`
+- `destroy` with `confirm=AZURE_PRODUCTION_DESTROY`
 
 The deployment workflow supports:
 
 - `validate`
-- `deploy-frontend` with `confirm_cost=AWS_PRODUCTION_APPLY`
-- `deploy-backend` with `confirm_cost=AWS_PRODUCTION_APPLY`
+- `deploy-frontend` with `confirm_cost=AZURE_PRODUCTION_APPLY`
+- `deploy-backend` with `confirm_cost=AZURE_PRODUCTION_APPLY`
 - `smoke-backend`
 
-AWS Production Scaffold changes are Delivery Control. Changes to `deploy/aws/**`, `.github/workflows/aws-production-scaffold.yml`, and `.github/workflows/aws-production-scaffold-infra.yml` make `Product checks` run release utility validation and actionlint, but they do not publish AWS resources during PR checks.
+Azure Production Scaffold changes are Delivery Control. Changes to `deploy/azure/**`, `.github/workflows/azure-production-scaffold.yml`, and `.github/workflows/azure-production-scaffold-infra.yml` make `Product checks` run release utility validation and actionlint, but they do not publish Azure resources during PR checks.
 
-AWS Production Scaffold operation details are documented in [AWS Production Scaffold](aws-production-scaffold.md).
+Azure Production Scaffold operation details are documented in [Azure Production Scaffold](azure-production-scaffold.md).
 
 ## Release PR
 
@@ -76,7 +76,7 @@ When the trigger is a normal `master` push, the workflow publishes a Development
 ghcr.io/<owner>/<repo>:X.Y.Z-000N-gSHA
 ```
 
-Development GHCR Images are for traceability and rollback testing only. They do not deploy AWS Production Scaffold.
+Development GHCR Images are for traceability and rollback testing only. They do not deploy Azure Production Scaffold.
 
 If the `master` push is exactly the same commit as a `vX.Y.Z` Release Tag, the workflow does not publish a duplicate `X.Y.Z-0000-gSHA` Development GHCR Image. The release-tagged `X.Y.Z` image is the canonical artifact for that commit.
 
@@ -86,7 +86,7 @@ When the trigger is a `vX.Y.Z` tag, the workflow publishes the release image ide
 ghcr.io/<owner>/<repo>:X.Y.Z
 ```
 
-It does not publish `latest`. AWS backend deployment builds and pushes the selected code revision to ECR through the manual AWS Production Scaffold workflow.
+It does not publish `latest`. Azure backend deployment resolves the selected GHCR Release Image to a digest and updates Container Apps through the manual Azure Production Scaffold workflow.
 
 ## Branch Protection
 
@@ -95,7 +95,7 @@ The protected `master` ruleset should require:
 - `Product checks`
 - `Container build and scan`
 
-Do not add separate required checks for release metadata or scaffold deployment. AWS Production Scaffold deployment is manually approved through the protected `aws-production-scaffold` GitHub Environment and explicit workflow confirmation strings.
+Do not add separate required checks for release metadata or scaffold deployment. Azure Production Scaffold deployment is manually approved through the protected `azure-production-scaffold` GitHub Environment and explicit workflow confirmation strings.
 
 ## Dependency Updates
 
