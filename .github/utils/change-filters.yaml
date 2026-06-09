@@ -26,7 +26,7 @@ delivery_control:
   - ".github/utils/*.py"
   - ".github/utils/**/*.py"
   - ".github/dependabot.yml"
-  - "deploy/aws/**"
+  - "deploy/azure/**"
 
 release_metadata:
   - ".github/utils/.release-please-manifest.json"

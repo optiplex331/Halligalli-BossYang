@@ -1,0 +1,349 @@
+---
+name: Azure Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Azure Production operation to run manually.
+        required: true
+        default: validate
+        type: choice
+        options:
+          - validate
+          - deploy-frontend
+          - deploy-backend
+          - smoke-backend
+      confirm_cost:
+        description: Type AZURE_PRODUCTION_APPLY to allow Azure-mutating deploy operations.
+        required: false
+        type: string
+      expected_version:
+        description: Optional expected APP_VERSION for smoke-backend health validation.
+        required: false
+        type: string
+      expected_commit:
+        description: Optional expected COMMIT_SHA for smoke-backend health validation.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  TERRAFORM_VERSION: 1.15.4
+
+jobs:
+  validate:
+    name: Validate Azure Production
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Run release utility validation
+        run: python3 .github/utils/validate_release_config.py
+
+      - name: Test release utilities
+        run: python3 -m unittest discover -s .github/utils/tests -p 'test_*.py'
+
+      - name: Terraform format check
+        run: terraform -chdir=deploy/azure fmt -check -recursive
+
+      - name: Terraform init without backend
+        run: terraform -chdir=deploy/azure init -backend=false -input=false
+
+      - name: Terraform validate
+        run: terraform -chdir=deploy/azure validate -no-color
+
+  guard-mutating-operation:
+    name: Guard Azure-mutating operation
+    if: >-
+      inputs.operation != 'validate' &&
+      inputs.operation != 'smoke-backend' &&
+      inputs.confirm_cost != 'AZURE_PRODUCTION_APPLY'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require explicit cost confirmation
+        run: |
+          echo "Azure Production deploy operations are manual and cost-aware." >&2
+          echo "Re-run with confirm_cost set to AZURE_PRODUCTION_APPLY to continue." >&2
+          exit 1
+
+  deploy-frontend:
+    name: Deploy Azure Production frontend
+    needs: validate
+    if: >-
+      inputs.operation == 'deploy-frontend' &&
+      inputs.confirm_cost == 'AZURE_PRODUCTION_APPLY'
+    runs-on: ubuntu-24.04
+    environment:
+      name: azure-production
+      url: ${{ vars.AZURE_PRODUCTION_FRONTEND_URL }}
+
+    env:
+      AZURE_PRODUCTION_FRONTEND_URL: ${{ vars.AZURE_PRODUCTION_FRONTEND_URL }}
+      AZURE_PRODUCTION_BACKEND_URL: ${{ vars.AZURE_PRODUCTION_BACKEND_URL }}
+      AZURE_STATIC_WEB_APPS_DEPLOYMENT_TOKEN: >-
+        ${{ secrets.AZURE_STATIC_WEB_APPS_DEPLOYMENT_TOKEN }}
+      VITE_HALLIGALLI_BACKEND_URL: ${{ vars.AZURE_PRODUCTION_BACKEND_URL }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Validate frontend deploy configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          required=(
+            AZURE_PRODUCTION_FRONTEND_URL
+            AZURE_PRODUCTION_BACKEND_URL
+            AZURE_STATIC_WEB_APPS_DEPLOYMENT_TOKEN
+          )
+
+          for name in "${required[@]}"; do
+            if [[ -z "${!name}" ]]; then
+              printf 'Set %s in the azure-production GitHub environment.\n' \
+                "${name}" >&2
+              exit 1
+            fi
+          done
+
+          if [[ "${AZURE_PRODUCTION_FRONTEND_URL}" != "https://play.halligalli.games" ]]; then
+            echo "Frontend target must be https://play.halligalli.games." >&2
+            exit 1
+          fi
+
+          if [[ "${AZURE_PRODUCTION_BACKEND_URL}" != "https://api.halligalli.games" ]]; then
+            echo "Backend Entry must be https://api.halligalli.games." >&2
+            exit 1
+          fi
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          run_install: false
+
+      - name: Set up Node.js with pnpm cache
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Build frontend for Azure Production
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+
+      - name: Publish static assets to Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ env.AZURE_STATIC_WEB_APPS_DEPLOYMENT_TOKEN }}
+          action: upload
+          app_location: dist
+          skip_app_build: true
+          skip_api_build: true
+
+  deploy-backend:
+    name: Deploy Azure Production backend
+    needs: validate
+    if: >-
+      inputs.operation == 'deploy-backend' &&
+      inputs.confirm_cost == 'AZURE_PRODUCTION_APPLY'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: azure-production
+      url: ${{ vars.AZURE_PRODUCTION_BACKEND_URL }}
+
+    env:
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_DEPLOY_CLIENT_ID: ${{ vars.AZURE_DEPLOY_CLIENT_ID }}
+      AZURE_PRODUCTION_FRONTEND_URL: ${{ vars.AZURE_PRODUCTION_FRONTEND_URL }}
+      AZURE_PRODUCTION_BACKEND_URL: ${{ vars.AZURE_PRODUCTION_BACKEND_URL }}
+      AZURE_PRODUCTION_RESOURCE_GROUP_NAME: ${{ vars.AZURE_PRODUCTION_RESOURCE_GROUP_NAME }}
+      AZURE_PRODUCTION_CONTAINER_APP_NAME: ${{ vars.AZURE_PRODUCTION_CONTAINER_APP_NAME }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Validate backend deploy configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          required=(
+            AZURE_TENANT_ID
+            AZURE_SUBSCRIPTION_ID
+            AZURE_DEPLOY_CLIENT_ID
+            AZURE_PRODUCTION_FRONTEND_URL
+            AZURE_PRODUCTION_BACKEND_URL
+            AZURE_PRODUCTION_RESOURCE_GROUP_NAME
+            AZURE_PRODUCTION_CONTAINER_APP_NAME
+          )
+
+          for name in "${required[@]}"; do
+            if [[ -z "${!name}" ]]; then
+              printf 'Set %s in the azure-production GitHub environment.\n' \
+                "${name}" >&2
+              exit 1
+            fi
+          done
+
+          if [[ "${AZURE_PRODUCTION_FRONTEND_URL}" != "https://play.halligalli.games" ]]; then
+            echo "Allowed browser origin must be https://play.halligalli.games." >&2
+            exit 1
+          fi
+
+          if [[ "${AZURE_PRODUCTION_BACKEND_URL}" != "https://api.halligalli.games" ]]; then
+            echo "Backend Entry must be https://api.halligalli.games." >&2
+            exit 1
+          fi
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Resolve GHCR release image identity
+        id: image
+        run: python3 .github/utils/resolve_azure_production_identity.py
+
+      - name: Resolve GHCR release image digest
+        id: digest
+        shell: bash
+        env:
+          IMAGE_TAG: ${{ steps.image.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+
+          image_digest="$(
+            docker buildx imagetools inspect "${IMAGE_TAG}" \
+              --format '{{.Manifest.Digest}}'
+          )"
+
+          if [[ ! "${image_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Could not resolve a valid GHCR image digest for ${IMAGE_TAG}." >&2
+            exit 1
+          fi
+
+          image_name="${IMAGE_TAG%:*}"
+          image_digest_ref="${image_name}@${image_digest}"
+
+          echo "image_digest=${image_digest}" >> "${GITHUB_OUTPUT}"
+          echo "image_digest_ref=${image_digest_ref}" >> "${GITHUB_OUTPUT}"
+          echo "Deploying ${image_digest_ref}"
+
+      - name: Configure GHCR registry on Container App
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          az containerapp registry set \
+            --name "${AZURE_PRODUCTION_CONTAINER_APP_NAME}" \
+            --resource-group "${AZURE_PRODUCTION_RESOURCE_GROUP_NAME}" \
+            --server ghcr.io
+
+      - name: Update Container App backend revision
+        shell: bash
+        env:
+          APP_VERSION: ${{ steps.image.outputs.version }}
+          COMMIT_SHA: ${{ steps.image.outputs.commit_sha }}
+          IMAGE: ${{ steps.digest.outputs.image_digest_ref }}
+        run: |
+          set -euo pipefail
+
+          az containerapp update \
+            --name "${AZURE_PRODUCTION_CONTAINER_APP_NAME}" \
+            --resource-group "${AZURE_PRODUCTION_RESOURCE_GROUP_NAME}" \
+            --image "${IMAGE}" \
+            --min-replicas 1 \
+            --max-replicas 1 \
+            --set-env-vars \
+              PORT=3001 \
+              HALLIGALLI_ALLOWED_ORIGINS="${AZURE_PRODUCTION_FRONTEND_URL}" \
+              APP_VERSION="${APP_VERSION}" \
+              COMMIT_SHA="${COMMIT_SHA}"
+
+      - name: Smoke test backend readiness and health
+        shell: bash
+        env:
+          EXPECTED_VERSION: ${{ steps.image.outputs.version }}
+          EXPECTED_COMMIT: ${{ steps.image.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+
+          curl --fail --silent --show-error "${AZURE_PRODUCTION_BACKEND_URL}/readyz"
+
+          response="$(
+            curl --fail --silent --show-error \
+              "${AZURE_PRODUCTION_BACKEND_URL}/health"
+          )"
+          export HEALTH_RESPONSE="${response}"
+          export SUCCESS_MESSAGE
+          SUCCESS_MESSAGE="Azure Production /health matches deployed identity."
+          python3 .github/utils/check_health.py
+
+  smoke-backend:
+    name: Smoke Azure Production backend
+    needs: validate
+    if: inputs.operation == 'smoke-backend'
+    runs-on: ubuntu-24.04
+    environment:
+      name: azure-production
+      url: ${{ vars.AZURE_PRODUCTION_BACKEND_URL }}
+
+    env:
+      AZURE_PRODUCTION_BACKEND_URL: ${{ vars.AZURE_PRODUCTION_BACKEND_URL }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Validate backend smoke configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${AZURE_PRODUCTION_BACKEND_URL}" ]]; then
+            echo "Set AZURE_PRODUCTION_BACKEND_URL in the azure-production GitHub environment." >&2
+            exit 1
+          fi
+
+      - name: Smoke test backend readiness and health
+        shell: bash
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+        run: |
+          set -euo pipefail
+
+          curl --fail --silent --show-error "${AZURE_PRODUCTION_BACKEND_URL}/readyz"
+
+          response="$(
+            curl --fail --silent --show-error \
+              "${AZURE_PRODUCTION_BACKEND_URL}/health"
+          )"
+          export HEALTH_RESPONSE="${response}"
+          export SUCCESS_MESSAGE
+          SUCCESS_MESSAGE="Azure Production /health matches expected identity."
+          python3 .github/utils/check_health.py

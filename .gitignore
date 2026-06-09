@@ -40,9 +40,9 @@ coverage/
 *.tfvars
 *.tfvars.json
 backend.hcl
-deploy/aws/environments/*/terraform.tfvars
-deploy/aws/environments/*/terraform.tfvars.json
-deploy/aws/environments/*/backend.hcl
+deploy/azure/environments/*/terraform.tfvars
+deploy/azure/environments/*/terraform.tfvars.json
+deploy/azure/environments/*/backend.hcl
 
 # Coding agents
 .claude/
