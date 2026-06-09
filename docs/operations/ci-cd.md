@@ -2,12 +2,12 @@
 
 Halligalli uses GitHub Actions as the delivery control plane. Pull requests and normal pushes validate code, release metadata, delivery control files, and container images, but they do not create Azure resources or deploy application artifacts.
 
-Azure Production Scaffold is operated through protected manual workflows:
+Azure Production is operated through protected manual workflows whose backing files and environment still use the `azure-production` boundary:
 
-- `.github/workflows/azure-production-scaffold-infra.yml` for Terraform `plan`, `apply`, `scale-down`, and `destroy`
-- `.github/workflows/azure-production-scaffold.yml` for frontend deploy, backend deploy, and backend smoke checks
+- `.github/workflows/azure-production-infra.yml` for Terraform `plan`, `apply`, `scale-down`, and `destroy`
+- `.github/workflows/azure-production.yml` for frontend deploy, backend deploy, and backend smoke checks
 
-Real Azure, HCP Terraform, Static Web Apps deployment token, Container Apps, DNS, and runtime values belong in the protected `azure-production-scaffold` GitHub Environment. The public template is `deploy/azure/github-environment.example`.
+Real Azure, HCP Terraform, Static Web Apps deployment token, Container Apps, DNS, and runtime values belong in the protected `azure-production` GitHub Environment. The public template is `deploy/azure/github-environment.example`.
 
 ## Pull Request Gates
 
@@ -33,9 +33,9 @@ Short shell-native workflow orchestration stays in Bash, such as `git`, `docker`
 
 Utility tests run unconditionally in the `Product checks` gate and do not require `pnpm install`.
 
-## Azure Production Scaffold
+## Azure Production
 
-Azure Production Scaffold workflows only run through `workflow_dispatch`; they are not attached to push, PR, or Release Tag events.
+Azure Production workflows only run through `workflow_dispatch`; they are not attached to push, PR, or Release Tag events. The visible workflow and environment names now use `azure-production`, but this still does not mean Halligalli has completed a production cutover.
 
 The infrastructure workflow supports:
 
@@ -51,9 +51,9 @@ The deployment workflow supports:
 - `deploy-backend` with `confirm_cost=AZURE_PRODUCTION_APPLY`
 - `smoke-backend`
 
-Azure Production Scaffold changes are Delivery Control. Changes to `deploy/azure/**`, `.github/workflows/azure-production-scaffold.yml`, and `.github/workflows/azure-production-scaffold-infra.yml` make `Product checks` run release utility validation and actionlint, but they do not publish Azure resources during PR checks.
+Azure Production changes are Delivery Control. Changes to `deploy/azure/**`, `.github/workflows/azure-production.yml`, and `.github/workflows/azure-production-infra.yml` make `Product checks` run release utility validation and actionlint, but they do not publish Azure resources during PR checks.
 
-Azure Production Scaffold operation details are documented in [Azure Production Scaffold](azure-production-scaffold.md).
+Azure Production operation details are documented in [Azure Production Reference](azure-production.md).
 
 ## Release PR
 
@@ -76,7 +76,7 @@ When the trigger is a normal `master` push, the workflow publishes a Development
 ghcr.io/<owner>/<repo>:X.Y.Z-000N-gSHA
 ```
 
-Development GHCR Images are for traceability and rollback testing only. They do not deploy Azure Production Scaffold.
+Development GHCR Images are for traceability and rollback testing only. They do not deploy Azure Production.
 
 If the `master` push is exactly the same commit as a `vX.Y.Z` Release Tag, the workflow does not publish a duplicate `X.Y.Z-0000-gSHA` Development GHCR Image. The release-tagged `X.Y.Z` image is the canonical artifact for that commit.
 
@@ -86,7 +86,7 @@ When the trigger is a `vX.Y.Z` tag, the workflow publishes the release image ide
 ghcr.io/<owner>/<repo>:X.Y.Z
 ```
 
-It does not publish `latest`. Azure backend deployment resolves the selected GHCR Release Image to a digest and updates Container Apps through the manual Azure Production Scaffold workflow.
+It does not publish `latest`. Azure backend deployment resolves the selected GHCR Release Image to a digest and updates Container Apps through the manual Azure Production workflow.
 
 ## Branch Protection
 
@@ -95,7 +95,7 @@ The protected `master` ruleset should require:
 - `Product checks`
 - `Container build and scan`
 
-Do not add separate required checks for release metadata or scaffold deployment. Azure Production Scaffold deployment is manually approved through the protected `azure-production-scaffold` GitHub Environment and explicit workflow confirmation strings.
+Do not add separate required checks for release metadata or Azure deployment. Azure Production deployment is manually approved through the protected `azure-production` GitHub Environment and explicit workflow confirmation strings.
 
 ## Dependency Updates
 

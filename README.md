@@ -2,7 +2,7 @@
 
 A browser-based Halligalli trainer built to feel as close to the physical card game as possible. Players sit around a virtual felt table, flip cards clockwise, and race to ring the bell the moment any fruit totals exactly five. Available in single-player practice mode and real-time multiplayer rooms.
 
-**Azure Production Scaffold**: `https://play.halligalli.games` after external Azure/HCP Terraform/Name.com activation. This scaffold is separate from any production cutover decision.
+**Azure Production**: `https://play.halligalli.games` after external Azure/HCP Terraform/Name.com activation. The backing non-production boundary remains separate from any production cutover decision.
 
 ---
 
@@ -112,7 +112,7 @@ Dark felt palette, gold accent (`--gold-light`), tabular-numeral stat displays, 
 - React 19 + Vite 8 + TypeScript + plain CSS (frontend)
 - Node.js 24 + socket.io 4 (WebSocket server)
 - Vitest for unit tests across game logic, persistence, lifecycle, health, socket config, and stats
-- Azure Production Scaffold template for a separated Static Web Apps frontend and Container Apps backend
+- Azure Production template for a separated Static Web Apps frontend and Container Apps backend
 - Manual, confirmation-gated Azure infrastructure and application deployment workflows
 
 ---
@@ -190,7 +190,7 @@ server/
 ├── Room.ts              — room/player model, match codes, host transfer
 └── GameEngine.ts        — server-authoritative game loop
 
-deploy/azure/      — sanitized Azure Production Scaffold Terraform reference and environment template
+deploy/azure/      — sanitized Azure Production Terraform reference and environment template
 scripts/simulate-bell.ts — card-distribution tuning utility
 public/yang-boss.png     — Boss portrait
 ```
@@ -199,20 +199,20 @@ public/yang-boss.png     — Boss portrait
 
 ## Deployment and Operations
 
-Azure Production Scaffold is the active cloud scaffold target without implying production cutover. The public Terraform reference models an Azure Static Web Apps frontend and Azure Container Apps backend with example values; real account-specific tfvars, backend config, state, Azure credentials, deployment tokens, and domain bindings are intentionally excluded from Git. Azure scaffold resources and application artifacts are changed only by manually dispatching protected workflows with explicit confirmation.
+Azure Production is the visible manual stage for the active Azure Production target without implying production cutover. The public Terraform reference models an Azure Static Web Apps frontend and Azure Container Apps backend with example values; real account-specific tfvars, backend config, state, Azure credentials, deployment tokens, and domain bindings are intentionally excluded from Git. Azure Production resources and application artifacts are changed only by manually dispatching protected workflows with explicit confirmation.
 
 - Release branch: `master`
 - Versioning: Release Please creates human-merged release PRs and `vX.Y.Z` tags
 - Release image: release tags build, scan, and publish immutable GHCR release images for traceability
-- Azure infrastructure: `.github/workflows/azure-production-scaffold-infra.yml` runs manual Terraform `plan`, `apply`, `scale-down`, and `destroy`
-- Azure deployment: `.github/workflows/azure-production-scaffold.yml` runs manual frontend/backend deploy and backend smoke checks
+- Azure infrastructure: `.github/workflows/azure-production-infra.yml` runs manual Terraform `plan`, `apply`, `scale-down`, and `destroy`
+- Azure deployment: `.github/workflows/azure-production.yml` runs manual frontend/backend deploy and backend smoke checks
 - Health check: `/health` reports status, active rooms, release version, and commit SHA
 - Readiness check: `/readyz` reports traffic readiness without release identity
 
 Operations docs:
 
 - [CI/CD](docs/operations/ci-cd.md)
-- [Azure Production Scaffold](docs/operations/azure-production-scaffold.md)
+- [Azure Production](docs/operations/azure-production.md)
 - [Rollback](docs/operations/rollback.md)
 
 ---

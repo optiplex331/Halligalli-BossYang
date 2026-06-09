@@ -1,7 +1,7 @@
 resource "azurerm_log_analytics_workspace" "backend" {
   name                = local.log_workspace_name
-  resource_group_name = azurerm_resource_group.scaffold.name
-  location            = azurerm_resource_group.scaffold.location
+  resource_group_name = azurerm_resource_group.production.name
+  location            = azurerm_resource_group.production.location
   sku                 = "PerGB2018"
   retention_in_days   = var.log_analytics_retention_days
   tags                = local.common_tags
@@ -9,8 +9,8 @@ resource "azurerm_log_analytics_workspace" "backend" {
 
 resource "azurerm_container_app_environment" "backend" {
   name                       = local.container_app_env_name
-  resource_group_name        = azurerm_resource_group.scaffold.name
-  location                   = azurerm_resource_group.scaffold.location
+  resource_group_name        = azurerm_resource_group.production.name
+  location                   = azurerm_resource_group.production.location
   log_analytics_workspace_id = azurerm_log_analytics_workspace.backend.id
   tags                       = local.common_tags
 }
@@ -18,7 +18,7 @@ resource "azurerm_container_app_environment" "backend" {
 resource "azurerm_role_assignment" "deploy_container_app_contributor" {
   count = var.azure_deploy_principal_id == null ? 0 : 1
 
-  scope                = azurerm_resource_group.scaffold.id
+  scope                = azurerm_resource_group.production.id
   role_definition_name = "Container Apps Contributor"
   principal_id         = var.azure_deploy_principal_id
 }
@@ -26,7 +26,7 @@ resource "azurerm_role_assignment" "deploy_container_app_contributor" {
 resource "azurerm_container_app" "backend" {
   name                         = local.backend_app_name
   container_app_environment_id = azurerm_container_app_environment.backend.id
-  resource_group_name          = azurerm_resource_group.scaffold.name
+  resource_group_name          = azurerm_resource_group.production.name
   revision_mode                = local.backend.revision_mode
   tags                         = local.common_tags
 
@@ -81,7 +81,7 @@ resource "azurerm_container_app" "backend" {
 
     precondition {
       condition     = var.backend_max_replicas == 1
-      error_message = "Azure Production Scaffold backend must not imply multiplayer horizontal scaling."
+      error_message = "Azure Production backend must not imply multiplayer horizontal scaling."
     }
   }
 }
@@ -96,6 +96,6 @@ check "backend_scaling_guardrail" {
 check "backend_readiness_surface" {
   assert {
     condition     = local.backend.readiness_path == "/readyz" && local.backend.health_path == "/health"
-    error_message = "Azure Production Scaffold smoke checks must preserve /readyz and /health."
+    error_message = "Azure Production smoke checks must preserve /readyz and /health."
   }
 }

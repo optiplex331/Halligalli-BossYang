@@ -1,5 +1,5 @@
 ---
-name: Azure Production Scaffold Infrastructure
+name: Azure Production Infrastructure
 
 on:
   workflow_dispatch:
@@ -29,7 +29,7 @@ env:
 
 jobs:
   validate:
-    name: Validate Azure Production Scaffold Terraform
+    name: Validate Azure Production Terraform
     runs-on: ubuntu-24.04
 
     steps:
@@ -54,14 +54,14 @@ jobs:
         run: terraform -chdir=deploy/azure validate -no-color
 
   infrastructure:
-    name: Run Azure Production Scaffold Terraform
+    name: Run Azure Production Terraform
     needs: validate
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write
     environment:
-      name: azure-production-scaffold
+      name: azure-production
       url: ${{ vars.HCP_TERRAFORM_WORKSPACE_URL }}
 
     env:
@@ -147,7 +147,7 @@ jobs:
 
           for name in "${required[@]}"; do
             if [[ -z "${!name}" ]]; then
-              printf 'Set %s in the azure-production-scaffold GitHub environment.\n' \
+              printf 'Set %s in the azure-production GitHub environment.\n' \
                 "${name}" >&2
               exit 1
             fi

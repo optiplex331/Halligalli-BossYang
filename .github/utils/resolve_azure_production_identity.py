@@ -1,4 +1,4 @@
-"""Resolve Azure Production Scaffold deployment image identity."""
+"""Resolve Azure Production deployment image identity."""
 
 from __future__ import annotations
 
@@ -21,8 +21,8 @@ def required(env: dict[str, str], name: str) -> str:
     return value
 
 
-def resolve_azure_scaffold_identity(env: dict[str, str], git=run_git) -> dict[str, str]:
-    """Resolve the GHCR Release Image selected for Azure scaffold deployment."""
+def resolve_azure_production_identity(env: dict[str, str], git=run_git) -> dict[str, str]:
+    """Resolve the GHCR Release Image selected for Azure Production deployment."""
 
     image = normalize_image(required(env, "GITHUB_REPOSITORY"))
     ref_type = env.get("GITHUB_REF_TYPE", "")
@@ -30,7 +30,7 @@ def resolve_azure_scaffold_identity(env: dict[str, str], git=run_git) -> dict[st
     commit_sha = git(["rev-parse", "HEAD"])
 
     if not is_release_tag(ref_type, ref_name):
-        raise ImageIdentityError("Azure Production Scaffold deploy-backend requires a vX.Y.Z Release Tag ref")
+        raise ImageIdentityError("Azure Production deploy-backend requires a vX.Y.Z Release Tag ref")
 
     version = ref_name.removeprefix("v")
 
@@ -46,7 +46,7 @@ def main() -> None:
     """CLI entry point used by GitHub Actions steps."""
 
     try:
-        outputs = resolve_azure_scaffold_identity(dict(os.environ))
+        outputs = resolve_azure_production_identity(dict(os.environ))
         for line in append_github_outputs(outputs):
             print(line)
     except (ImageIdentityError, ValueError) as error:

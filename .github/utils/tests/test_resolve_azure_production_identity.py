@@ -1,4 +1,4 @@
-"""Tests for Azure Production Scaffold image identity routing."""
+"""Tests for Azure Production image identity routing."""
 
 import unittest
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from resolve_azure_scaffold_identity import resolve_azure_scaffold_identity  # noqa: E402
+from resolve_azure_production_identity import resolve_azure_production_identity  # noqa: E402
 from resolve_image_identity import ImageIdentityError  # noqa: E402
 
 
@@ -25,7 +25,7 @@ def fake_git(outputs):
     return run
 
 
-class ResolveAzureScaffoldIdentityTest(unittest.TestCase):
+class ResolveAzureProductionIdentityTest(unittest.TestCase):
     def base_env(self):
         return {
             "GITHUB_REPOSITORY": "Optiplex331/Halligalli-BossYang",
@@ -38,7 +38,7 @@ class ResolveAzureScaffoldIdentityTest(unittest.TestCase):
             "GITHUB_REF_NAME": "v0.4.0",
         }
 
-        outputs = resolve_azure_scaffold_identity(
+        outputs = resolve_azure_production_identity(
             env,
             fake_git({("rev-parse", "HEAD"): "abc1234def5678"}),
         )
@@ -56,7 +56,7 @@ class ResolveAzureScaffoldIdentityTest(unittest.TestCase):
         }
 
         with self.assertRaisesRegex(ImageIdentityError, "requires a vX.Y.Z Release Tag"):
-            resolve_azure_scaffold_identity(env, fake_git({("rev-parse", "HEAD"): "abc1234"}))
+            resolve_azure_production_identity(env, fake_git({("rev-parse", "HEAD"): "abc1234"}))
 
 
 if __name__ == "__main__":

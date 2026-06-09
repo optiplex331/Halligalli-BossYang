@@ -1,20 +1,20 @@
 output "azure_production_region" {
-  description = "Accepted Azure Production Scaffold runtime region."
+  description = "Accepted Azure Production runtime region."
   value       = var.azure_region
 }
 
 output "azure_production_environment" {
-  description = "Protected GitHub Environment name for Azure Production Scaffold values."
+  description = "Protected GitHub Environment name for Azure Production values."
   value       = local.environment_name
 }
 
 output "azure_production_domain" {
-  description = "Domain whose Name.com DNS records are configured manually for Azure Production Scaffold."
+  description = "Domain whose Name.com DNS records are configured manually for Azure Production."
   value       = var.domain_name
 }
 
 output "azure_production_hostnames" {
-  description = "Public hostnames for Azure Production Scaffold."
+  description = "Public hostnames for Azure Production."
   value = {
     frontend = local.dns.frontend_hostname
     backend  = local.dns.backend_hostname
@@ -23,7 +23,7 @@ output "azure_production_hostnames" {
 }
 
 output "frontend_public_url" {
-  description = "Public Azure Production Scaffold frontend address."
+  description = "Public Azure Production frontend address."
   value       = local.frontend.public_url
 }
 
@@ -31,19 +31,19 @@ output "frontend_static_web_app" {
   description = "Static Web Apps values needed by manual frontend deployment and custom-domain activation."
   value = {
     name              = azurerm_static_web_app.frontend.name
-    resource_group    = azurerm_resource_group.scaffold.name
+    resource_group    = azurerm_resource_group.production.name
     default_host_name = azurerm_static_web_app.frontend.default_host_name
     custom_hostname   = local.dns.frontend_hostname
   }
 }
 
 output "frontend_vite_build_environment" {
-  description = "Environment values expected when building Azure Production Scaffold Vite frontend assets."
+  description = "Environment values expected when building Azure Production Vite frontend assets."
   value       = local.frontend.vite_environment
 }
 
 output "backend_public_url" {
-  description = "Secure Backend Entry for Azure Production Scaffold readiness, health, and socket.io traffic."
+  description = "Secure Backend Entry for Azure Production readiness, health, and socket.io traffic."
   value       = local.backend.public_url
 }
 
@@ -51,7 +51,7 @@ output "backend_container_app" {
   description = "Container Apps values needed by the manual backend deployment workflow."
   value = {
     name                = azurerm_container_app.backend.name
-    resource_group      = azurerm_resource_group.scaffold.name
+    resource_group      = azurerm_resource_group.production.name
     latest_revision_url = "https://${azurerm_container_app.backend.latest_revision_fqdn}"
     custom_hostname     = local.dns.backend_hostname
     min_replicas        = var.backend_min_replicas
@@ -60,7 +60,7 @@ output "backend_container_app" {
 }
 
 output "backend_runtime_environment" {
-  description = "Non-secret runtime environment represented in the Azure Production Scaffold backend Container App."
+  description = "Non-secret runtime environment represented in the Azure Production backend Container App."
   value = {
     HALLIGALLI_ALLOWED_ORIGINS = local.backend.allowed_origins
     APP_VERSION                = var.backend_app_version

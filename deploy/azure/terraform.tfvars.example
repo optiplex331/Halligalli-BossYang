@@ -3,21 +3,21 @@ azure_region            = "westeurope"
 static_web_app_location = "westeurope"
 
 # Public example only. Real values are generated in GitHub Actions from the
-# protected azure-production-scaffold GitHub Environment.
+# protected azure-production GitHub Environment.
 
 domain_name        = "halligalli.games"
 frontend_subdomain = "play"
 backend_subdomain  = "api"
 
-resource_group_name = "halligalli-azure-production-scaffold-rg"
-static_web_app_name = "halligalli-azure-production-scaffold"
+resource_group_name = "halligalli-azure-production-rg"
+static_web_app_name = "halligalli-azure-production"
 
 log_analytics_retention_days = 7
 
 backend_image        = "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
 backend_min_replicas = 0
 backend_max_replicas = 1
-backend_app_version  = "azure-production-scaffold-placeholder"
+backend_app_version  = "azure-production-placeholder"
 backend_commit_sha   = "0000000000000000000000000000000000000000"
 
 github_repository         = "example-owner/example-repo"

@@ -1,5 +1,5 @@
 locals {
-  environment_name = "azure-production-scaffold"
+  environment_name = "azure-production"
   name_prefix      = "${var.project_name}-${local.environment_name}"
 
   resource_group_name    = coalesce(var.resource_group_name, "${local.name_prefix}-rg")
@@ -50,7 +50,7 @@ locals {
     TerraformRoot = "deploy/azure"
     Runtime       = "Node 24"
     Production    = "false"
-    CostProfile   = "student-credit-scaffold"
+    CostProfile   = "student-credit-production-demo"
     StateBackend  = "hcp-terraform-remote-state"
   }
 }

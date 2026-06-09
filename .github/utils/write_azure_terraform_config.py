@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate private Terraform config files for Azure Production Scaffold CI."""
+"""Generate private Terraform config files for Azure Production CI."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 
-ENVIRONMENT_NAME = "azure-production-scaffold"
+ENVIRONMENT_NAME = "azure-production"
 
 
 def required(name: str) -> str:

@@ -1,4 +1,4 @@
-# Public template for the protected GitHub Environment named azure-production-scaffold.
+# Public template for the protected GitHub Environment named azure-production.
 # Do not put real values in Git. Copy the key names into GitHub Environment
 # variables/secrets after Azure, HCP Terraform, Name.com DNS, and runtime values are chosen.
 
@@ -15,26 +15,26 @@ AZURE_DEPLOY_PRINCIPAL_ID="00000000-0000-0000-0000-000000000000"
 
 [variables.infrastructure]
 HCP_TERRAFORM_ORGANIZATION="example-org"
-HCP_TERRAFORM_WORKSPACE="azure-production-scaffold"
-HCP_TERRAFORM_WORKSPACE_URL="https://app.terraform.io/app/example-org/workspaces/azure-production-scaffold"
+HCP_TERRAFORM_WORKSPACE="azure-production"
+HCP_TERRAFORM_WORKSPACE_URL="https://app.terraform.io/app/example-org/workspaces/azure-production"
 AZURE_PRODUCTION_PROJECT_NAME="halligalli"
 AZURE_PRODUCTION_REGION="westeurope"
 AZURE_PRODUCTION_STATIC_WEB_APP_LOCATION="westeurope"
 AZURE_PRODUCTION_DOMAIN_NAME="halligalli.games"
 AZURE_PRODUCTION_FRONTEND_SUBDOMAIN="play"
 AZURE_PRODUCTION_BACKEND_SUBDOMAIN="api"
-AZURE_PRODUCTION_RESOURCE_GROUP_NAME="halligalli-azure-production-scaffold-rg"
-AZURE_PRODUCTION_STATIC_WEB_APP_NAME="halligalli-azure-production-scaffold"
+AZURE_PRODUCTION_RESOURCE_GROUP_NAME="halligalli-azure-production-rg"
+AZURE_PRODUCTION_STATIC_WEB_APP_NAME="halligalli-azure-production"
 AZURE_PRODUCTION_BACKEND_IMAGE="mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
 AZURE_PRODUCTION_BACKEND_MIN_REPLICAS="0"
 AZURE_PRODUCTION_BACKEND_MAX_REPLICAS="1"
-AZURE_PRODUCTION_BACKEND_APP_VERSION="azure-production-scaffold-placeholder"
+AZURE_PRODUCTION_BACKEND_APP_VERSION="azure-production-placeholder"
 AZURE_PRODUCTION_BACKEND_COMMIT_SHA="0000000000000000000000000000000000000000"
 AZURE_PRODUCTION_GITHUB_REPOSITORY="example-owner/example-repo"
 
 [variables.deployment]
 AZURE_PRODUCTION_FRONTEND_URL="https://play.halligalli.games"
 AZURE_PRODUCTION_BACKEND_URL="https://api.halligalli.games"
-AZURE_PRODUCTION_RESOURCE_GROUP_NAME="halligalli-azure-production-scaffold-rg"
-AZURE_PRODUCTION_STATIC_WEB_APP_NAME="halligalli-azure-production-scaffold"
-AZURE_PRODUCTION_CONTAINER_APP_NAME="halligalli-azure-production-scaffold-backend"
+AZURE_PRODUCTION_RESOURCE_GROUP_NAME="halligalli-azure-production-rg"
+AZURE_PRODUCTION_STATIC_WEB_APP_NAME="halligalli-azure-production"
+AZURE_PRODUCTION_CONTAINER_APP_NAME="halligalli-azure-production-backend"

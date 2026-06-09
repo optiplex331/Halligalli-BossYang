@@ -1,5 +1,5 @@
 variable "project_name" {
-  description = "Short project name used in Azure Production Scaffold resource names."
+  description = "Short project name used in Azure Production resource names."
   type        = string
   default     = "halligalli"
 
@@ -10,13 +10,13 @@ variable "project_name" {
 }
 
 variable "azure_region" {
-  description = "Azure Production Scaffold runtime region. westeurope is the default; northeurope is only a fallback for capacity or availability."
+  description = "Azure Production runtime region. westeurope is the default; northeurope is only a fallback for capacity or availability."
   type        = string
   default     = "westeurope"
 
   validation {
     condition     = contains(["westeurope", "northeurope"], var.azure_region)
-    error_message = "Azure Production Scaffold may only use westeurope or the northeurope fallback."
+    error_message = "Azure Production may only use westeurope or the northeurope fallback."
   }
 }
 
@@ -32,7 +32,7 @@ variable "static_web_app_location" {
 }
 
 variable "domain_name" {
-  description = "Domain used by Azure Production Scaffold DNS records at Name.com."
+  description = "Domain used by Azure Production DNS records at Name.com."
   type        = string
   default     = "halligalli.games"
 
@@ -65,7 +65,7 @@ variable "backend_subdomain" {
 }
 
 variable "resource_group_name" {
-  description = "Optional existing-looking resource group name override for the Azure Production Scaffold."
+  description = "Optional existing-looking resource group name override for the Azure Production."
   type        = string
   default     = null
   nullable    = true
@@ -77,7 +77,7 @@ variable "resource_group_name" {
 }
 
 variable "static_web_app_name" {
-  description = "Optional Static Web App name override. Defaults to the scaffold name prefix."
+  description = "Optional Static Web App name override. Defaults to the Azure Production name prefix."
   type        = string
   default     = null
   nullable    = true
@@ -89,13 +89,13 @@ variable "static_web_app_name" {
 }
 
 variable "log_analytics_retention_days" {
-  description = "Log Analytics retention days for Azure Production Scaffold diagnostics."
+  description = "Log Analytics retention days for Azure Production diagnostics."
   type        = number
   default     = 7
 
   validation {
     condition     = var.log_analytics_retention_days == 7
-    error_message = "Azure Production Scaffold Log Retention must stay at seven days for the student-credit boundary."
+    error_message = "Azure Production Log Retention must stay at seven days for the student-credit boundary."
   }
 }
 
@@ -128,14 +128,14 @@ variable "backend_max_replicas" {
 
   validation {
     condition     = var.backend_max_replicas == 1
-    error_message = "Azure Production Scaffold backend max_replicas must remain 1."
+    error_message = "Azure Production backend max_replicas must remain 1."
   }
 }
 
 variable "backend_app_version" {
-  description = "Release Identity placeholder for APP_VERSION until the manual Azure Production Scaffold deployment workflow injects a release value."
+  description = "Release Identity placeholder for APP_VERSION until the manual Azure Production deployment workflow injects a release value."
   type        = string
-  default     = "azure-production-scaffold-placeholder"
+  default     = "azure-production-placeholder"
 
   validation {
     condition     = length(trimspace(var.backend_app_version)) > 0
@@ -144,7 +144,7 @@ variable "backend_app_version" {
 }
 
 variable "backend_commit_sha" {
-  description = "Release Identity placeholder for COMMIT_SHA until the manual Azure Production Scaffold deployment workflow injects a commit SHA."
+  description = "Release Identity placeholder for COMMIT_SHA until the manual Azure Production deployment workflow injects a commit SHA."
   type        = string
   default     = "0000000000000000000000000000000000000000"
 
@@ -155,7 +155,7 @@ variable "backend_commit_sha" {
 }
 
 variable "github_repository" {
-  description = "GitHub owner/repository expected to operate Azure Production Scaffold through the protected GitHub Environment."
+  description = "GitHub owner/repository expected to operate Azure Production through the protected GitHub Environment."
   type        = string
   default     = "example-owner/example-repo"
 

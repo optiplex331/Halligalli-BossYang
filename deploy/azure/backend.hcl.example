@@ -1,5 +1,5 @@
 organization = "example-org"
 
 workspaces {
-  name = "azure-production-scaffold"
+  name = "azure-production"
 }

@@ -1,11 +1,11 @@
 ---
-name: Azure Production Scaffold
+name: Azure Production
 
 on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Azure Production Scaffold operation to run manually.
+        description: Azure Production operation to run manually.
         required: true
         default: validate
         type: choice
@@ -35,7 +35,7 @@ env:
 
 jobs:
   validate:
-    name: Validate Azure Production Scaffold
+    name: Validate Azure Production
     runs-on: ubuntu-24.04
 
     steps:
@@ -72,19 +72,19 @@ jobs:
     steps:
       - name: Require explicit cost confirmation
         run: |
-          echo "Azure Production Scaffold deploy operations are manual and cost-aware." >&2
+          echo "Azure Production deploy operations are manual and cost-aware." >&2
           echo "Re-run with confirm_cost set to AZURE_PRODUCTION_APPLY to continue." >&2
           exit 1
 
   deploy-frontend:
-    name: Deploy Azure Production Scaffold frontend
+    name: Deploy Azure Production frontend
     needs: validate
     if: >-
       inputs.operation == 'deploy-frontend' &&
       inputs.confirm_cost == 'AZURE_PRODUCTION_APPLY'
     runs-on: ubuntu-24.04
     environment:
-      name: azure-production-scaffold
+      name: azure-production
       url: ${{ vars.AZURE_PRODUCTION_FRONTEND_URL }}
 
     env:
@@ -111,7 +111,7 @@ jobs:
 
           for name in "${required[@]}"; do
             if [[ -z "${!name}" ]]; then
-              printf 'Set %s in the azure-production-scaffold GitHub environment.\n' \
+              printf 'Set %s in the azure-production GitHub environment.\n' \
                 "${name}" >&2
               exit 1
             fi
@@ -138,7 +138,7 @@ jobs:
           node-version-file: package.json
           cache: pnpm
 
-      - name: Build frontend for Azure Production Scaffold
+      - name: Build frontend for Azure Production
         run: |
           pnpm install --frozen-lockfile
           pnpm run build
@@ -153,7 +153,7 @@ jobs:
           skip_api_build: true
 
   deploy-backend:
-    name: Deploy Azure Production Scaffold backend
+    name: Deploy Azure Production backend
     needs: validate
     if: >-
       inputs.operation == 'deploy-backend' &&
@@ -163,7 +163,7 @@ jobs:
       contents: read
       id-token: write
     environment:
-      name: azure-production-scaffold
+      name: azure-production
       url: ${{ vars.AZURE_PRODUCTION_BACKEND_URL }}
 
     env:
@@ -198,7 +198,7 @@ jobs:
 
           for name in "${required[@]}"; do
             if [[ -z "${!name}" ]]; then
-              printf 'Set %s in the azure-production-scaffold GitHub environment.\n' \
+              printf 'Set %s in the azure-production GitHub environment.\n' \
                 "${name}" >&2
               exit 1
             fi
@@ -226,7 +226,7 @@ jobs:
 
       - name: Resolve GHCR release image identity
         id: image
-        run: python3 .github/utils/resolve_azure_scaffold_identity.py
+        run: python3 .github/utils/resolve_azure_production_identity.py
 
       - name: Resolve GHCR release image digest
         id: digest
@@ -300,16 +300,16 @@ jobs:
           )"
           export HEALTH_RESPONSE="${response}"
           export SUCCESS_MESSAGE
-          SUCCESS_MESSAGE="Azure Production Scaffold /health matches deployed identity."
+          SUCCESS_MESSAGE="Azure Production /health matches deployed identity."
           python3 .github/utils/check_health.py
 
   smoke-backend:
-    name: Smoke Azure Production Scaffold backend
+    name: Smoke Azure Production backend
     needs: validate
     if: inputs.operation == 'smoke-backend'
     runs-on: ubuntu-24.04
     environment:
-      name: azure-production-scaffold
+      name: azure-production
       url: ${{ vars.AZURE_PRODUCTION_BACKEND_URL }}
 
     env:
@@ -325,7 +325,7 @@ jobs:
           set -euo pipefail
 
           if [[ -z "${AZURE_PRODUCTION_BACKEND_URL}" ]]; then
-            echo "Set AZURE_PRODUCTION_BACKEND_URL in the azure-production-scaffold GitHub environment." >&2
+            echo "Set AZURE_PRODUCTION_BACKEND_URL in the azure-production GitHub environment." >&2
             exit 1
           fi
 
@@ -345,5 +345,5 @@ jobs:
           )"
           export HEALTH_RESPONSE="${response}"
           export SUCCESS_MESSAGE
-          SUCCESS_MESSAGE="Azure Production Scaffold /health matches expected identity."
+          SUCCESS_MESSAGE="Azure Production /health matches expected identity."
           python3 .github/utils/check_health.py
