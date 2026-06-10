@@ -142,7 +142,7 @@ export function createHalligalliServer() {
 
     socket.on("room:create", ({ playerName, maxPlayers, difficulty, duration, language }) => {
       const code = generateCode(new Set(rooms.keys()));
-      const room = new Room(code, 0, maxPlayers || 4, difficulty || "normal", duration || 60, language || "zh");
+      const room = new Room(code, 0, maxPlayers || 4, difficulty || "normal", duration || 60, language || "en");
       const player = room.addPlayer(playerName || "Player 1", socket.id);
       if (!player) {
         socket.emit("room:error", {
