@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">Halligalli Arena feature showcase</title>
+  <desc id="desc">A dark product board showing the gameplay table, multiplayer room, training log, and setup commands.</desc>
+  <defs>
+    <radialGradient id="page" cx="22%" cy="12%" r="92%">
+      <stop offset="0" stop-color="#173723"/>
+      <stop offset=".38" stop-color="#0b1422"/>
+      <stop offset="1" stop-color="#05080f"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#fff0a3"/>
+      <stop offset=".45" stop-color="#f0c44a"/>
+      <stop offset="1" stop-color="#9b7311"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="720" fill="url(#page)"/>
+  <circle cx="966" cy="124" r="170" fill="#f0c44a" opacity=".12" filter="url(#soft)"/>
+  <circle cx="182" cy="618" r="180" fill="#1f5840" opacity=".36" filter="url(#soft)"/>
+  <text x="72" y="95" fill="#ede8d5" font-family="Georgia, serif" font-size="58" font-style="italic" font-weight="700">Halligalli Arena</text>
+  <text x="74" y="132" fill="#b8b29f" font-family="Arial, sans-serif" font-size="20">Exact-five bell training for solo practice and real-time rooms.</text>
+  <g transform="translate(72 174)">
+    <rect width="620" height="378" rx="26" fill="#0b1a16" stroke="#ffffff" stroke-opacity=".12"/>
+    <ellipse cx="310" cy="196" rx="244" ry="142" fill="#123621" stroke="#e8c34a" stroke-opacity=".18" stroke-width="2"/>
+    <circle cx="310" cy="196" r="62" fill="#05080f" opacity=".62"/>
+    <circle cx="310" cy="196" r="48" fill="url(#gold)"/>
+    <text x="282" y="206" fill="#1a0f00" font-family="Georgia, serif" font-size="31" font-weight="700">Bell</text>
+    <g fill="#f8f4ea" stroke="#d8c9a0">
+      <rect x="270" y="36" width="80" height="108" rx="12"/>
+      <rect x="88" y="158" width="80" height="108" rx="12"/>
+      <rect x="452" y="158" width="80" height="108" rx="12"/>
+      <rect x="270" y="250" width="80" height="108" rx="12"/>
+    </g>
+    <text x="292" y="100" font-size="28">🍌</text>
+    <text x="110" y="222" font-size="28">🍓</text>
+    <text x="474" y="222" font-size="28">🍋</text>
+    <text x="292" y="314" font-size="28">🍇</text>
+    <text x="24" y="35" fill="#e8c34a" font-family="Arial, sans-serif" font-size="15" font-weight="700">SERVER-AUTHORITATIVE TABLE</text>
+  </g>
+  <g transform="translate(735 176)">
+    <rect width="392" height="136" rx="24" fill="#ffffff" fill-opacity=".055" stroke="#ffffff" stroke-opacity=".12"/>
+    <text x="28" y="45" fill="#ede8d5" font-family="Georgia, serif" font-size="27" font-weight="700">Multiplayer rooms</text>
+    <text x="28" y="78" fill="#b8b29f" font-family="Arial, sans-serif" font-size="16">Create a code, ready up, and race friends.</text>
+    <rect x="28" y="96" width="82" height="22" rx="11" fill="#e8c34a" fill-opacity=".18"/>
+    <text x="46" y="112" fill="#f0c44a" font-family="Arial, sans-serif" font-size="12" font-weight="700">4-CHAR</text>
+  </g>
+  <g transform="translate(735 342)">
+    <rect width="392" height="136" rx="24" fill="#ffffff" fill-opacity=".055" stroke="#ffffff" stroke-opacity=".12"/>
+    <text x="28" y="45" fill="#ede8d5" font-family="Georgia, serif" font-size="27" font-weight="700">Training log</text>
+    <text x="28" y="78" fill="#b8b29f" font-family="Arial, sans-serif" font-size="16">Accuracy, reaction time, streaks, and daily goals.</text>
+    <polyline points="28,116 82,104 138,112 196,90 252,100 332,78" fill="none" stroke="#f0c44a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <g transform="translate(735 508)">
+    <rect width="392" height="96" rx="18" fill="#05080f" stroke="#ffffff" stroke-opacity=".1"/>
+    <text x="28" y="38" fill="#6fcf97" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">$ pnpm run dev</text>
+    <text x="28" y="68" fill="#f0c44a" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">$ pnpm run dev:server</text>
+  </g>
+  <text x="74" y="642" fill="#7d7768" font-family="Arial, sans-serif" font-size="15">React 19 · Vite 8 · TypeScript · socket.io · Vitest · localStorage progress</text>
+</svg>

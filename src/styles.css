@@ -1,5 +1,5 @@
 /* ============================================================
-   HALLIGALLI — Midnight Edition
+   HALLIGALLI ARENA — Midnight Edition
    Aesthetic: Dark luxury casino / late-night card table
    Display: Cormorant Garamond  ·  Mono: JetBrains Mono  ·  Body: Outfit
    ============================================================ */
@@ -26,6 +26,8 @@
   --gold-dim: rgba(201, 162, 39, 0.14);
   --gold-glow: rgba(201, 162, 39, 0.32);
   --gold-text: #e8c34a;
+  --wine: #4a1118;
+  --wine-dim: rgba(120, 26, 36, 0.16);
 
   /* Text */
   --text-0: #ede8d5;
@@ -70,11 +72,21 @@ body {
   background-color: var(--bg-0);
   /* Subtle noise grain */
   background-image:
+    radial-gradient(circle at 14% 9%, rgba(201, 162, 39, 0.11), transparent 23%),
+    radial-gradient(circle at 92% 18%, rgba(120, 26, 36, 0.22), transparent 30%),
+    radial-gradient(circle at 16% 86%, rgba(31, 88, 64, 0.18), transparent 24%),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.028'/%3E%3C/svg%3E");
+  background-attachment: fixed;
 }
 
 button {
   font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--gold-light);
+  outline-offset: 3px;
 }
 
 [tabindex="-1"]:focus {
@@ -136,6 +148,9 @@ h1 {
   letter-spacing: -0.03em;
   color: var(--text-0);
   font-style: italic;
+  text-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.45),
+    0 0 28px rgba(201, 162, 39, 0.1);
 }
 
 h2 {
@@ -156,6 +171,9 @@ h2 {
   font-size: 0.88rem;
   line-height: 1.65;
   backdrop-filter: blur(12px);
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(201, 162, 39, 0.04) inset;
 }
 
 /* ── Layout Primitives ─────────────────────────────────────── */
@@ -177,6 +195,7 @@ h2 {
 /* ── Card Surface ──────────────────────────────────────────── */
 
 .card {
+  position: relative;
   padding: 24px;
   border: 1px solid var(--border-0);
   border-radius: var(--r-lg);
@@ -187,9 +206,19 @@ h2 {
     0 24px 48px rgba(0, 0, 0, 0.28);
 }
 
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), transparent 34%);
+  pointer-events: none;
+}
+
 .intro {
   background:
     linear-gradient(135deg, rgba(201, 162, 39, 0.06) 0%, transparent 60%),
+    linear-gradient(235deg, var(--wine-dim) 0%, transparent 44%),
     var(--surface);
   border-color: var(--border-1);
 }
