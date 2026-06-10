@@ -1,6 +1,13 @@
-# CI/CD and GitOps
+# CI/CD
 
-Halligalli uses GitHub Actions as its delivery control plane and as the GitOps reconciler for the single-service DigitalOcean Production app. The intended production state is stored in the Git-tracked Production Manifest at `deploy/production/app.yaml`; DigitalOcean is updated from that manifest.
+Halligalli uses GitHub Actions as the delivery control plane. Pull requests and normal pushes validate code, release metadata, delivery control files, and container images, but they do not create Azure resources or deploy application artifacts.
+
+Azure Production is operated through protected manual workflows whose backing files and environment still use the `azure-production` boundary:
+
+- `.github/workflows/azure-production-infra.yml` for Terraform `plan`, `apply`, `scale-down`, and `destroy`
+- `.github/workflows/azure-production.yml` for frontend deploy, backend deploy, and backend smoke checks
+
+Real Azure, HCP Terraform, Static Web Apps deployment token, Container Apps, DNS, and runtime values belong in the protected `azure-production` GitHub Environment. The public template is `deploy/azure/github-environment.example`.
 
 ## Pull Request Gates
 
@@ -11,29 +18,42 @@ Every pull request targeting `master` runs these required checks:
 | Product checks | `CI` | `Product checks` | The change received the right product, metadata, or control-plane validation for its type. |
 | Container build and scan | `Container` | `Container build and scan` | The change received the right image validation for its type. |
 
-PR checks do not publish images and do not change DigitalOcean state. CI uses `package.json` as the `actions/setup-node` version source; the current product runtime baseline is Node.js 24.
+PR checks do not publish images and do not mutate Azure. CI uses `package.json` as the `actions/setup-node` version source; the current product runtime baseline is Node.js 24.
 
 The check names intentionally stay stable because branch protection depends on them. The work inside each check is routed by `dorny/paths-filter` and `.github/utils/change-filters.yaml`, not by workflow-level path filters. This avoids skipped workflows leaving required checks pending.
 
-Short shell-native workflow orchestration stays in Bash, such as `git`, `docker`, `doctl`, `gh`, `curl`, Terraform CLI orchestration, and environment checks. Structured parsing, reusable JSON validation, Production Manifest release identity handling, drift comparison, `/health` JSON validation, and non-trivial inline heredocs belong in dependency-free `.github/utils/*.py` scripts covered by Python's built-in `unittest`.
+Short shell-native workflow orchestration stays in Bash, such as `git`, `docker`, `gh`, `curl`, Terraform CLI orchestration, Azure CLI calls, and environment checks. Structured release validation, GitHub output formatting, `/health` JSON validation, and non-trivial inline heredocs belong in dependency-free `.github/utils/*.py` scripts covered by Python's built-in `unittest`.
 
 | Change type | Product checks | Container build and scan |
 |---|---|---|
-| Product/runtime PR | Validate release config and Python utility tests, install dependencies, run tests, typecheck, and build on Node.js 24. | Build the Node.js 24 production image and run Trivy. |
+| Product/runtime PR | Validate release config and Python utility tests, install dependencies, run tests, typecheck, and build on Node.js 24. | Build the Node.js 24 Azure backend image and run Trivy. |
 | Delivery control PR | Validate release config and utility tests, then run actionlint for GitHub Actions workflows. Skip heavy product work. | Skip image build work. |
 | Release PR | Validate release config and utility tests. Skip heavy product work. | Skip image build work. |
-| Production Promotion PR | Validate release config and utility tests, including Production Manifest structure, and require the PR to modify only `deploy/production/app.yaml`. Skip heavy product work. | Skip image build work because the Release Tag already built and scanned the image. |
 | Docs or other metadata PR | Validate release config and utility tests. Skip heavy product work. | Skip image build work. |
 
-Utility tests run unconditionally in the `Product checks` gate and do not require `pnpm install`. `Container`, `Reconcile DO Production`, and `Production Drift Check` run the specific utilities they need without repeating the full utility test suite.
+Utility tests run unconditionally in the `Product checks` gate and do not require `pnpm install`.
 
-## AWS Production Scaffold
+## Azure Production
 
-The `AWS Production Scaffold` workflow only runs through `workflow_dispatch`; it is not attached to push, PR, or Release Tag events. The default `validate` operation only runs release config and Terraform static validation. `deploy-frontend` and `deploy-backend` require the `PRODUCTION_SCAFFOLD_APPLY` confirmation before any AWS-mutating steps run.
+Azure Production workflows only run through `workflow_dispatch`; they are not attached to push, PR, or Release Tag events. The visible workflow and environment names now use `azure-production`, but this still does not mean Halligalli has completed a production cutover.
 
-AWS Production Scaffold changes are Delivery Control. Changes to `deploy/aws/**` and `.github/workflows/aws-production-scaffold.yml` make `Product checks` run release utility validation and actionlint, but they do not publish AWS resources and do not change DO Production.
+The infrastructure workflow supports:
 
-AWS Production Scaffold operation details are documented in [AWS Production Scaffold](aws-production-scaffold.md).
+- `plan`
+- `apply` with `confirm=AZURE_PRODUCTION_APPLY`
+- `scale-down` with `confirm=AZURE_PRODUCTION_SCALE_DOWN`
+- `destroy` with `confirm=AZURE_PRODUCTION_DESTROY`
+
+The deployment workflow supports:
+
+- `validate`
+- `deploy-frontend` with `confirm_cost=AZURE_PRODUCTION_APPLY`
+- `deploy-backend` with `confirm_cost=AZURE_PRODUCTION_APPLY`
+- `smoke-backend`
+
+Azure Production changes are Delivery Control. Changes to `deploy/azure/**`, `.github/workflows/azure-production.yml`, and `.github/workflows/azure-production-infra.yml` make `Product checks` run release utility validation and actionlint, but they do not publish Azure resources during PR checks.
+
+Azure Production operation details are documented in [Azure Production Reference](azure-production.md).
 
 ## Release PR
 
@@ -48,7 +68,9 @@ Release Please uses `HALLIGALLI_RELEASE_BOT_TOKEN` so the generated PR can trigg
 
 ## Release Image
 
-The `Container` workflow builds and scans images for product/runtime PRs, `master` integration pushes, and release tags. Pull request runs do not publish images.
+The `Container` workflow builds and scans the default Dockerfile target for product/runtime PRs, `master` integration pushes, and release tags. The default target is the Azure Container Apps backend runtime image: compiled Node.js server, shared runtime modules, production dependencies, `/readyz`, `/health`, and socket.io. It does not include Vite frontend assets because Azure Production publishes those separately to Static Web Apps.
+
+Pull request runs do not publish images.
 
 When the trigger is a normal `master` push, the workflow publishes a Development GHCR Image tagged from the latest Release Tag, first-parent commit distance, and short commit hash:
 
@@ -56,56 +78,17 @@ When the trigger is a normal `master` push, the workflow publishes a Development
 ghcr.io/<owner>/<repo>:X.Y.Z-000N-gSHA
 ```
 
-Development GHCR Images are for traceability and rollback testing only. They do not update `deploy/production/app.yaml`, do not open Production Promotion PRs, and do not feed AWS Production Scaffold.
+Development GHCR Images are for traceability and rollback testing only. They do not deploy Azure Production.
 
 If the `master` push is exactly the same commit as a `vX.Y.Z` Release Tag, the workflow does not publish a duplicate `X.Y.Z-0000-gSHA` Development GHCR Image. The release-tagged `X.Y.Z` image is the canonical artifact for that commit.
 
-When the trigger is a `vX.Y.Z` tag, the workflow publishes the production image identity without the `v` prefix:
+When the trigger is a `vX.Y.Z` tag, the workflow publishes the release image identity without the `v` prefix:
 
 ```text
 ghcr.io/<owner>/<repo>:X.Y.Z
 ```
 
-It does not publish `latest`. Production promotion uses the pushed image digest, not a mutable tag.
-
-## Production Promotion
-
-After the release image is published, the container workflow opens a human-reviewed Production Promotion PR. This PR updates:
-
-```text
-deploy/production/app.yaml
-```
-
-The manifest records:
-
-- GHCR registry and repository
-- image digest
-- `APP_VERSION`
-- `COMMIT_SHA`
-
-Merging the Production Promotion PR is the production deployment approval point.
-Production Promotion PRs must only modify `deploy/production/app.yaml`; required checks fail if product code, workflow files, release metadata, or documentation are mixed into the same PR.
-
-## GitOps Reconciler
-
-`Reconcile DO Production` runs when `deploy/production/app.yaml` changes on `master`; it can also be manually dispatched. It:
-
-1. Validates the Production Manifest.
-2. Applies the manifest with `doctl apps update --wait`.
-3. Smoke tests `/health`.
-4. Fails if `/health.status`, `/health.version`, or `/health.commit` does not match the manifest.
-
-The workflow uses the `do-production` concurrency group to serialize production reconciles.
-
-## Drift Check
-
-`Production Drift Check` runs daily and can also be manually dispatched. It compares:
-
-- `deploy/production/app.yaml`
-- the current live DigitalOcean app spec
-- live `/health`
-
-It fails if the live image digest, release version, or commit no longer matches Git.
+It does not publish `latest`. Azure backend deployment resolves the selected GHCR backend Release Image to a digest and updates Container Apps through the manual Azure Production workflow.
 
 ## Branch Protection
 
@@ -114,7 +97,7 @@ The protected `master` ruleset should require:
 - `Product checks`
 - `Container build and scan`
 
-Do not add separate required checks for release metadata, manifest validation, or production deployment. Production deployment only happens after a Production Promotion PR modifies the manifest and lands on `master`.
+Do not add separate required checks for release metadata or Azure deployment. Azure Production deployment is manually approved through the protected `azure-production` GitHub Environment and explicit workflow confirmation strings.
 
 ## Dependency Updates
 

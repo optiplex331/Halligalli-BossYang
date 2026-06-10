@@ -22,7 +22,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY server/package.json ./server/package.json
 RUN pnpm install --frozen-lockfile --prod
 
-FROM node:24-alpine AS runtime
+FROM node:24-alpine AS runtime-base
 
 ARG APP_VERSION=local
 ARG COMMIT_SHA=unknown
@@ -46,10 +46,18 @@ ENV COMMIT_SHA=$COMMIT_SHA
 WORKDIR /app
 
 COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
-COPY --from=build --chown=node:node /app/dist ./dist
 COPY --chown=node:node package.json ./
 
 USER node
 EXPOSE 3001
 
 CMD ["node", "dist/server/index.js"]
+
+FROM runtime-base AS standalone
+
+COPY --from=build --chown=node:node /app/dist ./dist
+
+FROM runtime-base AS azure-backend
+
+COPY --from=build --chown=node:node /app/dist/server ./dist/server
+COPY --from=build --chown=node:node /app/dist/src ./dist/src

@@ -12,9 +12,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   packages: write
-  pull-requests: write
 
 jobs:
   build-scan-publish:
@@ -28,11 +27,10 @@ jobs:
       image_digest: ${{ steps.push.outputs.image_digest }}
       commit_sha: ${{ steps.release.outputs.commit_sha }}
       should_push_image: ${{ steps.release.outputs.should_push_image }}
-      should_propose_promotion: ${{ steps.release.outputs.should_propose_promotion }}
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
 
@@ -112,82 +110,3 @@ jobs:
 
           echo "image_digest=${image_digest}" >> "${GITHUB_OUTPUT}"
           echo "Published ${{ steps.release.outputs.image_tag }} @ ${image_digest}"
-
-  propose-production-promotion:
-    name: Propose production promotion
-    needs: build-scan-publish
-    if: needs.build-scan-publish.outputs.should_propose_promotion == 'true'
-    runs-on: ubuntu-24.04
-
-    steps:
-      - name: Check out master
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: master
-          fetch-depth: 0
-          token: ${{ secrets.HALLIGALLI_RELEASE_BOT_TOKEN }}
-
-      - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version-file: package.json
-
-      - name: Update Production Manifest
-        shell: bash
-        env:
-          VERSION: ${{ needs.build-scan-publish.outputs.version }}
-          COMMIT_SHA: ${{ needs.build-scan-publish.outputs.commit_sha }}
-          IMAGE_DIGEST: ${{ needs.build-scan-publish.outputs.image_digest }}
-        run: |
-          set -euo pipefail
-          python3 .github/utils/update_production_manifest.py
-
-      - name: Open promotion PR
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.HALLIGALLI_RELEASE_BOT_TOKEN }}
-          VERSION: ${{ needs.build-scan-publish.outputs.version }}
-          COMMIT_SHA: ${{ needs.build-scan-publish.outputs.commit_sha }}
-          IMAGE_TAG: ${{ needs.build-scan-publish.outputs.image_tag }}
-          IMAGE_DIGEST: ${{ needs.build-scan-publish.outputs.image_digest }}
-        run: |
-          set -euo pipefail
-
-          branch="release/promote-v${VERSION}-production"
-
-          git config user.name "halligalli-release-bot"
-          git config user.email "halligalli-release-bot@users.noreply.github.com"
-          git checkout -B "${branch}"
-          git add deploy/production/app.yaml
-
-          if git diff --cached --quiet; then
-            echo "Production Manifest already points at ${IMAGE_DIGEST}."
-            exit 0
-          fi
-
-          git commit -m "chore(release): promote v${VERSION} to production"
-          git push --force-with-lease origin "${branch}"
-
-          body="$(mktemp)"
-          cat > "${body}" <<BODY
-          ## Production Promotion
-
-          Promote Halligalli v${VERSION} to DO Production.
-
-          - Image: \`${IMAGE_TAG}\`
-          - Digest: \`${IMAGE_DIGEST}\`
-          - Commit: \`${COMMIT_SHA}\`
-
-          Merge this PR to trigger the GitOps Reconciler for \`deploy/production/app.yaml\`.
-          BODY
-
-          existing_pr="$(gh pr list --head "${branch}" --base master --json number --jq '.[0].number // empty')"
-          if [[ -n "${existing_pr}" ]]; then
-            gh pr edit "${existing_pr}" --title "chore(release): promote v${VERSION} to production" --body-file "${body}"
-          else
-            gh pr create \
-              --base master \
-              --head "${branch}" \
-              --title "chore(release): promote v${VERSION} to production" \
-              --body-file "${body}"
-          fi
