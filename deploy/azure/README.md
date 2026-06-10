@@ -8,7 +8,7 @@ Real Azure subscription IDs, Microsoft Entra app IDs, HCP Terraform tokens, Stat
 
 - Frontend: Azure Static Web Apps Free for `play.halligalli.games`.
 - Backend: Azure Container Apps Consumption for the independent secure Backend Entry at `api.halligalli.games`.
-- Images: digest-pinned GHCR Release Images deployed directly to Azure Container Apps.
+- Images: digest-pinned GHCR backend Release Images deployed directly to Azure Container Apps.
 - Logs: Log Analytics with seven-day retention.
 - Identity: Microsoft Entra workload identity federation from GitHub Actions. The Terraform execution identity is bootstrapped once outside this root.
 - DNS: Name.com remains the DNS authority. Azure DNS is not part of this Azure Production stage.
@@ -17,6 +17,8 @@ Real Azure subscription IDs, Microsoft Entra app IDs, HCP Terraform tokens, Stat
 The committed defaults are safe placeholders except for the public Halligalli Azure Production hostnames. Override real account values through the protected `azure-production` GitHub Environment.
 
 This root manages the Static Web Apps custom-domain binding and emits the Container Apps ingress hostname for Name.com routing. It does not create the Container Apps backend custom-domain/certificate binding for `api.halligalli.games`; that is completed during external Azure activation before backend smoke checks use the custom Backend Entry.
+
+The default Dockerfile target is the Container Apps backend runtime image. It copies the compiled Node server and shared runtime modules, but not the Vite frontend files. Frontend assets are produced by a Vite-only build during the `deploy-frontend` workflow and published to Static Web Apps.
 
 ## Private Runtime Config
 
@@ -59,7 +61,7 @@ Use `.github/workflows/azure-production-infra.yml`:
 
 Use `.github/workflows/azure-production.yml` for application deployment:
 
-- `deploy-backend` resolves the selected `vX.Y.Z` GHCR Release Image to a digest, updates Container Apps, and checks `/readyz` and `/health`.
+- `deploy-backend` resolves the selected `vX.Y.Z` GHCR backend Release Image to a digest, updates Container Apps, and checks `/readyz` and `/health`.
 - `deploy-frontend` builds the Vite frontend with `VITE_HALLIGALLI_BACKEND_URL=https://api.halligalli.games` and publishes static assets to Static Web Apps with the protected deployment token.
 - `smoke-backend` checks the secure Backend Entry without changing resources.
 
