@@ -4,9 +4,9 @@ Rollback for Azure Production is an application deployment operation. Terraform 
 
 ## Preferred Rollback
 
-1. Find a known-good GitHub Release, Release Tag, or previously deployed GHCR digest reference from workflow logs.
+1. Find a known-good GitHub Release, Release Tag, or previously deployed GHCR backend image digest reference from workflow logs.
 2. Run `Azure Production` with `operation=deploy-backend` and `confirm_cost=AZURE_PRODUCTION_APPLY` from the known-good Release Tag.
-3. Run `operation=deploy-frontend` if frontend assets also need to roll back.
+3. Run `operation=deploy-frontend` if Static Web Apps frontend assets also need to roll back.
 4. Run `operation=smoke-backend` with `expected_version` and `expected_commit` when those values are known.
 5. Check `https://play.halligalli.games`, `https://api.halligalli.games/readyz`, `/health`, and a socket.io multiplayer room.
 

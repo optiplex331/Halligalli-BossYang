@@ -26,7 +26,7 @@ Do not commit Terraform state, `.tfvars`, generated backend config, Terraform pl
 | Domain | `halligalli.games`; apex remains outside this non-cutover decision |
 | Frontend | Azure Static Web Apps Free at `https://play.halligalli.games` |
 | Backend | Azure Container Apps Consumption at `https://api.halligalli.games` |
-| Image registry | GHCR Release Images, resolved to digests during backend deployment |
+| Image registry | GHCR backend Release Images, resolved to digests during backend deployment |
 | Logs | Log Analytics with seven-day retention |
 | DNS | Name.com records; Azure DNS migration is out of scope |
 | State | HCP Terraform remote state; Terraform CLI runs on GitHub Actions |
@@ -35,6 +35,23 @@ Do not commit Terraform state, `.tfvars`, generated backend config, Terraform pl
 The frontend build uses `VITE_HALLIGALLI_BACKEND_URL=https://api.halligalli.games`. The backend Container App uses `HALLIGALLI_ALLOWED_ORIGINS=https://play.halligalli.games`.
 
 `/readyz` is the Readiness Surface for traffic checks. `/health` reports Release Identity for smoke checks and rollback verification.
+
+## Container Image Contract
+
+The default Dockerfile target is the Azure Container Apps backend image. It contains:
+
+- the Node.js 24 runtime server under `dist/server/`
+- shared runtime modules under `dist/src/`
+- production `node_modules`
+- `/readyz`, `/health`, and `/socket.io`
+
+It intentionally does not copy Vite `dist/index.html` or `dist/assets/` into the default image. Azure Production publishes frontend assets through `deploy-frontend` to Static Web Apps; the backend image should stay a socket.io backend runtime image.
+
+Use the explicit `standalone` Docker target only for local all-in-one container checks where the same Node process should serve static frontend assets and socket.io:
+
+```bash
+docker build --target standalone -t halligalli:standalone .
+```
 
 ## Local Validation
 
@@ -82,13 +99,13 @@ These files are not committed, cached, or uploaded as artifacts.
 | Operation | Behavior |
 |---|---|
 | `validate` | Runs release utility checks and static Terraform validation. |
-| `deploy-frontend` | Builds the Vite frontend with the secure Backend Entry and publishes `dist/` to Static Web Apps. Requires `AZURE_PRODUCTION_APPLY`. |
-| `deploy-backend` | Resolves the selected `vX.Y.Z` GHCR Release Image to a digest, updates Container Apps, and smoke checks `/readyz` and `/health`. Requires `AZURE_PRODUCTION_APPLY`. |
+| `deploy-frontend` | Builds only the Vite frontend with the secure Backend Entry and publishes `dist/` to Static Web Apps. Requires `AZURE_PRODUCTION_APPLY`. |
+| `deploy-backend` | Resolves the selected `vX.Y.Z` GHCR backend Release Image to a digest, updates Container Apps, and smoke checks `/readyz` and `/health`. Requires `AZURE_PRODUCTION_APPLY`. |
 | `smoke-backend` | Calls `https://api.halligalli.games/readyz` and `/health` without changing resources. |
 
-Backend deployment accepts only `vX.Y.Z` Release Tags and uses the corresponding GHCR Release Image tag, such as `ghcr.io/<owner>/<repo>:0.4.0`. Before updating Container Apps, the workflow configures `ghcr.io` as the registry server, resolves the tag to a digest, and deploys `ghcr.io/<owner>/<repo>@sha256:<digest>`.
+Backend deployment accepts only `vX.Y.Z` Release Tags and uses the corresponding GHCR backend Release Image tag, such as `ghcr.io/<owner>/<repo>:0.4.0`. Before updating Container Apps, the workflow configures `ghcr.io` as the registry server, resolves the tag to a digest, and deploys `ghcr.io/<owner>/<repo>@sha256:<digest>`.
 
-The deployed `/health` version remains the clean Release Identity, such as `0.4.0`. Development GHCR Images are still for traceability and rollback testing only; they do not feed Azure Production. The GHCR Release Image must be pullable by Azure Container Apps; private GHCR credentials are out of scope for this non-cutover decision.
+The deployed `/health` version remains the clean Release Identity, such as `0.4.0`. Development GHCR Images are still for traceability and rollback testing only; they do not feed Azure Production. The GHCR backend Release Image must be pullable by Azure Container Apps; private GHCR credentials are out of scope for this non-cutover decision.
 
 ## GitHub Environment Values
 
@@ -171,7 +188,7 @@ Use this order when activating Azure Production:
 5. Run `operation=apply` with `confirm=AZURE_PRODUCTION_APPLY`, using `backend_min_replicas=0` and the placeholder backend image so Terraform can create the base infrastructure.
 6. Copy Terraform outputs into the GitHub Environment variables used by the deployment workflow.
 7. Complete Container Apps custom-domain/certificate activation for `api.halligalli.games`, then add required custom-domain verification and routing records in Name.com.
-8. Run `Azure Production` with `operation=deploy-backend` and `confirm_cost=AZURE_PRODUCTION_APPLY` from a Release Tag after the GHCR Release Image for that tag exists and is public to Azure Container Apps.
+8. Run `Azure Production` with `operation=deploy-backend` and `confirm_cost=AZURE_PRODUCTION_APPLY` from a Release Tag after the GHCR backend Release Image for that tag exists and is public to Azure Container Apps.
 9. Run `operation=deploy-frontend` with `confirm_cost=AZURE_PRODUCTION_APPLY`.
 10. Run `operation=smoke-backend`, then verify the public frontend, `/readyz`, `/health`, and socket.io multiplayer path over WSS.
 

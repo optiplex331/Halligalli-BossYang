@@ -141,7 +141,7 @@ jobs:
       - name: Build frontend for Azure Production
         run: |
           pnpm install --frozen-lockfile
-          pnpm run build
+          pnpm exec vite build
 
       - name: Publish static assets to Static Web Apps
         uses: Azure/static-web-apps-deploy@v1
@@ -224,11 +224,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
-      - name: Resolve GHCR release image identity
+      - name: Resolve GHCR backend release image identity
         id: image
         run: python3 .github/utils/resolve_azure_production_identity.py
 
-      - name: Resolve GHCR release image digest
+      - name: Resolve GHCR backend release image digest
         id: digest
         shell: bash
         env:

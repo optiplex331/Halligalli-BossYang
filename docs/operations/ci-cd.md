@@ -26,7 +26,7 @@ Short shell-native workflow orchestration stays in Bash, such as `git`, `docker`
 
 | Change type | Product checks | Container build and scan |
 |---|---|---|
-| Product/runtime PR | Validate release config and Python utility tests, install dependencies, run tests, typecheck, and build on Node.js 24. | Build the Node.js 24 production image and run Trivy. |
+| Product/runtime PR | Validate release config and Python utility tests, install dependencies, run tests, typecheck, and build on Node.js 24. | Build the Node.js 24 Azure backend image and run Trivy. |
 | Delivery control PR | Validate release config and utility tests, then run actionlint for GitHub Actions workflows. Skip heavy product work. | Skip image build work. |
 | Release PR | Validate release config and utility tests. Skip heavy product work. | Skip image build work. |
 | Docs or other metadata PR | Validate release config and utility tests. Skip heavy product work. | Skip image build work. |
@@ -68,7 +68,9 @@ Release Please uses `HALLIGALLI_RELEASE_BOT_TOKEN` so the generated PR can trigg
 
 ## Release Image
 
-The `Container` workflow builds and scans images for product/runtime PRs, `master` integration pushes, and release tags. Pull request runs do not publish images.
+The `Container` workflow builds and scans the default Dockerfile target for product/runtime PRs, `master` integration pushes, and release tags. The default target is the Azure Container Apps backend runtime image: compiled Node.js server, shared runtime modules, production dependencies, `/readyz`, `/health`, and socket.io. It does not include Vite frontend assets because Azure Production publishes those separately to Static Web Apps.
+
+Pull request runs do not publish images.
 
 When the trigger is a normal `master` push, the workflow publishes a Development GHCR Image tagged from the latest Release Tag, first-parent commit distance, and short commit hash:
 
@@ -86,7 +88,7 @@ When the trigger is a `vX.Y.Z` tag, the workflow publishes the release image ide
 ghcr.io/<owner>/<repo>:X.Y.Z
 ```
 
-It does not publish `latest`. Azure backend deployment resolves the selected GHCR Release Image to a digest and updates Container Apps through the manual Azure Production workflow.
+It does not publish `latest`. Azure backend deployment resolves the selected GHCR backend Release Image to a digest and updates Container Apps through the manual Azure Production workflow.
 
 ## Branch Protection
 

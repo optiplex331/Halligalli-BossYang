@@ -112,7 +112,7 @@ Dark felt palette, gold accent (`--gold-light`), tabular-numeral stat displays, 
 - React 19 + Vite 8 + TypeScript + plain CSS (frontend)
 - Node.js 24 + socket.io 4 (WebSocket server)
 - Vitest for unit tests across game logic, persistence, lifecycle, health, socket config, and stats
-- Azure Production template for a separated Static Web Apps frontend and Container Apps backend
+- Azure Production template for a separated Static Web Apps frontend and Container Apps backend image
 - Manual, confirmation-gated Azure infrastructure and application deployment workflows
 
 ---
@@ -149,6 +149,17 @@ pnpm run typecheck
 
 ```bash
 docker build -t halligalli:local .
+docker run --rm -p 3001:3001 halligalli:local
+curl --fail http://localhost:3001/readyz
+```
+
+The default Dockerfile target is the Azure Container Apps backend image. It contains the compiled Node.js server plus shared gameplay modules and exposes `/readyz`, `/health`, and `/socket.io`; it does not include the Vite frontend assets because Azure Production publishes those assets separately to Static Web Apps.
+
+For a local all-in-one container that serves the built frontend and socket.io from the same Node process:
+
+```bash
+docker build --target standalone -t halligalli:standalone .
+docker run --rm -p 3001:3001 halligalli:standalone
 ```
 
 ### Production build + run
@@ -185,7 +196,7 @@ src/
     └── useMultiplayerSocket.ts — room/game socket event subscriptions
 
 server/
-├── index.ts             — HTTP server + socket.io router + static dist/ serving
+├── index.ts             — HTTP server + socket.io router, with static dist/ serving for standalone/local runs
 ├── health.ts            — /health response shape and release identity
 ├── Room.ts              — room/player model, match codes, host transfer
 └── GameEngine.ts        — server-authoritative game loop
@@ -201,9 +212,11 @@ public/yang-boss.png     — Boss portrait
 
 Azure Production is the visible manual stage for the active Azure Production target without implying production cutover. The public Terraform reference models an Azure Static Web Apps frontend and Azure Container Apps backend with example values; real account-specific tfvars, backend config, state, Azure credentials, deployment tokens, and domain bindings are intentionally excluded from Git. Azure Production resources and application artifacts are changed only by manually dispatching protected workflows with explicit confirmation.
 
+The default Dockerfile output is the backend release image consumed by Azure Container Apps. Frontend assets are built with Vite and published by the Azure Production frontend deployment workflow to Static Web Apps, so the backend GHCR Release Image remains a Node.js/socket.io runtime image rather than an all-in-one web host.
+
 - Release branch: `master`
 - Versioning: Release Please creates human-merged release PRs and `vX.Y.Z` tags
-- Release image: release tags build, scan, and publish immutable GHCR release images for traceability
+- Release image: release tags build, scan, and publish immutable GHCR backend release images for traceability
 - Azure infrastructure: `.github/workflows/azure-production-infra.yml` runs manual Terraform `plan`, `apply`, `scale-down`, and `destroy`
 - Azure deployment: `.github/workflows/azure-production.yml` runs manual frontend/backend deploy and backend smoke checks
 - Health check: `/health` reports status, active rooms, release version, and commit SHA

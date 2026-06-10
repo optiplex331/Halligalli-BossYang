@@ -22,7 +22,7 @@ def required(env: dict[str, str], name: str) -> str:
 
 
 def resolve_azure_production_identity(env: dict[str, str], git=run_git) -> dict[str, str]:
-    """Resolve the GHCR Release Image selected for Azure Production deployment."""
+    """Resolve the GHCR backend Release Image selected for Azure Production deployment."""
 
     image = normalize_image(required(env, "GITHUB_REPOSITORY"))
     ref_type = env.get("GITHUB_REF_TYPE", "")
