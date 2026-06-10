@@ -24,19 +24,19 @@
 		"pnpm": ">=11.0.9"
 	},
 	"dependencies": {
-		"react": "^19.1.1",
-		"react-dom": "^19.1.1",
+		"react": "^19.2.7",
+		"react-dom": "^19.2.7",
 		"socket.io": "^4.8.0",
 		"socket.io-client": "^4.8.3"
 	},
 	"devDependencies": {
-		"@types/node": "^24.12.4",
-		"@types/react": "^19.2.15",
+		"@types/node": "^24.13.1",
+		"@types/react": "^19.2.16",
 		"@types/react-dom": "^19.2.3",
 		"@vitejs/plugin-react": "^6.0.2",
-		"tsx": "^4.22.3",
+		"tsx": "^4.22.4",
 		"typescript": "^6.0.3",
-		"vite": "^8.0.14",
-		"vitest": "^4.1.7"
+		"vite": "^8.0.16",
+		"vitest": "^4.1.8"
 	}
 }
