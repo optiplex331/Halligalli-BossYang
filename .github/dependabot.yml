@@ -9,6 +9,10 @@ updates:
       time: "09:00"
       timezone: Europe/Amsterdam
     open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: "@types/node"
+        update-types:
+          - "version-update:semver-major"
     groups:
       product-dependencies:
         patterns:
