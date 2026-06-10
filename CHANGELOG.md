@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.4.0...v0.4.1) (2026-06-10)
+
+
+### Bug Fixes
+
+* **deploy:** release backend-only Azure image ([87c08e3](https://github.com/optiplex331/Halligalli-BossYang/commit/87c08e3c186fd4648e5908ac20c57ff4dd239e28))
+
 ## [0.4.0](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.3.0...v0.4.0) (2026-06-04)
 
 
