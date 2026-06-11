@@ -1,43 +1,42 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
   <title id="title">Halligalli Arena icon</title>
-  <desc id="desc">A gold bell on a dark felt table with five fruit pips.</desc>
+  <desc id="desc">Three casino table cards with fruit pips adding to five.</desc>
   <defs>
     <radialGradient id="bg" cx="34%" cy="22%" r="86%">
       <stop offset="0" stop-color="#1f5840"/>
       <stop offset="0.42" stop-color="#0e2a1c"/>
       <stop offset="1" stop-color="#05080f"/>
     </radialGradient>
-    <linearGradient id="bell" x1="28" x2="98" y1="26" y2="104">
-      <stop offset="0" stop-color="#fff1a8"/>
-      <stop offset="0.35" stop-color="#f0c44a"/>
+    <linearGradient id="card" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#fffaf0"/>
+      <stop offset="1" stop-color="#eadfca"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="24" x2="104" y1="24" y2="106">
+      <stop offset="0" stop-color="#fff0a3"/>
+      <stop offset=".48" stop-color="#f0c44a"/>
       <stop offset="1" stop-color="#9b7311"/>
     </linearGradient>
-    <filter id="glow" x="-35%" y="-35%" width="170%" height="170%">
-      <feGaussianBlur stdDeviation="5" result="blur"/>
-      <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0.96 0 1 0 0 0.72 0 0 1 0 0.18 0 0 0 0.65 0"/>
-      <feMerge>
-        <feMergeNode/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="12" stdDeviation="7" flood-color="#020409" flood-opacity=".48"/>
     </filter>
   </defs>
   <rect width="128" height="128" rx="28" fill="url(#bg)"/>
-  <path d="M19 103c15 8 75 8 90 0" fill="none" stroke="#f0c44a" stroke-opacity=".28" stroke-width="2"/>
-  <g filter="url(#glow)">
-    <path d="M36 81h56c-5-8-7-18-7-31 0-14-9-25-21-25S43 36 43 50c0 13-2 23-7 31Z" fill="url(#bell)" stroke="#fff0a3" stroke-opacity=".55" stroke-width="2"/>
-    <path d="M48 86h32c0 9-6 15-16 15s-16-6-16-15Z" fill="#d8a523"/>
-    <circle cx="64" cy="24" r="8" fill="#f6d56d"/>
+  <path d="M22 98c16 9 68 13 84 0" fill="none" stroke="#f0c44a" stroke-opacity=".22" stroke-width="3" stroke-linecap="round"/>
+  <g filter="url(#shadow)">
+    <rect x="25" y="36" width="40" height="58" rx="8" fill="url(#card)" stroke="#b8922c" stroke-width="2" transform="rotate(-12 45 65)"/>
+    <rect x="63" y="36" width="40" height="58" rx="8" fill="url(#card)" stroke="#b8922c" stroke-width="2" transform="rotate(12 83 65)"/>
+    <rect x="44" y="28" width="40" height="66" rx="9" fill="url(#card)" stroke="#f0c44a" stroke-width="2"/>
   </g>
-  <g>
-    <circle cx="27" cy="33" r="5" fill="#f4cf48"/>
-    <circle cx="34" cy="40" r="5" fill="#f4cf48"/>
-    <circle cx="91" cy="37" r="5" fill="#e05252"/>
-    <circle cx="99" cy="42" r="5" fill="#e05252"/>
-    <circle cx="22" cy="78" r="6" fill="#f0c44a"/>
-    <circle cx="30" cy="76" r="4" fill="#8abf4a"/>
-    <circle cx="96" cy="82" r="4" fill="#8b4bc2"/>
-    <circle cx="104" cy="86" r="4" fill="#8b4bc2"/>
-    <circle cx="96" cy="91" r="4" fill="#8b4bc2"/>
-    <text x="56" y="118" fill="#f0c44a" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="24" font-weight="800">5</text>
+  <g fill="#1f5840">
+    <circle cx="38" cy="61" r="4"/>
+    <circle cx="45" cy="70" r="4"/>
+    <circle cx="82" cy="61" r="4"/>
+    <circle cx="89" cy="70" r="4"/>
+  </g>
+  <g fill="#f0c44a">
+    <circle cx="64" cy="51" r="5"/>
+    <circle cx="58" cy="64" r="5"/>
+    <circle cx="70" cy="64" r="5"/>
+    <text x="55" y="87" fill="#3a2600" font-family="Georgia, serif" font-size="23" font-weight="800">5</text>
   </g>
 </svg>

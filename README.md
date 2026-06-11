@@ -4,9 +4,9 @@
 
 # Halligalli Arena
 
-Exact-five bell training for a midnight card table.
+Real-time multiplayer Halligalli for midnight card-table races.
 
-Watch the visible top cards, spot the fruit total of five, and ring before the window closes. Practice alone, or open a real-time room and race friends on a server-authoritative table.
+Create a room, ready up with friends, flip around a server-authoritative table, and race to spot the exact-five fruit total first. Solo practice is included, but the product story is a fast multiplayer Halligalli arena.
 
 [![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-8-646cff?style=flat-square)](https://vite.dev/)
@@ -16,16 +16,15 @@ Watch the visible top cards, spot the fruit total of five, and ring before the w
 
 **Live demo**: `https://play.halligalli.games` after external Azure/HCP Terraform/Name.com activation.
 
-![Halligalli Arena gameplay](docs/assets/readme-hero.png)
-
 ![Halligalli Arena showcase](docs/assets/readme-showcase.svg)
 
 ## What It Does
 
-- **Solo practice**: train reaction speed, accuracy, streaks, and missed-window discipline.
-- **Real-time rooms**: create a 4-character room code, ready up, and race friends.
+- **Real-time rooms**: create a 4-character room code, ready up, and race friends on one shared table.
+- **Halligalli race loop**: flip cards, read the visible fruit count, and compete for the exact-five hit.
 - **Table-true rules**: clockwise flips, top-card-only counting, exact-five bell windows.
 - **Server authority**: multiplayer clients emit intent; the server owns flips, scoring, and match finish.
+- **Solo practice**: train reaction speed, accuracy, streaks, and missed-window discipline.
 - **Training memory**: local history, trend charts, daily goals, and achievements without accounts.
 - **Midnight table polish**: 3D card flips, bell particles, Boss Yang pressure, sound, and reduced-motion fallbacks.
 
