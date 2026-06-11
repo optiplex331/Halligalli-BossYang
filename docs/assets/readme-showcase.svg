@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 810" role="img" aria-labelledby="title desc">
   <title id="title">Halligalli Arena feature showcase</title>
-  <desc id="desc">A dark casino-style product board showing a real-time multiplayer Halligalli table, room code, shared score race, and setup commands.</desc>
+  <desc id="desc">A dark casino-style product board showing a real-time multiplayer Halligalli table with fruit cards, room code tiles, score chips, and setup commands.</desc>
   <defs>
     <radialGradient id="page" cx="22%" cy="12%" r="92%">
       <stop offset="0" stop-color="#173723"/>
@@ -20,8 +20,32 @@
       <feGaussianBlur stdDeviation="18"/>
     </filter>
     <filter id="lift" x="-25%" y="-25%" width="150%" height="150%">
-      <feDropShadow dx="0" dy="18" stdDeviation="14" flood-color="#020409" flood-opacity=".42"/>
+      <feDropShadow dx="0" dy="18" stdDeviation="14" flood-color="#020409" flood-opacity=".38"/>
     </filter>
+    <symbol id="strawberry" viewBox="0 0 64 64">
+      <path d="M32 54C21 45 15 35 15 25c0-8 6-14 14-10 1 1 2 1 3 2 1-1 2-1 3-2 8-4 14 2 14 10 0 10-6 20-17 29Z" fill="#d94545"/>
+      <path d="M24 14c3 0 5 1 8 4 3-3 5-4 8-4-2-4-5-6-8-6s-6 2-8 6Z" fill="#4fae72"/>
+      <path d="M27 29l3-2m6 9 3-2m-12 7 3-2" stroke="#ffd166" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="banana" viewBox="0 0 64 64">
+      <path d="M15 38c17 13 35 4 42-17-13 10-27 14-43 7-2 4-1 7 1 10Z" fill="#f0c44a"/>
+      <path d="M17 32c15 7 28 3 38-8-9 19-25 26-40 14" fill="none" stroke="#8d6712" stroke-width="4" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="lemon" viewBox="0 0 64 64">
+      <path d="M14 34c7-14 20-21 36-20 2 16-5 29-20 36-8-2-14-8-16-16Z" fill="#f0c44a"/>
+      <path d="M32 16c6-7 11-8 16-6-2 6-7 8-16 6Z" fill="#4fae72"/>
+      <path d="M20 38c9-4 17-10 25-19" stroke="#fff0a3" stroke-width="4" stroke-linecap="round" opacity=".65"/>
+    </symbol>
+    <symbol id="grapes" viewBox="0 0 64 64">
+      <path d="M34 14c6-6 12-6 18-2-5 5-11 6-18 2Z" fill="#4fae72"/>
+      <g fill="#7d56bd">
+        <circle cx="26" cy="26" r="7"/>
+        <circle cx="38" cy="26" r="7"/>
+        <circle cx="32" cy="38" r="8"/>
+        <circle cx="24" cy="48" r="6"/>
+        <circle cx="40" cy="48" r="6"/>
+      </g>
+    </symbol>
   </defs>
   <rect width="1440" height="810" fill="url(#page)"/>
   <circle cx="1118" cy="152" r="210" fill="#f0c44a" opacity=".1" filter="url(#soft)"/>
@@ -32,48 +56,31 @@
 
   <g transform="translate(82 218)">
     <rect width="780" height="430" rx="28" fill="#081713" stroke="#ffffff" stroke-opacity=".13"/>
-    <ellipse cx="390" cy="224" rx="318" ry="178" fill="#123621" stroke="#e8c34a" stroke-opacity=".24" stroke-width="3"/>
-    <ellipse cx="390" cy="224" rx="252" ry="132" fill="none" stroke="#ffffff" stroke-opacity=".07" stroke-width="2"/>
+    <ellipse cx="390" cy="232" rx="308" ry="158" fill="#123621" stroke="#e8c34a" stroke-opacity=".24" stroke-width="3"/>
+    <ellipse cx="390" cy="232" rx="238" ry="112" fill="none" stroke="#ffffff" stroke-opacity=".07" stroke-width="2"/>
     <text x="34" y="48" fill="#f0c44a" font-family="Verdana, sans-serif" font-size="19" font-weight="700">LIVE MULTIPLAYER TABLE</text>
 
-    <g filter="url(#lift)">
-      <rect x="348" y="76" width="84" height="108" rx="13" fill="url(#card)" stroke="#d5b552" stroke-width="2"/>
-      <rect x="348" y="272" width="84" height="108" rx="13" fill="url(#card)" stroke="#d5b552" stroke-width="2"/>
-      <rect x="132" y="172" width="84" height="108" rx="13" fill="url(#card)" stroke="#d5b552" stroke-width="2"/>
-      <rect x="564" y="172" width="84" height="108" rx="13" fill="url(#card)" stroke="#d5b552" stroke-width="2"/>
+    <g font-family="Verdana, sans-serif" font-size="12" font-weight="700" fill="#ede8d5">
+      <text x="374" y="72">P1</text>
+      <text x="158" y="174">P2</text>
+      <text x="598" y="174">P3</text>
+      <text x="360" y="406">YOU</text>
     </g>
 
-    <g fill="#d94545">
-      <circle cx="383" cy="126" r="7"/>
-      <circle cx="397" cy="126" r="7"/>
+    <g filter="url(#lift)">
+      <rect x="348" y="86" width="84" height="104" rx="13" fill="url(#card)" stroke="#d5b552" stroke-width="2"/>
+      <rect x="348" y="280" width="84" height="104" rx="13" fill="url(#card)" stroke="#d5b552" stroke-width="2"/>
+      <rect x="132" y="184" width="84" height="104" rx="13" fill="url(#card)" stroke="#d5b552" stroke-width="2"/>
+      <rect x="564" y="184" width="84" height="104" rx="13" fill="url(#card)" stroke="#d5b552" stroke-width="2"/>
     </g>
-    <g fill="#7d56bd">
-      <circle cx="383" cy="320" r="7"/>
-      <circle cx="397" cy="320" r="7"/>
-      <circle cx="390" cy="335" r="7"/>
-    </g>
-    <g fill="#f0c44a">
-      <circle cx="166" cy="218" r="7"/>
-      <circle cx="181" cy="218" r="7"/>
-      <circle cx="174" cy="234" r="7"/>
-    </g>
-    <g fill="#4fae72">
-      <circle cx="606" cy="218" r="7"/>
-      <circle cx="606" cy="236" r="7"/>
-    </g>
+    <use href="#strawberry" x="370" y="120" width="40" height="40"/>
+    <use href="#grapes" x="370" y="312" width="40" height="40"/>
+    <use href="#banana" x="154" y="216" width="40" height="40"/>
+    <use href="#lemon" x="586" y="216" width="40" height="40"/>
 
     <g>
-      <circle cx="390" cy="224" r="72" fill="#05080f" opacity=".72"/>
-      <circle cx="390" cy="224" r="44" fill="url(#gold)"/>
-      <text x="366" y="235" fill="#1a0f00" font-family="Georgia, serif" font-size="32" font-weight="800">5</text>
-      <text x="406" y="235" fill="#1a0f00" font-family="Verdana, sans-serif" font-size="15" font-weight="700">hit</text>
-    </g>
-
-    <g font-family="Verdana, sans-serif" font-size="15" font-weight="700">
-      <text x="350" y="66" fill="#ede8d5">MIA</text>
-      <text x="352" y="408" fill="#ede8d5">YOU</text>
-      <text x="122" y="160" fill="#ede8d5">KAI</text>
-      <text x="600" y="160" fill="#ede8d5">LEE</text>
+      <circle cx="390" cy="232" r="38" fill="url(#gold)"/>
+      <text x="359" y="238" fill="#1a0f00" font-family="Verdana, sans-serif" font-size="17" font-weight="800">FIVE</text>
     </g>
   </g>
 
@@ -81,15 +88,31 @@
     <rect width="430" height="142" rx="24" fill="#ffffff" fill-opacity=".058" stroke="#ffffff" stroke-opacity=".13"/>
     <text x="30" y="49" fill="#ede8d5" font-family="Georgia, serif" font-size="34" font-weight="700">Real-time rooms</text>
     <text x="30" y="84" fill="#c2bbaa" font-family="Verdana, sans-serif" font-size="17">Create a code, ready up, and race friends.</text>
-    <rect x="30" y="104" width="102" height="24" rx="12" fill="#e8c34a" fill-opacity=".2"/>
-    <text x="52" y="122" fill="#f0c44a" font-family="Verdana, sans-serif" font-size="13" font-weight="700">4-CHAR</text>
+    <g transform="translate(30 104)" font-family="Verdana, sans-serif" font-size="12" font-weight="700">
+      <text x="0" y="16" fill="#9f9786">ROOM</text>
+      <rect x="58" y="0" width="24" height="24" rx="7" fill="#f0c44a" fill-opacity=".2"/>
+      <rect x="88" y="0" width="24" height="24" rx="7" fill="#f0c44a" fill-opacity=".2"/>
+      <rect x="118" y="0" width="24" height="24" rx="7" fill="#f0c44a" fill-opacity=".2"/>
+      <rect x="148" y="0" width="24" height="24" rx="7" fill="#f0c44a" fill-opacity=".2"/>
+      <text x="66" y="16" fill="#f0c44a">A</text>
+      <text x="96" y="16" fill="#f0c44a">7</text>
+      <text x="126" y="16" fill="#f0c44a">K</text>
+      <text x="156" y="16" fill="#f0c44a">Q</text>
+    </g>
   </g>
 
   <g transform="translate(918 402)">
     <rect width="430" height="142" rx="24" fill="#ffffff" fill-opacity=".058" stroke="#ffffff" stroke-opacity=".13"/>
     <text x="30" y="49" fill="#ede8d5" font-family="Georgia, serif" font-size="34" font-weight="700">Shared score race</text>
     <text x="30" y="84" fill="#c2bbaa" font-family="Verdana, sans-serif" font-size="17">Hits, penalties, streaks, and final results.</text>
-    <polyline points="30,120 92,108 154,116 222,98 290,109 372,92" fill="none" stroke="#f0c44a" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <g transform="translate(30 104)" font-family="Verdana, sans-serif" font-size="12" font-weight="700">
+      <rect x="0" y="0" width="78" height="24" rx="12" fill="#f0c44a" fill-opacity=".16"/>
+      <rect x="92" y="0" width="78" height="24" rx="12" fill="#d94545" fill-opacity=".14"/>
+      <rect x="184" y="0" width="92" height="24" rx="12" fill="#4fae72" fill-opacity=".14"/>
+      <text x="18" y="16" fill="#f0c44a">+120</text>
+      <text x="112" y="16" fill="#e8aaa0">-50</text>
+      <text x="204" y="16" fill="#8fe0ac">streak</text>
+    </g>
   </g>
 
   <g transform="translate(918 578)">

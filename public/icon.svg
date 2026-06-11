@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
   <title id="title">Halligalli Arena icon</title>
-  <desc id="desc">Three casino table cards with fruit pips adding to five.</desc>
+  <desc id="desc">Three fruit cards on a dark casino table.</desc>
   <defs>
     <radialGradient id="bg" cx="34%" cy="22%" r="86%">
       <stop offset="0" stop-color="#1f5840"/>
@@ -11,32 +11,32 @@
       <stop offset="0" stop-color="#fffaf0"/>
       <stop offset="1" stop-color="#eadfca"/>
     </linearGradient>
-    <linearGradient id="gold" x1="24" x2="104" y1="24" y2="106">
-      <stop offset="0" stop-color="#fff0a3"/>
-      <stop offset=".48" stop-color="#f0c44a"/>
-      <stop offset="1" stop-color="#9b7311"/>
-    </linearGradient>
     <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
       <feDropShadow dx="0" dy="12" stdDeviation="7" flood-color="#020409" flood-opacity=".48"/>
     </filter>
+    <symbol id="strawberry" viewBox="0 0 64 64">
+      <path d="M32 54C21 45 15 35 15 25c0-8 6-14 14-10 1 1 2 1 3 2 1-1 2-1 3-2 8-4 14 2 14 10 0 10-6 20-17 29Z" fill="#d94545"/>
+      <path d="M24 14c3 0 5 1 8 4 3-3 5-4 8-4-2-4-5-6-8-6s-6 2-8 6Z" fill="#4fae72"/>
+      <path d="M27 29l3-2m6 9 3-2m-12 7 3-2" stroke="#ffd166" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="banana" viewBox="0 0 64 64">
+      <path d="M15 38c17 13 35 4 42-17-13 10-27 14-43 7-2 4-1 7 1 10Z" fill="#f0c44a"/>
+      <path d="M17 32c15 7 28 3 38-8-9 19-25 26-40 14" fill="none" stroke="#8d6712" stroke-width="4" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="lemon" viewBox="0 0 64 64">
+      <path d="M14 34c7-14 20-21 36-20 2 16-5 29-20 36-8-2-14-8-16-16Z" fill="#f0c44a"/>
+      <path d="M32 16c6-7 11-8 16-6-2 6-7 8-16 6Z" fill="#4fae72"/>
+      <path d="M20 38c9-4 17-10 25-19" stroke="#fff0a3" stroke-width="4" stroke-linecap="round" opacity=".65"/>
+    </symbol>
   </defs>
   <rect width="128" height="128" rx="28" fill="url(#bg)"/>
-  <path d="M22 98c16 9 68 13 84 0" fill="none" stroke="#f0c44a" stroke-opacity=".22" stroke-width="3" stroke-linecap="round"/>
+  <path d="M22 100c18 10 66 10 84 0" fill="none" stroke="#f0c44a" stroke-opacity=".22" stroke-width="3" stroke-linecap="round"/>
   <g filter="url(#shadow)">
-    <rect x="25" y="36" width="40" height="58" rx="8" fill="url(#card)" stroke="#b8922c" stroke-width="2" transform="rotate(-12 45 65)"/>
-    <rect x="63" y="36" width="40" height="58" rx="8" fill="url(#card)" stroke="#b8922c" stroke-width="2" transform="rotate(12 83 65)"/>
-    <rect x="44" y="28" width="40" height="66" rx="9" fill="url(#card)" stroke="#f0c44a" stroke-width="2"/>
+    <rect x="25" y="38" width="40" height="58" rx="8" fill="url(#card)" stroke="#b8922c" stroke-width="2" transform="rotate(-12 45 67)"/>
+    <rect x="63" y="38" width="40" height="58" rx="8" fill="url(#card)" stroke="#b8922c" stroke-width="2" transform="rotate(12 83 67)"/>
+    <rect x="44" y="27" width="40" height="68" rx="9" fill="url(#card)" stroke="#f0c44a" stroke-width="2"/>
   </g>
-  <g fill="#1f5840">
-    <circle cx="38" cy="61" r="4"/>
-    <circle cx="45" cy="70" r="4"/>
-    <circle cx="82" cy="61" r="4"/>
-    <circle cx="89" cy="70" r="4"/>
-  </g>
-  <g fill="#f0c44a">
-    <circle cx="64" cy="51" r="5"/>
-    <circle cx="58" cy="64" r="5"/>
-    <circle cx="70" cy="64" r="5"/>
-    <text x="55" y="87" fill="#3a2600" font-family="Georgia, serif" font-size="23" font-weight="800">5</text>
-  </g>
+  <use href="#banana" x="34" y="56" width="22" height="22" transform="rotate(-12 45 67)"/>
+  <use href="#lemon" x="76" y="56" width="22" height="22" transform="rotate(12 83 67)"/>
+  <use href="#strawberry" x="53" y="43" width="24" height="24"/>
 </svg>
