@@ -11,9 +11,10 @@ Normal pushes and pull requests do not create Azure resources, update Container 
 Azure-mutating application deployment requires explicit human action:
 
 1. Ensure Azure Production infrastructure has been applied from `optiplex331/Halligalli-infra`.
-2. Copy required infrastructure outputs into this repo's protected `azure-production` GitHub Environment.
-3. Run `.github/workflows/azure-production.yml` with `workflow_dispatch`.
-4. For frontend or backend deployment, type `AZURE_PRODUCTION_APPLY` as `confirm_cost`.
+2. Copy required frontend and smoke outputs into this repo's protected `azure-production` GitHub Environment.
+3. Run `.github/workflows/azure-production.yml` with `workflow_dispatch` for frontend publication or smoke checks.
+4. Run backend rollout locally with `scripts/deploy-azure-production-backend.sh vX.Y.Z` after `az login`.
+5. For frontend deployment, type `AZURE_PRODUCTION_APPLY` as `confirm_cost`.
 
 Do not commit Azure credentials, Static Web Apps deployment tokens, GitHub secrets, rendered Container Apps configs, or local `.env` files.
 
@@ -22,12 +23,13 @@ Do not commit Azure credentials, Static Web Apps deployment tokens, GitHub secre
 | Concern | Reference |
 |---|---|
 | Infrastructure repo | `optiplex331/Halligalli-infra` |
-| Product deployment workflow | `.github/workflows/azure-production.yml` |
+| Product deployment workflow | `.github/workflows/azure-production.yml` for frontend and smoke checks |
+| Backend deployment script | `scripts/deploy-azure-production-backend.sh` |
 | Frontend | Azure Static Web Apps Free at `https://play.halligalli.games` |
 | Backend | Azure Container Apps Consumption at `https://api.halligalli.games` |
 | Image registry | GHCR backend Release Images, resolved to digests during backend deployment |
 | DNS | Name.com records; Azure DNS migration is out of scope |
-| Runtime parameters | Protected `azure-production` GitHub Environment |
+| Runtime parameters | Protected `azure-production` GitHub Environment plus local Azure CLI login for backend rollout |
 
 The frontend build uses `VITE_HALLIGALLI_BACKEND_URL=https://api.halligalli.games`. The backend Container App uses `HALLIGALLI_ALLOWED_ORIGINS=https://play.halligalli.games`.
 
@@ -73,10 +75,15 @@ Terraform validation belongs in `optiplex331/Halligalli-infra`.
 |---|---|
 | `validate` | Runs release and deployment utility checks. |
 | `deploy-frontend` | Builds only the Vite frontend with the secure Backend Entry and publishes `dist/` to Static Web Apps. Requires `AZURE_PRODUCTION_APPLY`. |
-| `deploy-backend` | Resolves the selected `vX.Y.Z` GHCR backend Release Image to a digest, updates Container Apps, and smoke checks `/readyz` and `/health`. Requires `AZURE_PRODUCTION_APPLY`. |
 | `smoke-backend` | Calls `https://api.halligalli.games/readyz` and `/health` without changing resources. |
 
-Backend deployment accepts only `vX.Y.Z` Release Tags and uses the corresponding GHCR backend Release Image tag, such as `ghcr.io/<owner>/<repo>:0.4.0`. Before updating Container Apps, the workflow configures `ghcr.io` as the registry server, resolves the tag to a digest, and deploys `ghcr.io/<owner>/<repo>@sha256:<digest>`.
+Backend deployment is local because the current Azure for Students school tenant blocks GitHub OIDC bootstrap. It accepts only `vX.Y.Z` Release Tags and uses the corresponding GHCR backend Release Image tag, such as `ghcr.io/<owner>/<repo>:0.4.0`. Before updating Container Apps, the script configures `ghcr.io` as the registry server, resolves the tag to a digest, and deploys `ghcr.io/<owner>/<repo>@sha256:<digest>`.
+
+```bash
+az login
+az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+scripts/deploy-azure-production-backend.sh v0.4.0
+```
 
 The deployed `/health` version remains the clean Release Identity, such as `0.4.0`. Development GHCR Images are for traceability and rollback testing only; they do not feed Azure Production.
 
@@ -94,13 +101,21 @@ Store real deployment values in this repo's protected `azure-production` GitHub 
 
 | Name | Purpose |
 |---|---|
-| `AZURE_TENANT_ID` | Microsoft Entra tenant for workload identity federation. |
-| `AZURE_SUBSCRIPTION_ID` | Azure subscription containing Azure-managed resources. |
-| `AZURE_DEPLOY_CLIENT_ID` | Federated client ID used by backend deployment operations. |
 | `AZURE_PRODUCTION_FRONTEND_URL` | Public frontend URL, `https://play.halligalli.games`. |
 | `AZURE_PRODUCTION_BACKEND_URL` | Public Backend Entry, `https://api.halligalli.games`. |
+
+### Local Backend Variables
+
+The backend deploy script has safe defaults for the current scaffold names, but it also accepts these local environment overrides:
+
+| Name | Purpose |
+|---|---|
+| `AZURE_SUBSCRIPTION_ID` | Azure subscription selected before local backend rollout. |
+| `AZURE_PRODUCTION_GITHUB_REPOSITORY` | GHCR repository owner/name, default `optiplex331/Halligalli-BossYang`. |
 | `AZURE_PRODUCTION_RESOURCE_GROUP_NAME` | Resource group containing the Container App. |
 | `AZURE_PRODUCTION_CONTAINER_APP_NAME` | Container App backend name. |
+| `AZURE_PRODUCTION_FRONTEND_URL` | Allowed browser origin, default `https://play.halligalli.games`. |
+| `AZURE_PRODUCTION_BACKEND_URL` | Backend Entry used for smoke checks, default `https://api.halligalli.games`. |
 
 ## Name.com DNS And Custom Domains
 
@@ -115,9 +130,9 @@ Destroying Azure resources does not remove Name.com records; clean them up manua
 Use this order when activating Azure Production:
 
 1. Apply infrastructure from `optiplex331/Halligalli-infra`.
-2. Copy required deployment values into this repo's `azure-production` GitHub Environment.
+2. Copy required frontend and smoke values into this repo's `azure-production` GitHub Environment.
 3. Complete Container Apps custom-domain/certificate activation for `api.halligalli.games`, then add required custom-domain verification and routing records in Name.com.
-4. Run `Azure Production` with `operation=deploy-backend` and `confirm_cost=AZURE_PRODUCTION_APPLY` from a Release Tag after the GHCR backend Release Image for that tag exists and is pullable by Azure Container Apps.
+4. Run `scripts/deploy-azure-production-backend.sh vX.Y.Z` locally after the GHCR backend Release Image for that tag exists and is pullable by Azure Container Apps.
 5. Run `operation=deploy-frontend` with `confirm_cost=AZURE_PRODUCTION_APPLY`.
 6. Run `operation=smoke-backend`, then verify the public frontend, `/readyz`, `/health`, and socket.io multiplayer path over WSS.
 

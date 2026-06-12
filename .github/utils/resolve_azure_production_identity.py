@@ -30,7 +30,7 @@ def resolve_azure_production_identity(env: dict[str, str], git=run_git) -> dict[
     commit_sha = git(["rev-parse", "HEAD"])
 
     if not is_release_tag(ref_type, ref_name):
-        raise ImageIdentityError("Azure Production deploy-backend requires a vX.Y.Z Release Tag ref")
+        raise ImageIdentityError("Azure Production backend deployment requires a vX.Y.Z Release Tag ref")
 
     version = ref_name.removeprefix("v")
 

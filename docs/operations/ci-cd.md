@@ -2,9 +2,10 @@
 
 Halligalli uses GitHub Actions as the product delivery control plane. Pull requests and normal pushes validate code, release metadata, delivery control files, and container images, but they do not create Azure resources or deploy application artifacts.
 
-Azure Production application deployment is operated through a protected manual workflow whose product-side environment uses the `azure-production` boundary:
+Azure Production application deployment is operated through a protected manual workflow plus a local backend deployment script because the current Azure for Students school tenant blocks GitHub OIDC bootstrap:
 
-- `.github/workflows/azure-production.yml` for frontend deploy, backend deploy, and backend smoke checks
+- `.github/workflows/azure-production.yml` for frontend deploy and backend smoke checks
+- `scripts/deploy-azure-production-backend.sh` for local backend rollout through Azure CLI
 
 Azure Production infrastructure source of truth lives in the private `optiplex331/Halligalli-infra` repository. Product deployment values copied from that repo's infrastructure outputs belong in this repo's protected `azure-production` GitHub Environment.
 
@@ -42,7 +43,6 @@ The deployment workflow supports:
 
 - `validate`
 - `deploy-frontend` with `confirm_cost=AZURE_PRODUCTION_APPLY`
-- `deploy-backend` with `confirm_cost=AZURE_PRODUCTION_APPLY`
 - `smoke-backend`
 
 Azure Production deployment changes are Delivery Control. Changes to `.github/workflows/azure-production.yml` make `Product checks` run release utility validation and actionlint, but they do not publish Azure resources during PR checks.
@@ -82,7 +82,7 @@ When the trigger is a `vX.Y.Z` tag, the workflow publishes the release image ide
 ghcr.io/<owner>/<repo>:X.Y.Z
 ```
 
-It does not publish `latest`. Azure backend deployment resolves the selected GHCR backend Release Image to a digest and updates Container Apps through the manual Azure Production workflow.
+It does not publish `latest`. Azure backend deployment resolves the selected GHCR backend Release Image to a digest and updates Container Apps through the local Azure Production backend deployment script.
 
 ## Branch Protection
 
@@ -91,7 +91,7 @@ The protected `master` ruleset should require:
 - `Product checks`
 - `Container build and scan`
 
-Do not add separate required checks for release metadata or Azure deployment. Azure Production deployment is manually approved through the protected `azure-production` GitHub Environment and explicit workflow confirmation strings.
+Do not add separate required checks for release metadata or Azure deployment. Azure Production frontend publication is manually approved through the protected `azure-production` GitHub Environment and explicit workflow confirmation strings; backend rollout is a local human operation.
 
 ## Dependency Updates
 
