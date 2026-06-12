@@ -1,36 +1,35 @@
-# Azure Production Reference
+# Azure Production
 
-Azure Production is the visible manual workflow stage for the production-shaped Azure environment used by Halligalli portfolio/demo operation. Its backing files, GitHub Environment, and Terraform state still use the `azure-production` boundary, and this is not a production cutover. The current Release PR and GHCR image identity path remains separate.
+Azure Production is the visible manual deployment stage for Halligalli portfolio/demo operation. It is production-shaped but non-production, and it does not imply production cutover.
 
-The public repository contains the reviewable Terraform shape, manual workflow wiring, and GitHub Environment value template. It does not contain real Azure subscription values, HCP Terraform tokens, Static Web Apps deployment tokens, generated tfvars, Terraform state, Terraform plans, Microsoft Entra credentials, Name.com account access, or local `.env` files.
+Infrastructure source of truth now lives in the private `optiplex331/Halligalli-infra` repository. This product repo owns Release PRs, GHCR Release Images, frontend/backend application deployment, and smoke checks.
 
 ## Safety Boundary
 
 Normal pushes and pull requests do not create Azure resources, update Container Apps, publish Static Web Apps assets, or change DNS.
 
-Azure-mutating work requires explicit human action:
+Azure-mutating application deployment requires explicit human action:
 
-1. Bootstrap the Azure Production Terraform execution identity and GitHub federated credential once outside this Terraform root.
-2. Configure the protected `azure-production` GitHub Environment with HCP, Azure, Static Web Apps, Container Apps, domain, and runtime values.
-3. Run `.github/workflows/azure-production-infra.yml` with `workflow_dispatch`.
-4. For mutating infrastructure operations, type the required confirmation: `AZURE_PRODUCTION_APPLY`, `AZURE_PRODUCTION_SCALE_DOWN`, or `AZURE_PRODUCTION_DESTROY`.
-5. Run `.github/workflows/azure-production.yml` separately for frontend/backend application deployment.
+1. Ensure Azure Production infrastructure has been applied from `optiplex331/Halligalli-infra`.
+2. Copy required frontend and smoke outputs into this repo's protected `azure-production` GitHub Environment.
+3. Run `.github/workflows/azure-production.yml` with `workflow_dispatch` for frontend publication or smoke checks.
+4. Run backend rollout locally with `scripts/deploy-azure-production-backend.sh vX.Y.Z` after `az login`.
+5. For frontend deployment, type `AZURE_PRODUCTION_APPLY` as `confirm_cost`.
 
-Do not commit Terraform state, `.tfvars`, generated backend config, Terraform plans, Azure credentials, Static Web Apps deployment tokens, GitHub secrets, rendered Container Apps configs, or local `.env` files. Do not upload those files as workflow artifacts or cache entries.
+Do not commit Azure credentials, Static Web Apps deployment tokens, GitHub secrets, rendered Container Apps configs, or local `.env` files.
 
 ## Architecture
 
 | Concern | Reference |
 |---|---|
-| Region | `westeurope`, with `northeurope` only as an operational fallback |
-| Domain | `halligalli.games`; apex remains outside this non-cutover decision |
+| Infrastructure repo | `optiplex331/Halligalli-infra` |
+| Product deployment workflow | `.github/workflows/azure-production.yml` for frontend and smoke checks |
+| Backend deployment script | `scripts/deploy-azure-production-backend.sh` |
 | Frontend | Azure Static Web Apps Free at `https://play.halligalli.games` |
 | Backend | Azure Container Apps Consumption at `https://api.halligalli.games` |
 | Image registry | GHCR backend Release Images, resolved to digests during backend deployment |
-| Logs | Log Analytics with seven-day retention |
 | DNS | Name.com records; Azure DNS migration is out of scope |
-| State | HCP Terraform remote state; Terraform CLI runs on GitHub Actions |
-| Runtime parameters | Protected `azure-production` GitHub Environment |
+| Runtime parameters | Protected `azure-production` GitHub Environment plus local Azure CLI login for backend rollout |
 
 The frontend build uses `VITE_HALLIGALLI_BACKEND_URL=https://api.halligalli.games`. The backend Container App uses `HALLIGALLI_ALLOWED_ORIGINS=https://play.halligalli.games`.
 
@@ -45,7 +44,7 @@ The default Dockerfile target is the Azure Container Apps backend image. It cont
 - production `node_modules`
 - `/readyz`, `/health`, and `/socket.io`
 
-It intentionally does not copy Vite `dist/index.html` or `dist/assets/` into the default image. Azure Production publishes frontend assets through `deploy-frontend` to Static Web Apps; the backend image should stay a socket.io backend runtime image.
+It intentionally does not copy Vite `dist/index.html` or `dist/assets/` into the default image. Azure Production publishes frontend assets through `deploy-frontend` to Static Web Apps; the backend image stays a socket.io backend runtime image.
 
 Use the explicit `standalone` Docker target only for local all-in-one container checks where the same Node process should serve static frontend assets and socket.io:
 
@@ -55,12 +54,9 @@ docker build --target standalone -t halligalli:standalone .
 
 ## Local Validation
 
-These commands do not require Azure credentials or HCP Terraform access:
+These product-side commands do not require Azure credentials:
 
 ```bash
-terraform -chdir=deploy/azure fmt -check -recursive
-terraform -chdir=deploy/azure init -backend=false -input=false
-terraform -chdir=deploy/azure validate -no-color
 actionlint
 python3 .github/utils/validate_release_config.py
 python3 -m unittest discover -s .github/utils/tests -p 'test_*.py'
@@ -69,28 +65,7 @@ pnpm run typecheck
 pnpm run build
 ```
 
-Do not use `terraform apply` as a validation shortcut.
-
-## Infrastructure Operation
-
-`Azure Production Infrastructure` supports these manual operations:
-
-| Operation | Behavior |
-|---|---|
-| `plan` | Generates a real Terraform plan from GitHub Environment values, Azure account state, and HCP Terraform remote state. |
-| `apply` | Generates a fresh saved plan and applies it in the same workflow run. Requires `AZURE_PRODUCTION_APPLY`. |
-| `scale-down` | Generates a fresh saved plan with `backend_min_replicas=0` and applies it. Requires `AZURE_PRODUCTION_SCALE_DOWN`. |
-| `destroy` | Generates a fresh destroy plan and applies it. Requires `AZURE_PRODUCTION_DESTROY`. |
-
-The workflow runs Terraform CLI on the GitHub Actions runner. HCP Terraform stores remote state and state versions; it does not execute Terraform runs for this project phase.
-
-The workflow generates private files under the runner temp directory:
-
-- `backend.hcl`
-- `terraform.auto.tfvars.json`
-- `tfplan`
-
-These files are not committed, cached, or uploaded as artifacts.
+Terraform validation belongs in `optiplex331/Halligalli-infra`.
 
 ## Deployment Operation
 
@@ -98,57 +73,29 @@ These files are not committed, cached, or uploaded as artifacts.
 
 | Operation | Behavior |
 |---|---|
-| `validate` | Runs release utility checks and static Terraform validation. |
+| `validate` | Runs release and deployment utility checks. |
 | `deploy-frontend` | Builds only the Vite frontend with the secure Backend Entry and publishes `dist/` to Static Web Apps. Requires `AZURE_PRODUCTION_APPLY`. |
-| `deploy-backend` | Resolves the selected `vX.Y.Z` GHCR backend Release Image to a digest, updates Container Apps, and smoke checks `/readyz` and `/health`. Requires `AZURE_PRODUCTION_APPLY`. |
 | `smoke-backend` | Calls `https://api.halligalli.games/readyz` and `/health` without changing resources. |
 
-Backend deployment accepts only `vX.Y.Z` Release Tags and uses the corresponding GHCR backend Release Image tag, such as `ghcr.io/<owner>/<repo>:0.4.0`. Before updating Container Apps, the workflow configures `ghcr.io` as the registry server, resolves the tag to a digest, and deploys `ghcr.io/<owner>/<repo>@sha256:<digest>`.
+Backend deployment is local because the current Azure for Students school tenant blocks GitHub OIDC bootstrap. It accepts only `vX.Y.Z` Release Tags and uses the corresponding GHCR backend Release Image tag, such as `ghcr.io/<owner>/<repo>:0.4.0`. Before updating Container Apps, the script configures `ghcr.io` as the registry server, resolves the tag to a digest, and deploys `ghcr.io/<owner>/<repo>@sha256:<digest>`.
 
-The deployed `/health` version remains the clean Release Identity, such as `0.4.0`. Development GHCR Images are still for traceability and rollback testing only; they do not feed Azure Production. The GHCR backend Release Image must be pullable by Azure Container Apps; private GHCR credentials are out of scope for this non-cutover decision.
+```bash
+az login
+az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+scripts/deploy-azure-production-backend.sh v0.4.0
+```
+
+The deployed `/health` version remains the clean Release Identity, such as `0.4.0`. Development GHCR Images are for traceability and rollback testing only; they do not feed Azure Production.
 
 ## GitHub Environment Values
 
-Store real values in the `azure-production` GitHub Environment. Use `deploy/azure/github-environment.example` as the key template.
+Store real deployment values in this repo's protected `azure-production` GitHub Environment. Infrastructure values and Terraform state credentials belong in `optiplex331/Halligalli-infra`.
 
 ### Secrets
 
 | Name | Purpose |
 |---|---|
-| `HCP_TERRAFORM_TOKEN` | Terraform CLI credential for HCP Terraform remote state. |
 | `AZURE_STATIC_WEB_APPS_DEPLOYMENT_TOKEN` | Narrow token used only to publish frontend assets to Static Web Apps. |
-
-### Identity Variables
-
-| Name | Purpose |
-|---|---|
-| `AZURE_TENANT_ID` | Microsoft Entra tenant for workload identity federation. |
-| `AZURE_SUBSCRIPTION_ID` | Azure subscription containing Azure-managed resources. |
-| `AZURE_TERRAFORM_CLIENT_ID` | Federated client ID used by Terraform infrastructure operations. |
-| `AZURE_DEPLOY_CLIENT_ID` | Federated client ID used by backend deployment operations. |
-| `AZURE_DEPLOY_PRINCIPAL_ID` | Object ID Terraform can grant Container Apps update permissions to. |
-
-### Infrastructure Variables
-
-| Name | Purpose |
-|---|---|
-| `HCP_TERRAFORM_ORGANIZATION` | HCP Terraform organization for generated backend config. |
-| `HCP_TERRAFORM_WORKSPACE` | HCP Terraform workspace for remote state. |
-| `HCP_TERRAFORM_WORKSPACE_URL` | GitHub Environment URL target for infrastructure runs. |
-| `AZURE_PRODUCTION_PROJECT_NAME` | Optional project-name override; defaults to `halligalli`. |
-| `AZURE_PRODUCTION_REGION` | Runtime region; default `westeurope`, fallback `northeurope`. |
-| `AZURE_PRODUCTION_STATIC_WEB_APP_LOCATION` | Static Web Apps location. |
-| `AZURE_PRODUCTION_DOMAIN_NAME` | Domain, currently `halligalli.games`. |
-| `AZURE_PRODUCTION_FRONTEND_SUBDOMAIN` | Frontend subdomain, currently `play`. |
-| `AZURE_PRODUCTION_BACKEND_SUBDOMAIN` | Backend subdomain, currently `api`. |
-| `AZURE_PRODUCTION_RESOURCE_GROUP_NAME` | Azure Production resource group. |
-| `AZURE_PRODUCTION_STATIC_WEB_APP_NAME` | Static Web App name. |
-| `AZURE_PRODUCTION_BACKEND_IMAGE` | Bootstrap image for the Terraform-managed Container App. |
-| `AZURE_PRODUCTION_BACKEND_MIN_REPLICAS` | `0` for bootstrap or scale down, `1` to serve traffic. |
-| `AZURE_PRODUCTION_BACKEND_MAX_REPLICAS` | Must remain `1`. |
-| `AZURE_PRODUCTION_BACKEND_APP_VERSION` | Optional baseline Release Identity in the Terraform-managed Container App. |
-| `AZURE_PRODUCTION_BACKEND_COMMIT_SHA` | Optional baseline commit SHA in the Terraform-managed Container App. |
-| `AZURE_PRODUCTION_GITHUB_REPOSITORY` | GitHub owner/repository expected to operate Azure Production workflows. |
 
 ### Deployment Variables
 
@@ -156,44 +103,39 @@ Store real values in the `azure-production` GitHub Environment. Use `deploy/azur
 |---|---|
 | `AZURE_PRODUCTION_FRONTEND_URL` | Public frontend URL, `https://play.halligalli.games`. |
 | `AZURE_PRODUCTION_BACKEND_URL` | Public Backend Entry, `https://api.halligalli.games`. |
+
+### Local Backend Variables
+
+The backend deploy script has safe defaults for the current scaffold names, but it also accepts these local environment overrides:
+
+| Name | Purpose |
+|---|---|
+| `AZURE_SUBSCRIPTION_ID` | Azure subscription selected before local backend rollout. |
+| `AZURE_PRODUCTION_GITHUB_REPOSITORY` | GHCR repository owner/name, default `optiplex331/Halligalli-BossYang`. |
 | `AZURE_PRODUCTION_RESOURCE_GROUP_NAME` | Resource group containing the Container App. |
-| `AZURE_PRODUCTION_STATIC_WEB_APP_NAME` | Static Web App name. |
 | `AZURE_PRODUCTION_CONTAINER_APP_NAME` | Container App backend name. |
+| `AZURE_PRODUCTION_FRONTEND_URL` | Allowed browser origin, default `https://play.halligalli.games`. |
+| `AZURE_PRODUCTION_BACKEND_URL` | Backend Entry used for smoke checks, default `https://api.halligalli.games`. |
 
 ## Name.com DNS And Custom Domains
 
 `halligalli.games` remains on Name.com nameservers. Do not migrate DNS authority to Azure DNS for this Azure Production stage.
 
-Terraform manages the Static Web Apps custom-domain binding and outputs the Container Apps ingress hostname. The `api.halligalli.games` Container Apps custom-domain/certificate activation is an external activation step in Azure, followed by the required Name.com verification and routing records.
+Infrastructure outputs and Azure portal values from `optiplex331/Halligalli-infra` provide the current Static Web Apps default hostname and Container Apps ingress hostname. Name.com verification and routing records remain manual.
 
-Configure or confirm these records during activation:
-
-| Hostname | Record | Value |
-|---|---|---|
-| `play.halligalli.games` | CNAME | Static Web Apps default hostname from Terraform output or Azure portal. |
-| Static Web Apps verification host | TXT or CNAME | Exact verification record shown by Azure during custom-domain validation. |
-| `api.halligalli.games` | CNAME | Container Apps ingress hostname from Terraform output or Azure portal. |
-| Container Apps verification host | TXT | Exact `asuid` verification record shown by Azure during custom-domain validation. |
-
-Add only the records Azure requests for the current resources. Destroying Azure resources does not remove Name.com records; clean them up manually when tearing Azure Production down.
+Destroying Azure resources does not remove Name.com records; clean them up manually when tearing Azure Production down.
 
 ## First Activation
 
 Use this order when activating Azure Production:
 
-1. Bootstrap the Terraform execution identity and GitHub federated credential outside this Terraform root.
-2. Configure the `azure-production` GitHub Environment values listed above.
-3. Run `Azure Production Infrastructure` with `operation=plan`.
-4. Review the cost-bearing resources: Static Web Apps, Log Analytics, Container Apps environment, Container App, and role assignments.
-5. Run `operation=apply` with `confirm=AZURE_PRODUCTION_APPLY`, using `backend_min_replicas=0` and the placeholder backend image so Terraform can create the base infrastructure.
-6. Copy Terraform outputs into the GitHub Environment variables used by the deployment workflow.
-7. Complete Container Apps custom-domain/certificate activation for `api.halligalli.games`, then add required custom-domain verification and routing records in Name.com.
-8. Run `Azure Production` with `operation=deploy-backend` and `confirm_cost=AZURE_PRODUCTION_APPLY` from a Release Tag after the GHCR backend Release Image for that tag exists and is public to Azure Container Apps.
-9. Run `operation=deploy-frontend` with `confirm_cost=AZURE_PRODUCTION_APPLY`.
-10. Run `operation=smoke-backend`, then verify the public frontend, `/readyz`, `/health`, and socket.io multiplayer path over WSS.
+1. Apply infrastructure from `optiplex331/Halligalli-infra`.
+2. Copy required frontend and smoke values into this repo's `azure-production` GitHub Environment.
+3. Complete Container Apps custom-domain/certificate activation for `api.halligalli.games`, then add required custom-domain verification and routing records in Name.com.
+4. Run `scripts/deploy-azure-production-backend.sh vX.Y.Z` locally after the GHCR backend Release Image for that tag exists and is pullable by Azure Container Apps.
+5. Run `operation=deploy-frontend` with `confirm_cost=AZURE_PRODUCTION_APPLY`.
+6. Run `operation=smoke-backend`, then verify the public frontend, `/readyz`, `/health`, and socket.io multiplayer path over WSS.
 
 ## Cost And Lifecycle
 
-Use `scale-down` when Azure Production does not need to serve demos. It preserves Static Web Apps, Log Analytics, existing custom-domain bindings, Name.com records, and Terraform state while setting backend minimum replicas to zero.
-
-Use `destroy` only when intentionally tearing down Azure-managed Azure-managed resources. After destroy, manually remove stale Name.com DNS records and GitHub Environment values that should no longer be used.
+Use the infrastructure repo's `scale-down` operation when Azure Production does not need to serve demos. Use `destroy` only when intentionally tearing down Azure-managed resources.
