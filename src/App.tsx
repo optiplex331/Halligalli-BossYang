@@ -1333,7 +1333,7 @@ function App() {
       <section className="app-panel">
         <header className="hero">
           <div>
-            <h1>Halligalli</h1>
+            <h1>Halligalli Arena</h1>
           </div>
           <div className="hero-rule">{t("heroRule")}</div>
         </header>

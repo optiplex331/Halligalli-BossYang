@@ -1,0 +1,17 @@
+{
+  "name": "Halligalli Arena",
+  "short_name": "Arena",
+  "description": "A browser trainer for exact-five bell reactions, solo practice, and real-time multiplayer rooms.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#05080f",
+  "theme_color": "#c9a227",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,226 +1,141 @@
-# Halligalli Boss Practice
+<p align="center">
+  <img src="public/icon.svg" width="96" height="96" alt="Halligalli Arena icon" />
+</p>
 
-A browser-based Halligalli trainer built to feel as close to the physical card game as possible. Players sit around a virtual felt table, flip cards clockwise, and race to ring the bell the moment any fruit totals exactly five. Available in single-player practice mode and real-time multiplayer rooms.
+# Halligalli Arena
 
-**Azure Production**: `https://play.halligalli.games` after external Azure/HCP Terraform/Name.com activation. The backing non-production boundary remains separate from any production cutover decision.
+Real-time multiplayer Halligalli for midnight card-table races.
 
----
+Create a room, ready up with friends, flip around a server-authoritative table, and race to spot the exact-five fruit total first. Solo practice is included, but the product story is a fast multiplayer Halligalli arena.
 
-## Game Mechanics
+[![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-8-646cff?style=flat-square)](https://vite.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178c6?style=flat-square)](https://www.typescriptlang.org/)
+[![socket.io](https://img.shields.io/badge/socket.io-4-111?style=flat-square)](https://socket.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-f0c44a?style=flat-square)](LICENSE)
 
-### The core rule
-Cards are flipped one at a time, clockwise around the table. Each player's pile is face-up, but **only the top card counts** — older cards beneath it are invisible to the rule engine, just as in the physical game. The moment any single fruit across all top cards totals exactly 5, the bell window opens.
+**Live demo**: `https://play.halligalli.games` after external Azure/HCP Terraform/Name.com activation.
 
-### Bell timing
-Ringing the bell is not binary. A **speed bonus window** rewards faster reactions — the sooner you hit the bell after the window opens, the more bonus points you earn. Miss the window entirely and every player takes a −30 penalty on the next flip.
+![Halligalli Arena showcase](docs/assets/readme-showcase.svg)
 
-### Scoring formula
-| Event | Points |
-|---|---|
-| Correct ring — base | +120 |
-| Collected cards | +6 per card |
-| Speed bonus | up to +~50 (scales with reaction time) |
-| Consecutive streak | +10 per hit in current streak |
-| Wrong ring | −50 |
-| Penalty cards paid | −4 per card |
-| Missed bell window | −30 (applied to all players in multiplayer) |
+## What It Does
 
-### Wrong ring penalty
-Pressing the bell when no fruit totals five triggers a penalty: the player forfeits half the cards on the table (rounded up), shuffled to the bottom of their own pile. No cards to forfeit means no deduction, but the −50 still applies.
+- **Real-time rooms**: create a 4-character room code, ready up, and race friends on one shared table.
+- **Halligalli race loop**: flip cards, read the visible fruit count, and compete for the exact-five hit.
+- **Table-true rules**: clockwise flips, top-card-only counting, exact-five bell windows.
+- **Server authority**: multiplayer clients emit intent; the server owns flips, scoring, and match finish.
+- **Solo practice**: train reaction speed, accuracy, streaks, and missed-window discipline.
+- **Training memory**: local history, trend charts, daily goals, and achievements without accounts.
+- **Midnight table polish**: 3D card flips, bell particles, Boss Yang pressure, sound, and reduced-motion fallbacks.
 
-### Difficulty
-Three modes vary the flip interval and speed-bonus window:
+Independent browser project; not affiliated with any commercial card-game publisher.
 
-| Mode | Flip speed | Speed-bonus window |
-|---|---|---|
-| Easy | ~1.85 s | generous |
-| Normal | ~1.1 s | standard |
-| Boss | ~900 ms | tight |
-
-### Card deck
-The deck uses an optimized distribution (`COUNT_DISTRIBUTION`) tuned via Monte Carlo simulation to target 4–7 card flips between bell windows across 3–6 player counts. 2-pip and 3-pip cards are most common; 5-pip cards are rare, preventing trivially obvious single-card rings.
-
-### Multiplayer rules
-In a multiplayer room the server runs the authoritative game loop — no client can fake a win. Bell presses are first-come-first-served: the first valid press collects the table; all other simultaneous presses receive the wrong-ring penalty. A missed bell window penalises every player equally.
-
----
-
-## Design Features
-
-### Tabletop spatial layout
-Players are rendered as seats around an oval felt table, positioned using the same clockwise ordering as the physical game. The acting player is highlighted each flip so the user always knows whose turn it is without counting.
-
-### 3D card flip animation
-Cards use CSS `rotateY` + `backface-visibility` to produce a genuine 3D flip. The back face is visible mid-rotation; the front snaps in at the end. Flip direction is consistent with the clockwise rule.
-
-### Boss Mode — Yang
-Yang is a persistent observer who appears in Boss difficulty. After any missed bell window he delivers a taunt — a brief message rendered with a float animation above his portrait. The table also shifts to signal pressure. All animations are gated by `prefers-reduced-motion`.
-
-### Training progression
-The home screen training card tracks long-term improvement across three tabs:
-
-- **近期 / Recent** — last 5 rounds with score, accuracy, and avg reaction time
-- **趋势 / Trend** — SVG line chart for accuracy (%) and reaction time (ms) over the past 14 days; unlocks after 3 days of data
-- **成就 / Achievements** — 5 unlockable milestones (first round, 5-hit streak, perfect round, sub-200 ms reaction, 3-day daily goal streak)
-
-A **daily goal** bar (5 rounds / day) resets each calendar day and feeds the streak achievement. All data lives in `localStorage` — no account required.
-
-### Visual style
-Dark felt palette, gold accent (`--gold-light`), tabular-numeral stat displays, and a glow-sweep button effect. The UI is fully bilingual (Chinese / English) and switches without reload. Every interactive element meets WCAG 2.5.5 minimum touch target size on mobile.
-
----
-
-## Features Summary
-
-### Single-player
-- 3–6 player table layouts with clockwise flipping
-- Top-card-only bell validation matching the physical game rule
-- Speed bonus, streak multiplier, and penalty logic
-- Boss Mode with Yang taunts and visual pressure
-- Configurable difficulty and round length
-- Animated end-of-round score breakdown
-
-### Multiplayer
-- Create a room, share a 4-character match code
-- Up to 6 players, ready-up lobby, host controls
-- Server-authoritative game loop — fair across all clients
-- First-press-wins bell races with simultaneous-press penalty
-- Ranked per-player scoreboard at the end
-- Same-origin socket.io, zero setup for players
-
-### Training log
-- Last 5 rounds on the home screen (score, accuracy, avg reaction, mode badge)
-- Rolling 100-round history in `localStorage` (`halligalli_history`)
-- 14-day SVG trend charts for accuracy and reaction time
-- Daily goal tracker with cross-day reset
-- 5 achievements with unlock timestamps and toast notifications
-
-### Polish
-- 3D card flip, bell particle burst, screen transitions
-- Homepage entrance animations, glow-sweep buttons
-- 3-2-1 countdown before every round
-- Full `prefers-reduced-motion` fallback (all keyframes covered)
-- Chinese / English language switch
-- Sound effects with iOS audio-unlock on every game-entry button
-- Screen-reader accessible: `aria-live` on feedback/penalty/boss taunt, `aria-label`/`aria-pressed` on bell, `role="dialog"` on lobby, screen-change focus management
-- WCAG 2.5.5 touch targets (44 px min-height on all interactive elements at mobile breakpoint)
-
----
-
-## Tech Stack
-
-- React 19 + Vite 8 + TypeScript + plain CSS (frontend)
-- Node.js 24 + socket.io 4 (WebSocket server)
-- Vitest for unit tests across game logic, persistence, lifecycle, health, socket config, and stats
-- Azure Production template for a separated Static Web Apps frontend and Container Apps backend image
-- Manual, confirmation-gated Azure infrastructure and application deployment workflows
-
----
-
-## Getting Started
-
-### Dev (both frontend and server)
+## Quick Start
 
 ```bash
 node --version       # v24.x
 pnpm install
 pnpm run dev         # Vite dev server on :5173
-pnpm run dev:server  # socket.io server on :3001 (in a second terminal)
+pnpm run dev:server  # socket.io server on :3001, in a second terminal
 ```
 
-Vite proxies `/socket.io` to the server automatically. Open http://localhost:5173.
+Open http://localhost:5173.
 
-### Single-terminal dev (frontend only)
+Single-player works with only `pnpm run dev`. Multiplayer needs `pnpm run dev:server`.
 
-Multiplayer features will not work without the server, but single-player does:
-
-```bash
-pnpm run dev
-```
-
-### Tests and typecheck
+## Commands
 
 ```bash
 pnpm run test
 pnpm run typecheck
+pnpm run build
+pnpm start
 ```
 
-### Container check
+Container checks:
 
 ```bash
-docker build -t halligalli:local .
-docker run --rm -p 3001:3001 halligalli:local
+docker build -t halligalli-arena:local .
+docker run --rm -p 3001:3001 halligalli-arena:local
 curl --fail http://localhost:3001/readyz
 ```
 
-The default Dockerfile target is the Azure Container Apps backend image. It contains the compiled Node.js server plus shared gameplay modules and exposes `/readyz`, `/health`, and `/socket.io`; it does not include the Vite frontend assets because Azure Production publishes those assets separately to Static Web Apps.
-
-For a local all-in-one container that serves the built frontend and socket.io from the same Node process:
+For a local all-in-one image that serves the built frontend and socket.io from one Node process:
 
 ```bash
-docker build --target standalone -t halligalli:standalone .
-docker run --rm -p 3001:3001 halligalli:standalone
+docker build --target standalone -t halligalli-arena:standalone .
+docker run --rm -p 3001:3001 halligalli-arena:standalone
 ```
 
-### Production build + run
+## Rules Model
 
-```bash
-pnpm install
-pnpm run build   # outputs dist/
-pnpm start       # server serves dist/ + socket.io on port 3001
-```
+Cards flip clockwise around the table. Each player has a face-up pile, but only the top card counts. Older cards underneath are invisible to the rule engine.
 
-Open http://localhost:3001.
+Ring when one fruit totals exactly five across visible top cards.
 
----
+| Event | Points |
+|---|---:|
+| Correct ring base | +120 |
+| Collected cards | +6 per card |
+| Speed bonus | up to +~50 |
+| Consecutive streak | +10 per hit in current streak |
+| Wrong ring | -50 |
+| Penalty cards paid | -4 per card |
+| Missed bell window | -30 |
 
-## Project Structure
+| Mode | Flip speed | Speed-bonus window |
+|---|---:|---|
+| Easy | ~1.85 s | generous |
+| Normal | ~1.4 s | standard |
+| Boss | ~900 ms | tight |
+
+## Project Shape
 
 ```text
 src/
-├── App.tsx              — UI + single-player game loop
-├── main.tsx             — app entry
-├── styles.css           — all styles
-├── audio/
-│   └── useAudioEngine.ts   — AudioContext hook (playFeedback, ensureUnlocked)
-├── game/                — shared game logic (browser + server)
-│   ├── constants.ts
-│   ├── persistence.ts   — localStorage helpers incl. history, daily goal, achievements
-│   ├── rules.ts
-│   ├── lifecycle.ts
-│   ├── stats.ts         — pure stat functions (streak, trend, daily goal streak)
-│   └── types.ts         — shared gameplay types
-└── multiplayer/
-    ├── protocol.ts      — shared multiplayer payload types
-    ├── socket.ts        — socket.io-client singleton
-    └── useMultiplayerSocket.ts — room/game socket event subscriptions
+├── App.tsx                 # UI shell and single-player game loop
+├── audio/useAudioEngine.ts # Web Audio hook
+├── game/                   # shared browser + server game logic
+└── multiplayer/            # socket protocol and client projection
 
 server/
-├── index.ts             — HTTP server + socket.io router, with static dist/ serving for standalone/local runs
-├── health.ts            — /health response shape and release identity
-├── Room.ts              — room/player model, match codes, host transfer
-└── GameEngine.ts        — server-authoritative game loop
+├── GameEngine.ts           # multiplayer authority
+├── Room.ts                 # lobby and player model
+├── health.ts
+└── index.ts                # HTTP server + socket.io router
 
-deploy/azure/      — sanitized Azure Production Terraform reference and environment template
-scripts/simulate-bell.ts — card-distribution tuning utility
-public/yang-boss.png     — Boss portrait
+deploy/azure/               # Azure Production Terraform reference
+docs/operations/            # release, Azure, and rollback docs
 ```
 
----
+## Design Boundaries
 
-## Deployment and Operations
+- React 19 + Vite 8 + TypeScript + plain CSS.
+- Node.js 24 + socket.io 4.
+- Browser progress stays in `localStorage`.
+- No account system, database, router, state library, or CSS framework.
+- Stable visible copy stays bilingual in Chinese and English.
+- New animations must respect `prefers-reduced-motion`.
 
-Azure Production is the visible manual stage for the active Azure Production target without implying production cutover. The public Terraform reference models an Azure Static Web Apps frontend and Azure Container Apps backend with example values; real account-specific tfvars, backend config, state, Azure credentials, deployment tokens, and domain bindings are intentionally excluded from Git. Azure Production resources and application artifacts are changed only by manually dispatching protected workflows with explicit confirmation.
+## Privacy And Safety
 
-The default Dockerfile output is the backend release image consumed by Azure Container Apps. Frontend assets are built with Vite and published by the Azure Production frontend deployment workflow to Static Web Apps, so the backend GHCR Release Image remains a Node.js/socket.io runtime image rather than an all-in-one web host.
+Halligalli Arena stores training progress locally in the browser. It does not require accounts, payment data, or a server-side player profile.
+
+Multiplayer rooms are transient in-memory socket.io rooms. The server owns scoring and match results so clients cannot submit authoritative wins.
+
+See [SECURITY.md](SECURITY.md) for reporting and safety boundaries.
+
+## Deployment
+
+Azure Production is the visible manual stage for the active Azure Production target without implying production cutover. The public Terraform reference models an Azure Static Web Apps frontend and Azure Container Apps backend with example values; real account-specific tfvars, backend config, state, Azure credentials, deployment tokens, and domain bindings are intentionally excluded from Git.
 
 - Release branch: `master`
 - Versioning: Release Please creates human-merged release PRs and `vX.Y.Z` tags
-- Release image: release tags build, scan, and publish immutable GHCR backend release images for traceability
-- Azure infrastructure: `.github/workflows/azure-production-infra.yml` runs manual Terraform `plan`, `apply`, `scale-down`, and `destroy`
-- Azure deployment: `.github/workflows/azure-production.yml` runs manual frontend/backend deploy and backend smoke checks
-- Health check: `/health` reports status, active rooms, release version, and commit SHA
-- Readiness check: `/readyz` reports traffic readiness without release identity
+- Release image: release tags build, scan, and publish immutable GHCR backend images
+- Azure infrastructure: `.github/workflows/azure-production-infra.yml`
+- Azure deployment: `.github/workflows/azure-production.yml`
+- Health check: `/health`
+- Readiness check: `/readyz`
 
 Operations docs:
 
@@ -228,8 +143,16 @@ Operations docs:
 - [Azure Production](docs/operations/azure-production.md)
 - [Rollback](docs/operations/rollback.md)
 
----
+## Contributing
+
+Small, focused pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), then run:
+
+```bash
+pnpm run test
+pnpm run typecheck
+pnpm run build
+```
 
 ## License
 
-Private project.
+MIT. See [LICENSE](LICENSE).

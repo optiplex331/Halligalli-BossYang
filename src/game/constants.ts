@@ -38,7 +38,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   difficulty: "normal",
   duration: 60,
   playerCount: 4,
-  language: "zh",
+  language: "en",
   soundEnabled: true,
 };
 

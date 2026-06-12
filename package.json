@@ -1,6 +1,26 @@
 {
-	"name": "halligalli-web",
+	"name": "halligalli-arena",
 	"private": true,
+	"description": "A real-time multiplayer Halligalli table for exact-five card races, solo practice, and server-authoritative rooms.",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/optiplex331/Halligalli-BossYang.git"
+	},
+	"homepage": "https://play.halligalli.games",
+	"bugs": {
+		"url": "https://github.com/optiplex331/Halligalli-BossYang/issues"
+	},
+	"keywords": [
+		"halligalli",
+		"multiplayer",
+		"browser-game",
+		"reaction-trainer",
+		"socket.io",
+		"react",
+		"vite",
+		"typescript"
+	],
 	"packageManager": "pnpm@11.0.9",
 	"type": "module",
 	"devEngines": {
