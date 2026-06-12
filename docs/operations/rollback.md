@@ -1,6 +1,6 @@
 # Rollback
 
-Rollback for Azure Production is an application deployment operation. Terraform should not be used for ordinary application rollback unless the infrastructure itself is broken.
+Rollback for Azure Production is an application deployment operation. Terraform in `optiplex331/Halligalli-infra` should not be used for ordinary application rollback unless the infrastructure itself is broken.
 
 ## Preferred Rollback
 
@@ -18,8 +18,8 @@ If Azure Production must recover before a clean redeploy can complete, use Azure
 
 - Do not push directly to `master`.
 - Do not deploy `latest`.
-- Do not run Terraform `destroy` as application rollback.
-- Do not use untracked local `.env`, tfvars, Container Apps config JSON, or Azure credentials as the source of truth.
+- Do not run the infrastructure repo's Terraform `destroy` as application rollback.
+- Do not use untracked local `.env`, Container Apps config JSON, or Azure credentials as the source of truth.
 - Do not bypass the protected `azure-production` GitHub Environment for normal rollback.
 
 ## Verification

@@ -1,13 +1,12 @@
 # CI/CD
 
-Halligalli uses GitHub Actions as the delivery control plane. Pull requests and normal pushes validate code, release metadata, delivery control files, and container images, but they do not create Azure resources or deploy application artifacts.
+Halligalli uses GitHub Actions as the product delivery control plane. Pull requests and normal pushes validate code, release metadata, delivery control files, and container images, but they do not create Azure resources or deploy application artifacts.
 
-Azure Production is operated through protected manual workflows whose backing files and environment still use the `azure-production` boundary:
+Azure Production application deployment is operated through a protected manual workflow whose product-side environment uses the `azure-production` boundary:
 
-- `.github/workflows/azure-production-infra.yml` for Terraform `plan`, `apply`, `scale-down`, and `destroy`
 - `.github/workflows/azure-production.yml` for frontend deploy, backend deploy, and backend smoke checks
 
-Real Azure, HCP Terraform, Static Web Apps deployment token, Container Apps, DNS, and runtime values belong in the protected `azure-production` GitHub Environment. The public template is `deploy/azure/github-environment.example`.
+Azure Production infrastructure source of truth lives in the private `optiplex331/Halligalli-infra` repository. Product deployment values copied from that repo's infrastructure outputs belong in this repo's protected `azure-production` GitHub Environment.
 
 ## Pull Request Gates
 
@@ -22,7 +21,7 @@ PR checks do not publish images and do not mutate Azure. CI uses `package.json` 
 
 The check names intentionally stay stable because branch protection depends on them. The work inside each check is routed by `dorny/paths-filter` and `.github/utils/change-filters.yaml`, not by workflow-level path filters. This avoids skipped workflows leaving required checks pending.
 
-Short shell-native workflow orchestration stays in Bash, such as `git`, `docker`, `gh`, `curl`, Terraform CLI orchestration, Azure CLI calls, and environment checks. Structured release validation, GitHub output formatting, `/health` JSON validation, and non-trivial inline heredocs belong in dependency-free `.github/utils/*.py` scripts covered by Python's built-in `unittest`.
+Short shell-native workflow orchestration stays in Bash, such as `git`, `docker`, `gh`, `curl`, Azure CLI calls, and environment checks. Structured release validation, GitHub output formatting, `/health` JSON validation, and non-trivial inline heredocs belong in dependency-free `.github/utils/*.py` scripts covered by Python's built-in `unittest`.
 
 | Change type | Product checks | Container build and scan |
 |---|---|---|
@@ -35,14 +34,9 @@ Utility tests run unconditionally in the `Product checks` gate and do not requir
 
 ## Azure Production
 
-Azure Production workflows only run through `workflow_dispatch`; they are not attached to push, PR, or Release Tag events. The visible workflow and environment names now use `azure-production`, but this still does not mean Halligalli has completed a production cutover.
+The Azure Production application deployment workflow only runs through `workflow_dispatch`; it is not attached to push, PR, or Release Tag events. The visible workflow and environment names use `azure-production`, but this still does not mean Halligalli has completed a production cutover.
 
-The infrastructure workflow supports:
-
-- `plan`
-- `apply` with `confirm=AZURE_PRODUCTION_APPLY`
-- `scale-down` with `confirm=AZURE_PRODUCTION_SCALE_DOWN`
-- `destroy` with `confirm=AZURE_PRODUCTION_DESTROY`
+Terraform `plan`, `apply`, `scale-down`, and `destroy` belong in `optiplex331/Halligalli-infra`.
 
 The deployment workflow supports:
 
@@ -51,7 +45,7 @@ The deployment workflow supports:
 - `deploy-backend` with `confirm_cost=AZURE_PRODUCTION_APPLY`
 - `smoke-backend`
 
-Azure Production changes are Delivery Control. Changes to `deploy/azure/**`, `.github/workflows/azure-production.yml`, and `.github/workflows/azure-production-infra.yml` make `Product checks` run release utility validation and actionlint, but they do not publish Azure resources during PR checks.
+Azure Production deployment changes are Delivery Control. Changes to `.github/workflows/azure-production.yml` make `Product checks` run release utility validation and actionlint, but they do not publish Azure resources during PR checks.
 
 Azure Production operation details are documented in [Azure Production Reference](azure-production.md).
 

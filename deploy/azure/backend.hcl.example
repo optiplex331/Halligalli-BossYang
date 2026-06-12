@@ -1,5 +1,0 @@
-organization = "example-org"
-
-workspaces {
-  name = "azure-production"
-}

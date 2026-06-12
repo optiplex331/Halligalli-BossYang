@@ -104,7 +104,6 @@ server/
 ├── health.ts
 └── index.ts                # HTTP server + socket.io router
 
-deploy/azure/               # Azure Production Terraform reference
 docs/operations/            # release, Azure, and rollback docs
 ```
 
@@ -127,12 +126,12 @@ See [SECURITY.md](SECURITY.md) for reporting and safety boundaries.
 
 ## Deployment
 
-Azure Production is the visible manual stage for the active Azure Production target without implying production cutover. The public Terraform reference models an Azure Static Web Apps frontend and Azure Container Apps backend with example values; real account-specific tfvars, backend config, state, Azure credentials, deployment tokens, and domain bindings are intentionally excluded from Git.
+Azure Production is the visible manual stage for the active Azure Production target without implying production cutover. Infrastructure source of truth lives in the private `optiplex331/Halligalli-infra` repository; this product repo keeps Release PRs, GHCR Release Images, frontend/backend deployment, and smoke checks.
 
 - Release branch: `master`
 - Versioning: Release Please creates human-merged release PRs and `vX.Y.Z` tags
 - Release image: release tags build, scan, and publish immutable GHCR backend images
-- Azure infrastructure: `.github/workflows/azure-production-infra.yml`
+- Azure infrastructure: `optiplex331/Halligalli-infra`
 - Azure deployment: `.github/workflows/azure-production.yml`
 - Health check: `/health`
 - Readiness check: `/readyz`

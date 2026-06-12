@@ -11,7 +11,7 @@ Please report security issues privately by emailing the repository owner or open
 - Client-side React app.
 - Node.js socket.io server.
 - Local browser progress stored in `localStorage`.
-- Manual Azure Production deployment workflows and Terraform reference files.
+- Manual Azure Production application deployment workflow.
 
 ## Current Safety Boundaries
 
@@ -21,7 +21,7 @@ Please report security issues privately by emailing the repository owner or open
 - No payment or personal-data workflow.
 - Multiplayer scoring is server-authoritative.
 - Browser progress stays local to the device.
-- Deployment secrets, tfvars, backend config, and real cloud credentials are intentionally excluded from Git.
+- Deployment secrets, generated config, and real cloud credentials are intentionally excluded from Git.
 
 ## Out Of Scope
 
