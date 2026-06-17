@@ -2,5 +2,10 @@ packages:
   - .
   - server
 
+overrides:
+  engine.io: 6.6.9
+  engine.io-client: 6.6.6
+  socket.io-adapter: 2.5.8
+
 allowBuilds:
   esbuild: true
