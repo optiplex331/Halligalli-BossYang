@@ -1,6 +1,6 @@
 # Rollback
 
-Rollback for Azure Production is an application deployment operation. Terraform in `optiplex331/Halligalli-infra` should not be used for ordinary application rollback unless the infrastructure itself is broken.
+Rollback for Azure Production is an application deployment operation. Terraform should not be used for ordinary application rollback unless the infrastructure itself is broken.
 
 ## Preferred Rollback
 

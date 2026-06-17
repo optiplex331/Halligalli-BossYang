@@ -4,7 +4,7 @@ set -euo pipefail
 release_tag="${1:-${AZURE_PRODUCTION_RELEASE_TAG:-}}"
 repository="${AZURE_PRODUCTION_GITHUB_REPOSITORY:-optiplex331/Halligalli-BossYang}"
 resource_group="${AZURE_PRODUCTION_RESOURCE_GROUP_NAME:-halligalli-boss-practice-azure-production-rg}"
-container_app="${AZURE_PRODUCTION_CONTAINER_APP_NAME:-halligalli-azure-production-backend}"
+container_app="${AZURE_PRODUCTION_CONTAINER_APP_NAME:-halligalli-azprod-backend}"
 frontend_url="${AZURE_PRODUCTION_FRONTEND_URL:-https://play.halligalli.games}"
 backend_url="${AZURE_PRODUCTION_BACKEND_URL:-https://api.halligalli.games}"
 
@@ -49,6 +49,26 @@ commit_sha="$(git rev-list -n 1 "${release_tag}")"
 image_name="ghcr.io/$(printf '%s' "${repository}" | tr '[:upper:]' '[:lower:]')"
 image_tag="${image_name}:${version}"
 
+repository_owner="$(
+  printf '%s' "${repository%%/*}" | tr '[:upper:]' '[:lower:]'
+)"
+ghcr_username="${AZURE_PRODUCTION_GHCR_USERNAME:-${GHCR_USERNAME:-${repository_owner}}}"
+ghcr_token="${AZURE_PRODUCTION_GHCR_TOKEN:-${GHCR_TOKEN:-${GITHUB_TOKEN:-}}}"
+
+if [[ -z "${ghcr_token}" ]] && command -v gh >/dev/null 2>&1; then
+  ghcr_token="$(gh auth token 2>/dev/null || true)"
+fi
+
+if [[ -z "${ghcr_token}" ]]; then
+  echo "Set AZURE_PRODUCTION_GHCR_TOKEN, GHCR_TOKEN, or GITHUB_TOKEN with read:packages scope." >&2
+  echo "Alternatively, authenticate the GitHub CLI with read:packages before deploying." >&2
+  exit 1
+fi
+
+printf '%s' "${ghcr_token}" | docker login ghcr.io \
+  --username "${ghcr_username}" \
+  --password-stdin >/dev/null
+
 image_digest="$(
   docker buildx imagetools inspect "${image_tag}" \
     --format '{{.Manifest.Digest}}'
@@ -65,7 +85,9 @@ echo "Deploying ${image_digest_ref}"
 az containerapp registry set \
   --name "${container_app}" \
   --resource-group "${resource_group}" \
-  --server ghcr.io
+  --server ghcr.io \
+  --username "${ghcr_username}" \
+  --password "${ghcr_token}"
 
 az containerapp update \
   --name "${container_app}" \
@@ -79,8 +101,8 @@ az containerapp update \
     APP_VERSION="${version}" \
     COMMIT_SHA="${commit_sha}"
 
-curl --fail --silent --show-error "${backend_url}/readyz"
-response="$(curl --fail --silent --show-error "${backend_url}/health")"
+curl --max-time 20 --fail --silent --show-error "${backend_url}/readyz"
+response="$(curl --max-time 20 --fail --silent --show-error "${backend_url}/health")"
 
 export HEALTH_RESPONSE="${response}"
 export EXPECTED_VERSION="${version}"

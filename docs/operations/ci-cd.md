@@ -7,7 +7,7 @@ Azure Production application deployment is operated through a protected manual w
 - `.github/workflows/azure-production.yml` for frontend deploy and backend smoke checks
 - `scripts/deploy-azure-production-backend.sh` for local backend rollout through Azure CLI
 
-Azure Production infrastructure source of truth lives in the private `optiplex331/Halligalli-infra` repository. Product deployment values copied from that repo's infrastructure outputs belong in this repo's protected `azure-production` GitHub Environment.
+Product deployment values copied from infrastructure outputs belong in this repo's protected `azure-production` GitHub Environment.
 
 ## Pull Request Gates
 
@@ -37,7 +37,7 @@ Utility tests run unconditionally in the `Product checks` gate and do not requir
 
 The Azure Production application deployment workflow only runs through `workflow_dispatch`; it is not attached to push, PR, or Release Tag events. The visible workflow and environment names use `azure-production`, but this still does not mean Halligalli has completed a production cutover.
 
-Terraform `plan`, `apply`, `scale-down`, and `destroy` belong in `optiplex331/Halligalli-infra`.
+Terraform `plan`, `apply`, `scale-down`, and `destroy` are separate from product deployment.
 
 The deployment workflow supports:
 

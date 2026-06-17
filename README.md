@@ -14,7 +14,7 @@ Create a room, ready up with friends, flip around a server-authoritative table, 
 [![socket.io](https://img.shields.io/badge/socket.io-4-111?style=flat-square)](https://socket.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-f0c44a?style=flat-square)](LICENSE)
 
-**Live demo**: `https://play.halligalli.games` after external Azure/HCP Terraform/Name.com activation.
+**Live demo**: `https://play.halligalli.games` when Azure Production is scaled up for demos.
 
 ![Halligalli Arena showcase](docs/assets/readme-showcase.svg)
 
@@ -126,15 +126,17 @@ See [SECURITY.md](SECURITY.md) for reporting and safety boundaries.
 
 ## Deployment
 
-Azure Production is the visible manual stage for the active Azure Production target without implying production cutover. Infrastructure source of truth lives in the private `optiplex331/Halligalli-infra` repository; this product repo keeps Release PRs, GHCR Release Images, frontend/backend deployment, and smoke checks.
+Azure Production is the visible manual stage for the active Azure Production target without implying production cutover. Infrastructure must be applied separately before product deployment; product delivery uses Release PRs, GHCR Release Images, frontend/backend deployment, and smoke checks.
 
 - Release branch: `master`
 - Versioning: Release Please creates human-merged release PRs and `vX.Y.Z` tags
 - Release image: release tags build, scan, and publish immutable GHCR backend images
-- Azure infrastructure: `optiplex331/Halligalli-infra`
+- Azure infrastructure: applied separately before product deployment
 - Azure deployment: `.github/workflows/azure-production.yml`
 - Health check: `/health`
 - Readiness check: `/readyz`
+
+The first Azure Production activation has been verified. Current infrastructure state is cost-aware by default: the backend Container App is scaled down to zero minimum replicas after demos, and should be scaled up and smoke-tested before a live demonstration.
 
 Operations docs:
 
