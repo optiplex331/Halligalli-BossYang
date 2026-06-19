@@ -1,0 +1,90 @@
+# Halligalli standalone runtime chart defaults.
+# Real Azure Kubernetes Desired State belongs outside this public product repo.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/optiplex331/halligalli-bossyang
+  tag: "0.0.0-placeholder"
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+containerPort: 3001
+
+releaseIdentity:
+  # Defaults to image.tag when empty. This value is exposed through /health as APP_VERSION.
+  version: ""
+  # Set to the release commit SHA in real desired state. This value is exposed through /health.
+  commit: "unknown"
+
+config:
+  # Leave empty for same-origin socket.io. Set only for explicit non-secret CORS allow-lists.
+  allowedOrigins: ""
+  # Non-secret runtime environment only. Do not put secrets or build-time VITE_* values here.
+  extraEnv: {}
+
+# Reference externally managed Kubernetes Secrets when needed. The chart does not render Secrets.
+secretEnvFrom: []
+
+service:
+  type: ClusterIP
+  port: 80
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts: []
+  tls: []
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+probes:
+  liveness:
+    path: /health
+    initialDelaySeconds: 10
+    periodSeconds: 20
+    timeoutSeconds: 2
+    failureThreshold: 3
+  readiness:
+    path: /readyz
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+terminationGracePeriodSeconds: 30

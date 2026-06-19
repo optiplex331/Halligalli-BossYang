@@ -7,7 +7,7 @@ Azure Production application deployment is operated through a protected manual w
 - `.github/workflows/azure-production.yml` for frontend deploy and backend smoke checks
 - `scripts/deploy-azure-production-backend.sh` for local backend rollout through Azure CLI
 
-Azure Production infrastructure source of truth lives in the private `optiplex331/Halligalli-infra` repository. Product deployment values copied from that repo's infrastructure outputs belong in this repo's protected `azure-production` GitHub Environment.
+Product deployment values copied from infrastructure outputs belong in this repo's protected `azure-production` GitHub Environment.
 
 ## Pull Request Gates
 
@@ -37,7 +37,7 @@ Utility tests run unconditionally in the `Product checks` gate and do not requir
 
 The Azure Production application deployment workflow only runs through `workflow_dispatch`; it is not attached to push, PR, or Release Tag events. The visible workflow and environment names use `azure-production`, but this still does not mean Halligalli has completed a production cutover.
 
-Terraform `plan`, `apply`, `scale-down`, and `destroy` belong in `optiplex331/Halligalli-infra`.
+Terraform `plan`, `apply`, `scale-down`, and `destroy` are separate from product deployment.
 
 The deployment workflow supports:
 
@@ -63,6 +63,8 @@ Release Please uses `HALLIGALLI_RELEASE_BOT_TOKEN` so the generated PR can trigg
 ## Release Image
 
 The `Container` workflow builds and scans the default Dockerfile target for product/runtime PRs, `master` integration pushes, and release tags. The default target is the Azure Container Apps backend runtime image: compiled Node.js server, shared runtime modules, production dependencies, `/readyz`, `/health`, and socket.io. It does not include Vite frontend assets because Azure Production publishes those separately to Static Web Apps.
+
+Azure Kubernetes Production will use the standalone image shape as the future default only after explicit Phase B migration confirmation. The required workflow and release identity changes are tracked in [Standalone Release Image Migration Plan](standalone-release-image-migration.md); current release workflow defaults stay backend-only until then.
 
 Pull request runs do not publish images.
 

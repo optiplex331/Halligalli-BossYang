@@ -14,7 +14,7 @@ Create a room, ready up with friends, flip around a server-authoritative table, 
 [![socket.io](https://img.shields.io/badge/socket.io-4-111?style=flat-square)](https://socket.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-f0c44a?style=flat-square)](LICENSE)
 
-**Live demo**: `https://play.halligalli.games` after external Azure/HCP Terraform/Name.com activation.
+**Live demo**: `https://play.halligalli.games` when Azure Production is scaled up for demos.
 
 ![Halligalli Arena showcase](docs/assets/readme-showcase.svg)
 
@@ -66,6 +66,14 @@ For a local all-in-one image that serves the built frontend and socket.io from o
 docker build --target standalone -t halligalli-arena:standalone .
 docker run --rm -p 3001:3001 halligalli-arena:standalone
 ```
+
+Kubernetes package validation:
+
+```bash
+pnpm run validate:kubernetes
+```
+
+This is a Phase A local/static check for the public Helm Chart. It requires Helm on `PATH`, renders the chart with safe example values, and does not create Azure resources or deploy to a cluster.
 
 ## Rules Model
 
@@ -126,20 +134,27 @@ See [SECURITY.md](SECURITY.md) for reporting and safety boundaries.
 
 ## Deployment
 
-Azure Production is the visible manual stage for the active Azure Production target without implying production cutover. Infrastructure source of truth lives in the private `optiplex331/Halligalli-infra` repository; this product repo keeps Release PRs, GHCR Release Images, frontend/backend deployment, and smoke checks.
+Azure Production is the visible manual stage for the active Azure Production target without implying production cutover. Infrastructure must be applied separately before product deployment; product delivery uses Release PRs, GHCR Release Images, frontend/backend deployment, and smoke checks.
+
+Container Apps-backed Azure Production remains the active cloud scaffold path until explicit Phase B Azure Kubernetes Production migration confirmation. The Kubernetes assets in this repo are Phase A packaging and local/static validation only: they do not create Azure resources, deploy to a cluster, move DNS, or switch the default Release Image.
 
 - Release branch: `master`
 - Versioning: Release Please creates human-merged release PRs and `vX.Y.Z` tags
 - Release image: release tags build, scan, and publish immutable GHCR backend images
-- Azure infrastructure: `optiplex331/Halligalli-infra`
+- Azure infrastructure: applied separately before product deployment
 - Azure deployment: `.github/workflows/azure-production.yml`
+- Kubernetes package: `charts/halligalli/` with safe examples under `examples/kubernetes/`; real Azure Kubernetes Desired State lives in the infrastructure repo
 - Health check: `/health`
 - Readiness check: `/readyz`
+
+The first Azure Production activation has been verified. Current infrastructure state is cost-aware by default: the backend Container App is scaled down to zero minimum replicas after demos, and should be scaled up and smoke-tested before a live demonstration.
 
 Operations docs:
 
 - [CI/CD](docs/operations/ci-cd.md)
 - [Azure Production](docs/operations/azure-production.md)
+- [Kubernetes](docs/operations/kubernetes.md)
+- [Standalone Release Image Migration Plan](docs/operations/standalone-release-image-migration.md)
 - [Rollback](docs/operations/rollback.md)
 
 ## Contributing

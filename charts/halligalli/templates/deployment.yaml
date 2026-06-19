@@ -1,0 +1,95 @@
+{{- include "halligalli.validateValues" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "halligalli.fullname" . }}
+  labels:
+    {{- include "halligalli.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "halligalli.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "halligalli.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      containers:
+        - name: halligalli
+          image: {{ include "halligalli.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.containerPort }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: {{ .Values.containerPort | quote }}
+            - name: APP_VERSION
+              value: {{ include "halligalli.releaseVersion" . | quote }}
+            - name: COMMIT_SHA
+              value: {{ include "halligalli.releaseCommit" . | quote }}
+            {{- with .Values.config.allowedOrigins }}
+            - name: HALLIGALLI_ALLOWED_ORIGINS
+              value: {{ . | quote }}
+            {{- end }}
+            {{- range $name, $value := .Values.config.extraEnv }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- with .Values.secretEnvFrom }}
+          envFrom:
+            {{- range . }}
+            - secretRef:
+                name: {{ required "secretEnvFrom entries require name" .name | quote }}
+                optional: {{ default false .optional }}
+            {{- end }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.liveness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readiness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

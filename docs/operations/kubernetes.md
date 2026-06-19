@@ -1,0 +1,175 @@
+# Kubernetes
+
+Halligalli's public Kubernetes package is the [Halligalli Helm Chart](../../charts/halligalli/README.md). It deploys the standalone runtime shape: one Node.js process serves static frontend assets, `/readyz`, `/health`, and same-origin socket.io.
+
+This document is for Phase A local/static review of the public application package. Real Azure Kubernetes Desired State belongs in the Azure Production Infrastructure Repo, not in this product repository. Container Apps-backed Azure Production remains the active cloud scaffold path until explicit Phase B migration confirmation.
+
+## Safety Boundary
+
+Normal chart rendering does not create Azure resources, update DNS, publish images, or deploy to a cluster.
+
+Phase A also does not switch the default GHCR Release Image target, bootstrap Argo CD, or change `play.halligalli.games`/`api.halligalli.games` routing. Those are Phase B activation decisions.
+
+Keep these surfaces separate:
+
+| Surface | Owner | Contents |
+|---|---|---|
+| Public chart | Child Repo | Templates, safe defaults, schema, examples, and public documentation. |
+| Safe examples | Child Repo | Placeholder hosts, placeholder digests, no real environment values. |
+| Azure Kubernetes Desired State | Azure Production Infrastructure Repo | Real namespace binding, Argo CD Application, production values, image digest, ingress host, and TLS issuer. |
+| Cloud resources | Azure Production Infrastructure Repo | Terraform-managed AKS and related Azure infrastructure. |
+
+Do not commit Kubernetes Secrets, cloud credentials, real production values, rendered live manifests, kubeconfigs, or local `.env` files.
+
+## Standalone Runtime
+
+The Kubernetes path uses the Dockerfile `standalone` target. That target includes both the Vite build output and the Node.js/socket.io server in one image.
+
+```bash
+docker build --target standalone -t halligalli-arena:standalone .
+docker run --rm -p 3001:3001 halligalli-arena:standalone
+curl --fail http://localhost:3001/readyz
+curl --fail http://localhost:3001/health
+```
+
+For Azure Kubernetes Production activation, the deployed image should be a digest-pinned GHCR Release Image built from the standalone target. Phase A does not change the current default Azure Production backend image path.
+
+The Phase B plan for switching the default Release Image from backend-only to standalone is documented in [Standalone Release Image Migration Plan](standalone-release-image-migration.md). Do not change release workflow defaults or make the canonical `X.Y.Z` tag mean standalone until that migration is explicitly confirmed.
+
+## Same-Origin Traffic
+
+The Kubernetes runtime should serve one public origin:
+
+```text
+https://play.halligalli.games
+```
+
+The same origin handles:
+
+- frontend assets
+- `/readyz`
+- `/health`
+- `/socket.io`
+
+Do not set `VITE_HALLIGALLI_BACKEND_URL` for this chart. The frontend should use same-origin socket.io. The old `api.halligalli.games` backend entry remains part of the Container Apps-backed Azure Production path until a separate migration is explicitly confirmed.
+
+## Image And Release Identity
+
+Use an immutable image reference for real desired state:
+
+```yaml
+image:
+  repository: ghcr.io/optiplex331/halligalli-bossyang
+  tag: "0.4.0"
+  digest: "sha256:<release-image-digest>"
+
+releaseIdentity:
+  version: "0.4.0"
+  commit: "<release-commit-sha>"
+```
+
+When `image.digest` is set, the chart renders `ghcr.io/...@sha256:...`. The tag remains as human-readable release identity for reviews, labels, and `/health`.
+
+Never deploy `latest`.
+
+## Config And Secret Boundary
+
+The runtime has no required application secret for the standalone path.
+
+Use chart values this way:
+
+| Value | Use |
+|---|---|
+| `config.allowedOrigins` | Optional non-secret CORS allow-list. Keep empty for same-origin operation. |
+| `config.extraEnv` | Non-secret runtime environment variables only. |
+| `secretEnvFrom` | References to externally managed Kubernetes Secrets, if a future runtime setting requires one. |
+
+The chart intentionally does not render `Secret` objects. Real values for Azure Kubernetes Production belong in the infrastructure repository's GitOps desired state, not in public examples.
+
+## Render Locally
+
+Prerequisites for a clean Child Repo checkout:
+
+- Node.js 24 and pnpm 11.
+- Helm 3 or 4 available on `PATH`.
+- Local dependencies installed with `pnpm install`.
+
+```bash
+helm lint charts/halligalli
+helm template halligalli charts/halligalli
+helm template halligalli charts/halligalli \
+  -f examples/kubernetes/standalone-values.yaml
+```
+
+The default render emits a `Deployment` and `Service`. The example values also render an `Ingress` with placeholder host and TLS values.
+
+## Validate Locally
+
+Phase A validation is local/static only. It does not create Azure resources, read Azure credentials, use a kubeconfig, create a cluster, update DNS, publish images, or deploy manifests.
+
+```bash
+pnpm run validate:kubernetes
+```
+
+The command runs:
+
+- `helm lint charts/halligalli`
+- `helm lint charts/halligalli -f examples/kubernetes/standalone-values.yaml`
+- `helm template halligalli charts/halligalli -f examples/kubernetes/standalone-values.yaml`
+- rendered manifest contract checks
+
+The rendered contract check verifies that the safe example values produce the intended standalone package shape:
+
+- exactly one `Deployment`
+- exactly one replica
+- exactly one `Service`
+- no rendered Kubernetes `Secret`
+- optional `Ingress` routes `/` with `Prefix` to the rendered Service for same-origin traffic
+- digest-pinned image reference support through `repository@sha256:<digest>`
+- `/health` liveness probe and `/readyz` readiness probe
+- resource requests and limits
+- `PORT`, `APP_VERSION`, and `COMMIT_SHA` environment variables
+- no `VITE_HALLIGALLI_BACKEND_URL`
+
+## Expected Rendered Contract
+
+The rendered workload should have:
+
+- exactly one `Deployment`
+- exactly one replica
+- one `Service`
+- optional `Ingress`
+- `/readyz` readiness probe
+- `/health` liveness probe
+- configurable resource requests and limits
+- `PORT`, `APP_VERSION`, and `COMMIT_SHA` environment variables
+- no `VITE_HALLIGALLI_BACKEND_URL`
+- no rendered Kubernetes `Secret`
+
+## Multiplayer Scaling Boundary
+
+Multi-replica multiplayer is intentionally deferred. The Multiplayer Authority is still in-process: `server/GameEngine.ts`, room state, timers, and socket.io event ownership live inside one Node.js process. Scaling the Deployment above one replica would split that authority across pods and make room state and socket routing inconsistent.
+
+Keep `replicaCount: 1` until Multiplayer Authority state is externalized or socket.io routing is redesigned and tested.
+
+## Rollback Shape
+
+Kubernetes rollback should be a GitOps desired-state change to a previous digest-pinned image:
+
+```yaml
+image:
+  tag: "0.4.0"
+  digest: "sha256:<previous-good-digest>"
+releaseIdentity:
+  version: "0.4.0"
+  commit: "<previous-good-commit>"
+```
+
+After Argo CD syncs that change, verify:
+
+```bash
+curl --fail https://play.halligalli.games/readyz
+curl --fail https://play.halligalli.games/health
+```
+
+`/health` should report the expected `version` and `commit`.

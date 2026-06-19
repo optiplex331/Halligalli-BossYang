@@ -1,0 +1,30 @@
+# Safe rendering example for the public Halligalli Helm Chart.
+# Do not use this file as real Azure Kubernetes Desired State.
+
+image:
+  repository: ghcr.io/optiplex331/halligalli-bossyang
+  tag: "0.4.0"
+  digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+releaseIdentity:
+  version: "0.4.0"
+  commit: "0000000000000000000000000000000000000000"
+
+config:
+  allowedOrigins: ""
+  extraEnv: {}
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-placeholder
+  hosts:
+    - host: play.example.test
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: halligalli-tls-placeholder
+      hosts:
+        - play.example.test

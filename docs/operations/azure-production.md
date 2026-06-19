@@ -2,7 +2,9 @@
 
 Azure Production is the visible manual deployment stage for Halligalli portfolio/demo operation. It is production-shaped but non-production, and it does not imply production cutover.
 
-Infrastructure source of truth now lives in the private `optiplex331/Halligalli-infra` repository. This product repo owns Release PRs, GHCR Release Images, frontend/backend application deployment, and smoke checks.
+Azure Production infrastructure must be applied before product deployment. Product deployment uses Release PRs, GHCR Release Images, frontend/backend application deployment, and smoke checks.
+
+This document describes the current Container Apps-backed Azure Production path. It remains active until explicit Phase B Azure Kubernetes Production migration confirmation. The Phase A Kubernetes chart and validation docs do not create Azure resources, move DNS, change the default Release Image, or retire this path.
 
 ## Safety Boundary
 
@@ -10,10 +12,10 @@ Normal pushes and pull requests do not create Azure resources, update Container 
 
 Azure-mutating application deployment requires explicit human action:
 
-1. Ensure Azure Production infrastructure has been applied from `optiplex331/Halligalli-infra`.
+1. Ensure Azure Production infrastructure has been applied.
 2. Copy required frontend and smoke outputs into this repo's protected `azure-production` GitHub Environment.
 3. Run `.github/workflows/azure-production.yml` with `workflow_dispatch` for frontend publication or smoke checks.
-4. Run backend rollout locally with `scripts/deploy-azure-production-backend.sh vX.Y.Z` after `az login`.
+4. Run backend rollout locally with `scripts/deploy-azure-production-backend.sh vX.Y.Z` after `az login` and GHCR authentication.
 5. For frontend deployment, type `AZURE_PRODUCTION_APPLY` as `confirm_cost`.
 
 Do not commit Azure credentials, Static Web Apps deployment tokens, GitHub secrets, rendered Container Apps configs, or local `.env` files.
@@ -22,18 +24,35 @@ Do not commit Azure credentials, Static Web Apps deployment tokens, GitHub secre
 
 | Concern | Reference |
 |---|---|
-| Infrastructure repo | `optiplex331/Halligalli-infra` |
+| Infrastructure | Applied separately before product deployment |
 | Product deployment workflow | `.github/workflows/azure-production.yml` for frontend and smoke checks |
 | Backend deployment script | `scripts/deploy-azure-production-backend.sh` |
 | Frontend | Azure Static Web Apps Free at `https://play.halligalli.games` |
-| Backend | Azure Container Apps Consumption at `https://api.halligalli.games` |
-| Image registry | GHCR backend Release Images, resolved to digests during backend deployment |
+| Backend | Azure Container Apps Consumption at `https://api.halligalli.games`; current app name `halligalli-azprod-backend` |
+| Image registry | GHCR backend Release Images, resolved to digests during backend deployment; Container Apps needs a GHCR pull credential |
 | DNS | Name.com records; Azure DNS migration is out of scope |
 | Runtime parameters | Protected `azure-production` GitHub Environment plus local Azure CLI login for backend rollout |
 
 The frontend build uses `VITE_HALLIGALLI_BACKEND_URL=https://api.halligalli.games`. The backend Container App uses `HALLIGALLI_ALLOWED_ORIGINS=https://play.halligalli.games`.
 
 `/readyz` is the Readiness Surface for traffic checks. `/health` reports Release Identity for smoke checks and rollback verification.
+
+The future AKS path is different: it uses a same-origin standalone runtime at `https://play.halligalli.games` and does not set `VITE_HALLIGALLI_BACKEND_URL`. See [Kubernetes](kubernetes.md) and [Standalone Release Image Migration Plan](standalone-release-image-migration.md) for the inactive Phase A/Phase B boundary.
+
+## Current Runtime Posture
+
+The first external activation has been verified. Current HCP Terraform remote state has:
+
+| Field | Current value |
+|---|---|
+| Frontend URL | `https://play.halligalli.games` |
+| Backend URL | `https://api.halligalli.games` |
+| Runtime region | `northeurope` fallback |
+| Resource group location | `westeurope` |
+| Backend replicas | `min=0`, `max=1` |
+| Log retention | `30` days |
+
+Before any future Terraform plan or apply, make sure the infrastructure repo's ignored local operation values match that posture unless you are intentionally changing it. For the current scaled-down environment, `AZURE_PRODUCTION_REGION` should be `northeurope` and `AZURE_PRODUCTION_BACKEND_MIN_REPLICAS` should be `0`.
 
 ## Container Image Contract
 
@@ -65,7 +84,7 @@ pnpm run typecheck
 pnpm run build
 ```
 
-Terraform validation belongs in `optiplex331/Halligalli-infra`.
+Terraform validation belongs with the Azure Production infrastructure source.
 
 ## Deployment Operation
 
@@ -77,11 +96,12 @@ Terraform validation belongs in `optiplex331/Halligalli-infra`.
 | `deploy-frontend` | Builds only the Vite frontend with the secure Backend Entry and publishes `dist/` to Static Web Apps. Requires `AZURE_PRODUCTION_APPLY`. |
 | `smoke-backend` | Calls `https://api.halligalli.games/readyz` and `/health` without changing resources. |
 
-Backend deployment is local because the current Azure for Students school tenant blocks GitHub OIDC bootstrap. It accepts only `vX.Y.Z` Release Tags and uses the corresponding GHCR backend Release Image tag, such as `ghcr.io/<owner>/<repo>:0.4.0`. Before updating Container Apps, the script configures `ghcr.io` as the registry server, resolves the tag to a digest, and deploys `ghcr.io/<owner>/<repo>@sha256:<digest>`.
+Backend deployment is local because the current Azure for Students school tenant blocks GitHub OIDC bootstrap. It accepts only `vX.Y.Z` Release Tags and uses the corresponding GHCR backend Release Image tag, such as `ghcr.io/<owner>/<repo>:0.4.0`. Before updating Container Apps, the script configures `ghcr.io` with a pull credential, resolves the tag to a digest, and deploys `ghcr.io/<owner>/<repo>@sha256:<digest>`.
 
 ```bash
 az login
 az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+gh auth status # or set AZURE_PRODUCTION_GHCR_TOKEN with read:packages scope
 scripts/deploy-azure-production-backend.sh v0.4.0
 ```
 
@@ -89,7 +109,7 @@ The deployed `/health` version remains the clean Release Identity, such as `0.4.
 
 ## GitHub Environment Values
 
-Store real deployment values in this repo's protected `azure-production` GitHub Environment. Infrastructure values and Terraform state credentials belong in `optiplex331/Halligalli-infra`.
+Store real deployment values in this repo's protected `azure-production` GitHub Environment. Infrastructure values and Terraform state credentials must stay outside the product repo.
 
 ### Secrets
 
@@ -112,6 +132,8 @@ The backend deploy script has safe defaults for the current scaffold names, but 
 |---|---|
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription selected before local backend rollout. |
 | `AZURE_PRODUCTION_GITHUB_REPOSITORY` | GHCR repository owner/name, default `optiplex331/Halligalli-BossYang`. |
+| `AZURE_PRODUCTION_GHCR_USERNAME` | Optional GHCR username; defaults to the repository owner. |
+| `AZURE_PRODUCTION_GHCR_TOKEN` | Optional GHCR token with `read:packages`; falls back to `GHCR_TOKEN`, `GITHUB_TOKEN`, or `gh auth token`. |
 | `AZURE_PRODUCTION_RESOURCE_GROUP_NAME` | Resource group containing the Container App. |
 | `AZURE_PRODUCTION_CONTAINER_APP_NAME` | Container App backend name. |
 | `AZURE_PRODUCTION_FRONTEND_URL` | Allowed browser origin, default `https://play.halligalli.games`. |
@@ -121,7 +143,15 @@ The backend deploy script has safe defaults for the current scaffold names, but 
 
 `halligalli.games` remains on Name.com nameservers. Do not migrate DNS authority to Azure DNS for this Azure Production stage.
 
-Infrastructure outputs and Azure portal values from `optiplex331/Halligalli-infra` provide the current Static Web Apps default hostname and Container Apps ingress hostname. Name.com verification and routing records remain manual.
+Infrastructure outputs and Azure portal values provide the current Static Web Apps default hostname, Container Apps ingress hostname, and Container Apps domain verification ID. Name.com verification and routing records remain manual.
+
+Current activation records are:
+
+| Type | Name | Value |
+|---|---|---|
+| `CNAME` | `play` | `thankful-mushroom-06afe9003.7.azurestaticapps.net` |
+| `CNAME` | `api` | `halligalli-azprod-backend.livelysand-8b8a433d.northeurope.azurecontainerapps.io` |
+| `TXT` | `asuid.api` | Container Apps custom-domain verification ID from Azure. |
 
 Destroying Azure resources does not remove Name.com records; clean them up manually when tearing Azure Production down.
 
@@ -129,13 +159,14 @@ Destroying Azure resources does not remove Name.com records; clean them up manua
 
 Use this order when activating Azure Production:
 
-1. Apply infrastructure from `optiplex331/Halligalli-infra`.
+1. Apply infrastructure. Use `AZURE_PRODUCTION_REGION=northeurope` only when `westeurope` Container Apps capacity blocks activation.
 2. Copy required frontend and smoke values into this repo's `azure-production` GitHub Environment.
-3. Complete Container Apps custom-domain/certificate activation for `api.halligalli.games`, then add required custom-domain verification and routing records in Name.com.
-4. Run `scripts/deploy-azure-production-backend.sh vX.Y.Z` locally after the GHCR backend Release Image for that tag exists and is pullable by Azure Container Apps.
-5. Run `operation=deploy-frontend` with `confirm_cost=AZURE_PRODUCTION_APPLY`.
-6. Run `operation=smoke-backend`, then verify the public frontend, `/readyz`, `/health`, and socket.io multiplayer path over WSS.
+3. Add required Name.com CNAME/TXT records from Terraform outputs and Azure Container Apps custom-domain verification.
+4. Complete Container Apps custom-domain/certificate activation for `api.halligalli.games`.
+5. Run `scripts/deploy-azure-production-backend.sh vX.Y.Z` locally after the GHCR backend Release Image for that tag exists and a GHCR pull credential is available.
+6. Run `operation=deploy-frontend` with `confirm_cost=AZURE_PRODUCTION_APPLY`.
+7. Run `operation=smoke-backend`, then verify the public frontend, `/readyz`, `/health`, and socket.io multiplayer path over WSS.
 
 ## Cost And Lifecycle
 
-Use the infrastructure repo's `scale-down` operation when Azure Production does not need to serve demos. Use `destroy` only when intentionally tearing down Azure-managed resources.
+Use the infrastructure `scale-down` operation when Azure Production does not need to serve demos. It keeps Static Web Apps, DNS, Log Analytics, and custom-domain bindings, while setting the backend to a zero-minimum-replica posture. Use `destroy` only when intentionally tearing down Azure-managed resources.
