@@ -1,16 +1,16 @@
 # Azure Production
 
-Azure Production is the visible manual deployment stage for Halligalli portfolio/demo operation. It is production-shaped but non-production, and it does not imply production cutover.
+Azure Production is the historical Container Apps-backed deployment stage for Halligalli portfolio/demo operation. After the AKS cutover and historical destroy operation, its Terraform-managed resources are gone and it is not an active fallback.
 
-Azure Production infrastructure must be applied before product deployment. Product deployment uses Release PRs, GHCR Release Images, frontend/backend application deployment, and smoke checks.
+The active production path is Azure Kubernetes Production. This document remains for historical inspection of the old Static Web Apps plus Container Apps shape.
 
-This document describes the current Container Apps-backed Azure Production path. It remains active until explicit Phase B Azure Kubernetes Production migration confirmation. The Phase A Kubernetes chart and validation docs do not create Azure resources, move DNS, change the default Release Image, or retire this path.
+Do not use this path for new production deployment. Use [Kubernetes](kubernetes.md) and the infrastructure repo's Azure Kubernetes Production runbook for active production work.
 
 ## Safety Boundary
 
 Normal pushes and pull requests do not create Azure resources, update Container Apps, publish Static Web Apps assets, or change DNS.
 
-Azure-mutating application deployment requires explicit human action:
+Historical Azure-mutating application deployment required explicit human action:
 
 1. Ensure Azure Production infrastructure has been applied.
 2. Copy required frontend and smoke outputs into this repo's protected `azure-production` GitHub Environment.
@@ -24,12 +24,12 @@ Do not commit Azure credentials, Static Web Apps deployment tokens, GitHub secre
 
 | Concern | Reference |
 |---|---|
-| Infrastructure | Applied separately before product deployment |
-| Product deployment workflow | `.github/workflows/azure-production.yml` for frontend and smoke checks |
-| Backend deployment script | `scripts/deploy-azure-production-backend.sh` |
-| Frontend | Azure Static Web Apps Free at `https://play.halligalli.games` |
-| Backend | Azure Container Apps Consumption at `https://api.halligalli.games`; current app name `halligalli-azprod-backend` |
-| Image registry | GHCR backend Release Images, resolved to digests during backend deployment; Container Apps needs a GHCR pull credential |
+| Infrastructure | Historical Container Apps-backed Terraform root in the infrastructure repo |
+| Product deployment workflow | Historical `.github/workflows/azure-production.yml` for frontend and smoke checks |
+| Backend deployment script | Historical `scripts/deploy-azure-production-backend.sh` |
+| Frontend | Historical Azure Static Web Apps Free at `https://play.halligalli.games` |
+| Backend | Historical Azure Container Apps Consumption at `https://api.halligalli.games`; app name was `halligalli-azprod-backend` |
+| Image registry | Historical GHCR backend Release Images, resolved to digests during backend deployment; Container Apps needs a GHCR pull credential |
 | DNS | Name.com records; Azure DNS migration is out of scope |
 | Runtime parameters | Protected `azure-production` GitHub Environment plus local Azure CLI login for backend rollout |
 
@@ -37,13 +37,13 @@ The frontend build uses `VITE_HALLIGALLI_BACKEND_URL=https://api.halligalli.game
 
 `/readyz` is the Readiness Surface for traffic checks. `/health` reports Release Identity for smoke checks and rollback verification.
 
-The future AKS path is different: it uses a same-origin standalone runtime at `https://play.halligalli.games` and does not set `VITE_HALLIGALLI_BACKEND_URL`. See [Kubernetes](kubernetes.md) and [Standalone Release Image Migration Plan](standalone-release-image-migration.md) for the inactive Phase A/Phase B boundary.
+The active AKS path is different: it uses a same-origin standalone runtime at `https://play.halligalli.games` and does not set `VITE_HALLIGALLI_BACKEND_URL`. See [Kubernetes](kubernetes.md) and [Standalone Release Image Migration Plan](standalone-release-image-migration.md).
 
-## Current Runtime Posture
+## Historical Runtime Posture
 
-The first external activation has been verified. Current HCP Terraform remote state has:
+The first external activation was verified before the AKS cutover. The later historical destroy operation removed the Terraform-managed Azure Production resources.
 
-| Field | Current value |
+| Field | Last known historical value |
 |---|---|
 | Frontend URL | `https://play.halligalli.games` |
 | Backend URL | `https://api.halligalli.games` |
@@ -52,20 +52,20 @@ The first external activation has been verified. Current HCP Terraform remote st
 | Backend replicas | `min=0`, `max=1` |
 | Log retention | `30` days |
 
-Before any future Terraform plan or apply, make sure the infrastructure repo's ignored local operation values match that posture unless you are intentionally changing it. For the current scaled-down environment, `AZURE_PRODUCTION_REGION` should be `northeurope` and `AZURE_PRODUCTION_BACKEND_MIN_REPLICAS` should be `0`.
+Before any future Terraform plan or apply for teardown or inspection, make sure the infrastructure repo's ignored local operation values match that posture unless you are intentionally changing it. For the last known Container Apps posture, `AZURE_PRODUCTION_REGION` should be `northeurope` and `AZURE_PRODUCTION_BACKEND_MIN_REPLICAS` should be `0`.
 
 ## Container Image Contract
 
-The default Dockerfile target is the Azure Container Apps backend image. It contains:
+The historical Azure Container Apps backend image contains:
 
 - the Node.js 24 runtime server under `dist/server/`
 - shared runtime modules under `dist/src/`
 - production `node_modules`
 - `/readyz`, `/health`, and `/socket.io`
 
-It intentionally does not copy Vite `dist/index.html` or `dist/assets/` into the default image. Azure Production publishes frontend assets through `deploy-frontend` to Static Web Apps; the backend image stays a socket.io backend runtime image.
+It intentionally did not copy Vite `dist/index.html` or `dist/assets/`. Azure Production published frontend assets through `deploy-frontend` to Static Web Apps; the backend image stayed a socket.io backend runtime image.
 
-Use the explicit `standalone` Docker target only for local all-in-one container checks where the same Node process should serve static frontend assets and socket.io:
+Active AKS production uses the `standalone` Docker target where the same Node process serves static frontend assets and socket.io:
 
 ```bash
 docker build --target standalone -t halligalli:standalone .
@@ -88,7 +88,7 @@ Terraform validation belongs with the Azure Production infrastructure source.
 
 ## Deployment Operation
 
-`Azure Production` supports:
+Historical `Azure Production` supports:
 
 | Operation | Behavior |
 |---|---|
@@ -96,7 +96,7 @@ Terraform validation belongs with the Azure Production infrastructure source.
 | `deploy-frontend` | Builds only the Vite frontend with the secure Backend Entry and publishes `dist/` to Static Web Apps. Requires `AZURE_PRODUCTION_APPLY`. |
 | `smoke-backend` | Calls `https://api.halligalli.games/readyz` and `/health` without changing resources. |
 
-Backend deployment is local because the current Azure for Students school tenant blocks GitHub OIDC bootstrap. It accepts only `vX.Y.Z` Release Tags and uses the corresponding GHCR backend Release Image tag, such as `ghcr.io/<owner>/<repo>:0.4.0`. Before updating Container Apps, the script configures `ghcr.io` with a pull credential, resolves the tag to a digest, and deploys `ghcr.io/<owner>/<repo>@sha256:<digest>`.
+Backend deployment was local because the current Azure for Students school tenant blocks GitHub OIDC bootstrap. It accepted only `vX.Y.Z` Release Tags and used the corresponding GHCR backend Release Image tag, such as `ghcr.io/<owner>/<repo>:0.4.0`. After AKS cutover, canonical `X.Y.Z` tags mean standalone images; do not use this script with post-cutover tags unless a separate legacy backend artifact is introduced.
 
 ```bash
 az login
@@ -143,9 +143,9 @@ The backend deploy script has safe defaults for the current scaffold names, but 
 
 `halligalli.games` remains on Name.com nameservers. Do not migrate DNS authority to Azure DNS for this Azure Production stage.
 
-Infrastructure outputs and Azure portal values provide the current Static Web Apps default hostname, Container Apps ingress hostname, and Container Apps domain verification ID. Name.com verification and routing records remain manual.
+Infrastructure outputs and Azure portal values provided the historical Static Web Apps default hostname, Container Apps ingress hostname, and Container Apps domain verification ID. Name.com verification and routing records remain manual.
 
-Current activation records are:
+Historical activation records retained for DNS cleanup or audit are:
 
 | Type | Name | Value |
 |---|---|---|
@@ -157,7 +157,7 @@ Destroying Azure resources does not remove Name.com records; clean them up manua
 
 ## First Activation
 
-Use this order when activating Azure Production:
+Historical first activation used this order:
 
 1. Apply infrastructure. Use `AZURE_PRODUCTION_REGION=northeurope` only when `westeurope` Container Apps capacity blocks activation.
 2. Copy required frontend and smoke values into this repo's `azure-production` GitHub Environment.
@@ -169,4 +169,4 @@ Use this order when activating Azure Production:
 
 ## Cost And Lifecycle
 
-Use the infrastructure `scale-down` operation when Azure Production does not need to serve demos. It keeps Static Web Apps, DNS, Log Analytics, and custom-domain bindings, while setting the backend to a zero-minimum-replica posture. Use `destroy` only when intentionally tearing down Azure-managed resources.
+The infrastructure `destroy` operation has already removed the historical Azure-managed resources. `scale-down` is historical context for the old demo posture and should not be treated as active fallback production.

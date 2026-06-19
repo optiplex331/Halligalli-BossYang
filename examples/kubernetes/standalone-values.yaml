@@ -10,6 +10,12 @@ releaseIdentity:
   version: "0.4.0"
   commit: "0000000000000000000000000000000000000000"
 
+deploymentStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 0
+    maxUnavailable: 1
+
 config:
   allowedOrigins: ""
   extraEnv: {}

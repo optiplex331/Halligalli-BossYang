@@ -11,6 +11,13 @@ const validRenderedManifests = [
     },
     spec: {
       replicas: 1,
+      strategy: {
+        type: "RollingUpdate",
+        rollingUpdate: {
+          maxSurge: 0,
+          maxUnavailable: 1,
+        },
+      },
       template: {
         spec: {
           containers: [
@@ -121,6 +128,16 @@ describe("validateRenderedManifests", () => {
 
     expect(validateRenderedManifests(manifests)).toContain(
       "expected Ingress to route a / Prefix path to the rendered Service",
+    );
+  });
+
+  it("requires the proof example to roll back without creating an extra pod", () => {
+    const manifests = structuredClone(validRenderedManifests) as Array<Record<string, any>>;
+    const deployment = manifests[0]!;
+    delete deployment.spec.strategy;
+
+    expect(validateRenderedManifests(manifests)).toContain(
+      "expected Deployment strategy to be RollingUpdate with maxSurge 0 and maxUnavailable 1",
     );
   });
 });

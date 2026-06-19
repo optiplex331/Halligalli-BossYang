@@ -9,6 +9,44 @@
       "const": 1,
       "description": "Halligalli Multiplayer Authority is in-process, so the chart is intentionally single-replica."
     },
+    "deploymentStrategy": {
+      "description": "Kubernetes Deployment strategy. The default avoids surge pods so single-node proof clusters can roll back without spare pod capacity.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "const": "Recreate"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "rollingUpdate"],
+          "properties": {
+            "type": {
+              "const": "RollingUpdate"
+            },
+            "rollingUpdate": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["maxSurge", "maxUnavailable"],
+              "properties": {
+                "maxSurge": {
+                  "$ref": "#/definitions/intOrPercent"
+                },
+                "maxUnavailable": {
+                  "$ref": "#/definitions/intOrPercent"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
     "image": {
       "type": "object",
       "additionalProperties": false,
@@ -259,6 +297,7 @@
   },
   "required": [
     "replicaCount",
+    "deploymentStrategy",
     "image",
     "imagePullSecrets",
     "nameOverride",
@@ -281,6 +320,18 @@
     "terminationGracePeriodSeconds"
   ],
   "definitions": {
+    "intOrPercent": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9]+%?$"
+        }
+      ]
+    },
     "httpProbe": {
       "type": "object",
       "additionalProperties": false,

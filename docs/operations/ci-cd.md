@@ -2,7 +2,9 @@
 
 Halligalli uses GitHub Actions as the product delivery control plane. Pull requests and normal pushes validate code, release metadata, delivery control files, and container images, but they do not create Azure resources or deploy application artifacts.
 
-Azure Production application deployment is operated through a protected manual workflow plus a local backend deployment script because the current Azure for Students school tenant blocks GitHub OIDC bootstrap:
+Active production rollout is reviewed through the infrastructure repo's Azure Kubernetes Desired State: Release Tag -> standalone GHCR image -> digest-pinned GitOps values -> Argo CD -> AKS.
+
+The historical Azure Production application deployment path remains as protected manual workflow plumbing plus a local backend deployment script because the Azure for Students school tenant blocked GitHub OIDC bootstrap:
 
 - `.github/workflows/azure-production.yml` for frontend deploy and backend smoke checks
 - `scripts/deploy-azure-production-backend.sh` for local backend rollout through Azure CLI
@@ -26,7 +28,7 @@ Short shell-native workflow orchestration stays in Bash, such as `git`, `docker`
 
 | Change type | Product checks | Container build and scan |
 |---|---|---|
-| Product/runtime PR | Validate release config and Python utility tests, install dependencies, run tests, typecheck, and build on Node.js 24. | Build the Node.js 24 Azure backend image and run Trivy. |
+| Product/runtime PR | Validate release config and Python utility tests, install dependencies, run tests, typecheck, and build on Node.js 24. | Build the Node.js 24 standalone image and run Trivy. |
 | Delivery control PR | Validate release config and utility tests, then run actionlint for GitHub Actions workflows. Skip heavy product work. | Skip image build work. |
 | Release PR | Validate release config and utility tests. Skip heavy product work. | Skip image build work. |
 | Docs or other metadata PR | Validate release config and utility tests. Skip heavy product work. | Skip image build work. |
@@ -35,7 +37,7 @@ Utility tests run unconditionally in the `Product checks` gate and do not requir
 
 ## Azure Production
 
-The Azure Production application deployment workflow only runs through `workflow_dispatch`; it is not attached to push, PR, or Release Tag events. The visible workflow and environment names use `azure-production`, but this still does not mean Halligalli has completed a production cutover.
+The Azure Production application deployment workflow only runs through `workflow_dispatch`; it is not attached to push, PR, or Release Tag events. The visible workflow and environment names use `azure-production`, but this is historical Static Web Apps/Container Apps plumbing and is not the active AKS production deployment path.
 
 Terraform `plan`, `apply`, `scale-down`, and `destroy` are separate from product deployment.
 
@@ -62,9 +64,9 @@ Release Please uses `HALLIGALLI_RELEASE_BOT_TOKEN` so the generated PR can trigg
 
 ## Release Image
 
-The `Container` workflow builds and scans the default Dockerfile target for product/runtime PRs, `master` integration pushes, and release tags. The default target is the Azure Container Apps backend runtime image: compiled Node.js server, shared runtime modules, production dependencies, `/readyz`, `/health`, and socket.io. It does not include Vite frontend assets because Azure Production publishes those separately to Static Web Apps.
+The `Container` workflow builds and scans the Dockerfile `standalone` target for product/runtime PRs, `master` integration pushes, and release tags. The standalone target packages the built Vite frontend, the Node.js 24 server, shared runtime modules, production dependencies, `/readyz`, `/health`, and socket.io in one image for Azure Kubernetes Production.
 
-Azure Kubernetes Production will use the standalone image shape as the future default only after explicit Phase B migration confirmation. The required workflow and release identity changes are tracked in [Standalone Release Image Migration Plan](standalone-release-image-migration.md); current release workflow defaults stay backend-only until then.
+Container Apps backend-only images are historical after the AKS cutover. The canonical `ghcr.io/<owner>/<repo>:X.Y.Z` Release Image now means the standalone AKS image.
 
 Pull request runs do not publish images.
 
@@ -84,7 +86,7 @@ When the trigger is a `vX.Y.Z` tag, the workflow publishes the release image ide
 ghcr.io/<owner>/<repo>:X.Y.Z
 ```
 
-It does not publish `latest`. Azure backend deployment resolves the selected GHCR backend Release Image to a digest and updates Container Apps through the local Azure Production backend deployment script.
+It does not publish `latest`. Azure Kubernetes Desired State should resolve the selected GHCR standalone Release Image to a digest before Argo CD sync. Historical Container Apps backend deployment must not assume post-cutover canonical tags are backend-only.
 
 ## Branch Protection
 
@@ -93,7 +95,7 @@ The protected `master` ruleset should require:
 - `Product checks`
 - `Container build and scan`
 
-Do not add separate required checks for release metadata or Azure deployment. Azure Production frontend publication is manually approved through the protected `azure-production` GitHub Environment and explicit workflow confirmation strings; backend rollout is a local human operation.
+Do not add separate required checks for release metadata or Azure deployment. Active production rollout is reviewed through the infrastructure repo desired-state change, not this product repo PR gate; the historical Azure Production workflow should not become a branch-protection requirement.
 
 ## Dependency Updates
 

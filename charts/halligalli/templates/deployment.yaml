@@ -7,6 +7,8 @@ metadata:
     {{- include "halligalli.labels" . | nindent 4 }}
 spec:
   replicas: 1
+  strategy:
+    {{- toYaml .Values.deploymentStrategy | nindent 4 }}
   selector:
     matchLabels:
       {{- include "halligalli.selectorLabels" . | nindent 6 }}
