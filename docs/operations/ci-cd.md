@@ -62,9 +62,9 @@ Release Please uses `HALLIGALLI_RELEASE_BOT_TOKEN` so the generated PR can trigg
 
 ## Release Image
 
-The `Container` workflow builds and scans the default Dockerfile target for product/runtime PRs, `master` integration pushes, and release tags. The default target is the Azure Container Apps backend runtime image: compiled Node.js server, shared runtime modules, production dependencies, `/readyz`, `/health`, and socket.io. It does not include Vite frontend assets because Azure Production publishes those separately to Static Web Apps.
+The `Container` workflow builds and scans the Dockerfile `standalone` target for product/runtime PRs, `master` integration pushes, and release tags. The standalone target packages the built Vite frontend, the Node.js 24 server, shared runtime modules, production dependencies, `/readyz`, `/health`, and socket.io in one image for Azure Kubernetes Production.
 
-Azure Kubernetes Production will use the standalone image shape as the future default only after explicit Phase B migration confirmation. The required workflow and release identity changes are tracked in [Standalone Release Image Migration Plan](standalone-release-image-migration.md); current release workflow defaults stay backend-only until then.
+Container Apps backend-only images are historical after the AKS cutover. The canonical `ghcr.io/<owner>/<repo>:X.Y.Z` Release Image now means the standalone AKS image.
 
 Pull request runs do not publish images.
 
@@ -84,7 +84,7 @@ When the trigger is a `vX.Y.Z` tag, the workflow publishes the release image ide
 ghcr.io/<owner>/<repo>:X.Y.Z
 ```
 
-It does not publish `latest`. Azure backend deployment resolves the selected GHCR backend Release Image to a digest and updates Container Apps through the local Azure Production backend deployment script.
+It does not publish `latest`. Azure Kubernetes Desired State should resolve the selected GHCR standalone Release Image to a digest before Argo CD sync. Historical Container Apps backend deployment must not assume post-cutover canonical tags are backend-only.
 
 ## Branch Protection
 

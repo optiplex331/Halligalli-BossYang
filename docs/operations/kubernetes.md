@@ -2,13 +2,13 @@
 
 Halligalli's public Kubernetes package is the [Halligalli Helm Chart](../../charts/halligalli/README.md). It deploys the standalone runtime shape: one Node.js process serves static frontend assets, `/readyz`, `/health`, and same-origin socket.io.
 
-This document is for Phase A local/static review of the public application package. Real Azure Kubernetes Desired State belongs in the Azure Production Infrastructure Repo, not in this product repository. Container Apps-backed Azure Production remains the active cloud scaffold path until explicit Phase B migration confirmation.
+This document describes the public application package for Azure Kubernetes Production. Real Azure Kubernetes Desired State belongs in the Azure Production Infrastructure Repo, not in this product repository. Container Apps-backed Azure Production is historical after cutover, and its Terraform-managed resources were destroyed.
 
 ## Safety Boundary
 
 Normal chart rendering does not create Azure resources, update DNS, publish images, or deploy to a cluster.
 
-Phase A also does not switch the default GHCR Release Image target, bootstrap Argo CD, or change `play.halligalli.games`/`api.halligalli.games` routing. Those are Phase B activation decisions.
+Chart rendering still does not switch live DNS, bootstrap Argo CD, or mutate Azure resources. Those remain explicit infrastructure operations.
 
 Keep these surfaces separate:
 
@@ -32,9 +32,9 @@ curl --fail http://localhost:3001/readyz
 curl --fail http://localhost:3001/health
 ```
 
-For Azure Kubernetes Production activation, the deployed image should be a digest-pinned GHCR Release Image built from the standalone target. Phase A does not change the current default Azure Production backend image path.
+For Azure Kubernetes Production, the deployed image should be a digest-pinned GHCR Release Image built from the standalone target.
 
-The Phase B plan for switching the default Release Image from backend-only to standalone is documented in [Standalone Release Image Migration Plan](standalone-release-image-migration.md). Do not change release workflow defaults or make the canonical `X.Y.Z` tag mean standalone until that migration is explicitly confirmed.
+The default Release Image has been switched from backend-only to standalone for AKS cutover. [Standalone Release Image Migration Plan](standalone-release-image-migration.md) remains the decision trail for that switch.
 
 ## Same-Origin Traffic
 
@@ -51,7 +51,7 @@ The same origin handles:
 - `/health`
 - `/socket.io`
 
-Do not set `VITE_HALLIGALLI_BACKEND_URL` for this chart. The frontend should use same-origin socket.io. The old `api.halligalli.games` backend entry remains part of the Container Apps-backed Azure Production path until a separate migration is explicitly confirmed.
+Do not set `VITE_HALLIGALLI_BACKEND_URL` for this chart. The frontend should use same-origin socket.io. The old `api.halligalli.games` backend entry is historical after cutover.
 
 ## Image And Release Identity
 
@@ -105,7 +105,7 @@ The default render emits a `Deployment` and `Service`. The example values also r
 
 ## Validate Locally
 
-Phase A validation is local/static only. It does not create Azure resources, read Azure credentials, use a kubeconfig, create a cluster, update DNS, publish images, or deploy manifests.
+Local validation does not create Azure resources, read Azure credentials, use a kubeconfig, create a cluster, update DNS, publish images, or deploy manifests.
 
 ```bash
 pnpm run validate:kubernetes
@@ -190,9 +190,9 @@ curl --fail https://play.halligalli.games/health
 
 ## DNS And Browser WebSocket Proof
 
-If `play.halligalli.games` still points at the Container Apps-backed Azure Production frontend, AKS proof is incomplete for real public HTTPS and browser WebSocket traffic. Cluster-local or temporary-host checks can prove the pod, Service, Ingress controller, and placeholder host routing, but they do not prove the final browser origin.
+If `play.halligalli.games` still points at the historical Container Apps-backed Azure Production frontend, AKS proof is incomplete for real public HTTPS and browser WebSocket traffic. Cluster-local or temporary-host checks can prove the pod, Service, Ingress controller, and placeholder host routing, but they do not prove the final browser origin.
 
-Before treating Phase B proof as complete, move or temporarily delegate `play.halligalli.games` to the AKS ingress endpoint with a valid TLS certificate, then verify:
+Before treating a live AKS cutover run as complete, move or temporarily delegate `play.halligalli.games` to the AKS ingress endpoint with a valid TLS certificate, then verify:
 
 ```bash
 curl --fail https://play.halligalli.games/readyz

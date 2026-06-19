@@ -134,20 +134,20 @@ See [SECURITY.md](SECURITY.md) for reporting and safety boundaries.
 
 ## Deployment
 
-Azure Production is the visible manual stage for the active Azure Production target without implying production cutover. Infrastructure must be applied separately before product deployment; product delivery uses Release PRs, GHCR Release Images, frontend/backend deployment, and smoke checks.
+Azure Kubernetes Production is the active production story after the AKS cutover decision. It uses the standalone Halligalli runtime, the public Helm Chart, infrastructure-owned Azure Kubernetes Desired State, Argo CD, and same-origin traffic at `play.halligalli.games`.
 
-Container Apps-backed Azure Production remains the active cloud scaffold path until explicit Phase B Azure Kubernetes Production migration confirmation. The Kubernetes assets in this repo are Phase A packaging and local/static validation only: they do not create Azure resources, deploy to a cluster, move DNS, or switch the default Release Image.
+Container Apps-backed Azure Production is historical after cutover; its Terraform-managed resources were destroyed and it is not an active fallback. The Kubernetes assets in this repo are the public application package, while real Azure Kubernetes Desired State and cloud operations live in the infrastructure repo.
 
 - Release branch: `master`
 - Versioning: Release Please creates human-merged release PRs and `vX.Y.Z` tags
-- Release image: release tags build, scan, and publish immutable GHCR backend images
-- Azure infrastructure: applied separately before product deployment
-- Azure deployment: `.github/workflows/azure-production.yml`
+- Release image: release tags build, scan, and publish immutable GHCR standalone images
+- Azure infrastructure: AKS and GitOps desired state are operated from the infrastructure repo
+- Historical Azure deployment: `.github/workflows/azure-production.yml`
 - Kubernetes package: `charts/halligalli/` with safe examples under `examples/kubernetes/`; real Azure Kubernetes Desired State lives in the infrastructure repo
 - Health check: `/health`
 - Readiness check: `/readyz`
 
-The first Azure Production activation has been verified. Current infrastructure state is cost-aware by default: the backend Container App is scaled down to zero minimum replicas after demos, and should be scaled up and smoke-tested before a live demonstration.
+The first Container Apps-backed Azure Production activation has been verified historically. Current production language should use Azure Kubernetes Production; old Container Apps resources should be inspected or destroyed only through deliberate local infrastructure operations.
 
 Operations docs:
 

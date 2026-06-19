@@ -1,8 +1,8 @@
 # Standalone Release Image Migration Plan
 
-This is the Phase B migration plan for making the standalone Halligalli image the default Release Image. It is not active yet.
+This is the completed migration record for making the standalone Halligalli image the default Release Image.
 
-Azure Kubernetes Production must be explicitly confirmed before this plan is implemented. Until then, the current Azure Container Apps backend image remains the default Release Image and the release workflows must not switch targets.
+Azure Kubernetes Production has been explicitly confirmed as the only active production environment. The current `Container` workflow builds the `standalone` Docker target, and Container Apps backend-only images are historical.
 
 ## Why Standalone Becomes The Future Default
 
@@ -15,7 +15,7 @@ Azure Kubernetes Production deploys Halligalli as one same-origin Kubernetes wor
 
 That shape requires the Dockerfile `standalone` target. The current backend-only image intentionally omits Vite `dist/index.html` and `dist/assets/`, so it cannot be the primary AKS artifact for same-origin frontend plus socket.io delivery.
 
-Making standalone the future default also gives the portfolio story one immutable artifact path:
+Making standalone the default gives the portfolio story one immutable artifact path:
 
 ```text
 Release Tag -> scanned GHCR standalone Release Image -> Azure Kubernetes Desired State -> Argo CD -> AKS
@@ -23,24 +23,24 @@ Release Tag -> scanned GHCR standalone Release Image -> Azure Kubernetes Desired
 
 The human-readable Release Identity stays the same: Release Tags produce `APP_VERSION` without the leading `v`, and `/health` reports that version plus the release commit SHA. The digest, not the tag, remains the deploy target.
 
-## Current Default To Preserve
+## Historical Default
 
-Before Phase B confirmation, keep these contracts unchanged:
+Before AKS cutover, these contracts existed:
 
 - `.github/workflows/container.yml` builds `docker build .` without `--target`; because the final Dockerfile stage is `azure-backend`, this publishes the Azure Container Apps backend image.
 - Release tags publish `ghcr.io/<owner>/<repo>:X.Y.Z` as the backend Release Image.
 - The image is scanned before publication and is never tagged `latest`.
 - `scripts/deploy-azure-production-backend.sh` resolves `ghcr.io/<owner>/<repo>:X.Y.Z` to `ghcr.io/<owner>/<repo>@sha256:<digest>` before updating Container Apps.
-- `.github/workflows/azure-production.yml` continues to publish Static Web Apps frontend assets separately with `VITE_HALLIGALLI_BACKEND_URL=https://api.halligalli.games`.
-- `api.halligalli.games` remains the active Backend Entry for the Container Apps-backed Azure Production path.
+- `.github/workflows/azure-production.yml` published Static Web Apps frontend assets separately with `VITE_HALLIGALLI_BACKEND_URL=https://api.halligalli.games`.
+- `api.halligalli.games` was the Backend Entry for the Container Apps-backed Azure Production path.
 
-This slice does not change those defaults.
+ADR-0016 supersedes those defaults for active production.
 
-## Phase B Workflow Changes
+## Applied Workflow Shape
 
-After explicit Phase B migration confirmation, make the release control-plane changes in one reviewed change set:
+After explicit cutover confirmation, the release control-plane shape is:
 
-1. Change the `Container` workflow build step to build the standalone target for product/runtime PR validation, master integration images, and Release Tag images:
+1. The `Container` workflow build step builds the standalone target for product/runtime PR validation, master integration images, and Release Tag images:
 
    ```bash
    docker build --target standalone ...
@@ -63,22 +63,22 @@ After explicit Phase B migration confirmation, make the release control-plane ch
    - `org.opencontainers.image.version=X.Y.Z`
    - `org.opencontainers.image.revision=<release-commit-sha>`
 
-5. If Container Apps must remain a maintained fallback after the default tag changes, add an explicit legacy backend artifact instead of overloading the canonical tag. Use a clearly separate identity such as `X.Y.Z-azure-backend` or a dedicated legacy workflow output, then update only the legacy deployment script/docs to consume that artifact. Do not let the AKS desired state consume the legacy backend artifact.
+5. Container Apps does not remain a maintained fallback after the default tag changes. If a future decision reintroduces legacy backend deployment, add an explicit legacy backend artifact instead of overloading the canonical tag.
 
-6. Update release utility tests if any output names, artifact suffixes, or publish decisions change. If the canonical tag remains `X.Y.Z`, the existing image identity outputs can continue to mean "the default Release Image" and the documentation should state that the default is now standalone.
+6. Release utility tests need changes only if output names, artifact suffixes, or publish decisions change. Since the canonical tag remains `X.Y.Z`, the existing image identity outputs mean "the default Release Image", now standalone.
 
-7. Update operation docs at the same time:
+7. Operation docs now state:
 
    - `docs/operations/ci-cd.md`: default Release Image target is standalone.
-   - `docs/operations/kubernetes.md`: Phase B is active and desired state consumes the canonical standalone release digest.
-   - `docs/operations/azure-production.md`: Container Apps is legacy or fallback, not the primary delivery path.
+   - `docs/operations/kubernetes.md`: Azure Kubernetes Production is active and desired state consumes the canonical standalone release digest.
+   - `docs/operations/azure-production.md`: Container Apps is historical with destroyed Terraform-managed resources, not fallback.
    - `docs/operations/rollback.md`: AKS rollback is the primary rollback path.
 
 Do not change branch protection check names. `Product checks` and `Container build and scan` should remain stable; only the work performed inside the container check changes.
 
 ## Digest Flow Into Azure Kubernetes Desired State
 
-The future AKS deployment should use this flow:
+The AKS deployment should use this flow:
 
 1. Merge a Release PR.
 2. Release Please creates `vX.Y.Z`.
@@ -110,7 +110,7 @@ The Helm Chart renders `repository@sha256:<digest>` when `image.digest` is set. 
 
 ## Rollback Implications
 
-### Future AKS Path
+### AKS Path
 
 AKS rollback should be a GitOps desired-state change, not a rebuilt image and not a Terraform rollback:
 
@@ -122,29 +122,25 @@ AKS rollback should be a GitOps desired-state change, not a rebuilt image and no
 
 If the failure is ingress, certificate, cluster, or Argo CD infrastructure rather than application runtime, use the Azure Kubernetes Production infrastructure runbooks. Do not treat Terraform `destroy` as application rollback.
 
-### Legacy Container Apps Path
+### Historical Container Apps Path
 
-Before Phase B, legacy rollback remains the current Azure Production rollback:
+Before AKS cutover, legacy rollback used the Azure Production rollback:
 
 1. Pick a known-good backend Release Tag.
 2. Run `scripts/deploy-azure-production-backend.sh vX.Y.Z`.
 3. Redeploy Static Web Apps frontend assets only if frontend assets also need to roll back.
 4. Smoke `https://api.halligalli.games/readyz`, `https://api.halligalli.games/health`, `https://play.halligalli.games`, and socket.io.
 
-After Phase B, decide whether Container Apps is a short-lived fallback or a maintained legacy path:
-
-- Short-lived fallback: document the last known-good backend-only Release Tag and use it only to recover the old split frontend/backend path while AKS is being repaired.
-- Maintained legacy path: publish an explicitly named backend-only legacy artifact and update the backend deployment script to resolve that artifact by digest. The canonical `X.Y.Z` tag should not mean both standalone and backend-only at the same time.
+After ADR-0016, Container Apps is not a short-lived fallback or maintained legacy path. If a future decision reverses that, publish an explicitly named backend-only legacy artifact and update the backend deployment script to resolve that artifact by digest.
 
 The main risk is artifact identity ambiguity. Once `ghcr.io/<owner>/<repo>:X.Y.Z` becomes standalone, any script that assumes the same tag is backend-only must either be retired, constrained to pre-migration tags, or taught to select a separate legacy backend artifact.
 
-## Phase B Readiness Checklist
+## Cutover Checklist
 
-- Explicit human confirmation says Azure Kubernetes Production migration may begin.
+- Explicit human confirmation says Azure Kubernetes Production is the only active production environment.
 - The Halligalli Helm Chart and `pnpm run validate:kubernetes` are green.
 - Azure Kubernetes Desired State exists in the infrastructure repository and uses digest-pinned images.
-- The team chooses whether Container Apps is retired, short-lived fallback, or maintained legacy.
 - The `Container` workflow scans and pushes the standalone target before desired state consumes it.
 - The selected standalone digest, release version, and commit SHA are recorded in the desired-state change.
 - Rollback to a previous standalone digest is tested through Argo CD.
-- If legacy Container Apps remains maintained, its backend-only artifact identity is explicit and separate from the canonical standalone Release Image.
+- Container Apps-backed Azure Production is historical with destroyed Terraform-managed resources unless a future ADR reverses the cutover posture.

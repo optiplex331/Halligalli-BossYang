@@ -61,6 +61,7 @@ jobs:
           set -euo pipefail
 
           docker build \
+            --target standalone \
             --build-arg APP_VERSION="${{ steps.release.outputs.version }}" \
             --build-arg COMMIT_SHA="${{ steps.release.outputs.commit_sha }}" \
             --label "org.opencontainers.image.version=${{ steps.release.outputs.version }}" \
