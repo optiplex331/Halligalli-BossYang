@@ -3,6 +3,13 @@
 
 replicaCount: 1
 
+deploymentStrategy:
+  # Single-replica proof clusters may not have spare pod capacity during rollback.
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 0
+    maxUnavailable: 1
+
 image:
   repository: ghcr.io/optiplex331/halligalli-bossyang
   tag: "0.0.0-placeholder"

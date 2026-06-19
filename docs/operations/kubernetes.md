@@ -122,6 +122,7 @@ The rendered contract check verifies that the safe example values produce the in
 
 - exactly one `Deployment`
 - exactly one replica
+- `RollingUpdate` strategy with `maxSurge: 0` and `maxUnavailable: 1` for single-node rollback proof
 - exactly one `Service`
 - no rendered Kubernetes `Secret`
 - optional `Ingress` routes `/` with `Prefix` to the rendered Service for same-origin traffic
@@ -137,6 +138,7 @@ The rendered workload should have:
 
 - exactly one `Deployment`
 - exactly one replica
+- `RollingUpdate` strategy with `maxSurge: 0` and `maxUnavailable: 1`
 - one `Service`
 - optional `Ingress`
 - `/readyz` readiness probe
@@ -165,6 +167,18 @@ releaseIdentity:
   commit: "<previous-good-commit>"
 ```
 
+The chart defaults to a no-surge single-replica rollout strategy:
+
+```yaml
+deploymentStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 0
+    maxUnavailable: 1
+```
+
+This is intentional for short-lived proof clusters and small Free tier nodes where a rollback cannot temporarily run old and new application pods at the same time. The tradeoff is a short application interruption during rollout or rollback. Use a different `deploymentStrategy` in real Azure Kubernetes Desired State only after confirming the cluster has spare pod capacity and the Multiplayer Authority availability tradeoff is acceptable.
+
 After Argo CD syncs that change, verify:
 
 ```bash
@@ -173,3 +187,16 @@ curl --fail https://play.halligalli.games/health
 ```
 
 `/health` should report the expected `version` and `commit`.
+
+## DNS And Browser WebSocket Proof
+
+If `play.halligalli.games` still points at the Container Apps-backed Azure Production frontend, AKS proof is incomplete for real public HTTPS and browser WebSocket traffic. Cluster-local or temporary-host checks can prove the pod, Service, Ingress controller, and placeholder host routing, but they do not prove the final browser origin.
+
+Before treating Phase B proof as complete, move or temporarily delegate `play.halligalli.games` to the AKS ingress endpoint with a valid TLS certificate, then verify:
+
+```bash
+curl --fail https://play.halligalli.games/readyz
+curl --fail https://play.halligalli.games/health
+```
+
+Also create a browser multiplayer room through `https://play.halligalli.games` and confirm socket.io upgrades over WSS on the same origin. Do not set `VITE_HALLIGALLI_BACKEND_URL` for this proof.

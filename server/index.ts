@@ -8,6 +8,7 @@ import type { ServerOptions, Socket } from "socket.io";
 import { Player, Room, generateCode } from "./Room.js";
 import { GameEngine } from "./GameEngine.js";
 import { createHealthPayload } from "./health.js";
+import { isSupportedPlayerCount } from "../src/game/rules.js";
 import type {
   ClientToServerEvents,
   SeatMap,
@@ -15,6 +16,7 @@ import type {
 } from "../src/multiplayer/protocol.js";
 
 const PORT = process.env.PORT || 3001;
+const DEFAULT_ROOM_SIZE = 4;
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const DIST_DIR =
   process.env.HALLIGALLI_DIST_DIR ||
@@ -42,6 +44,22 @@ function parseAllowedOrigins(value = ""): string[] {
     .split(",")
     .map((origin) => origin.trim())
     .filter((origin) => origin.length > 0);
+}
+
+function normalizeRoomSize(maxPlayers: unknown): number | null {
+  const roomSize = maxPlayers === undefined ? DEFAULT_ROOM_SIZE : maxPlayers;
+  if (typeof roomSize !== "number") {
+    return null;
+  }
+
+  return isSupportedPlayerCount(roomSize) ? roomSize : null;
+}
+
+function emitUnsupportedRoomSize(socket: Socket<ClientToServerEvents, ServerToClientEvents>) {
+  socket.emit("room:error", {
+    message: "This game supports 3 to 6 players",
+    messageZh: "当前仅支持 3 到 6 人游戏",
+  });
 }
 
 export function createHalligalliServer() {
@@ -141,8 +159,14 @@ export function createHalligalliServer() {
     console.log(`Connected: ${socket.id}`);
 
     socket.on("room:create", ({ playerName, maxPlayers, difficulty, duration, language }) => {
+      const roomSize = normalizeRoomSize(maxPlayers);
+      if (roomSize === null) {
+        emitUnsupportedRoomSize(socket);
+        return;
+      }
+
       const code = generateCode(new Set(rooms.keys()));
-      const room = new Room(code, 0, maxPlayers || 4, difficulty || "normal", duration || 60, language || "en");
+      const room = new Room(code, 0, roomSize, difficulty || "normal", duration || 60, language || "en");
       const player = room.addPlayer(playerName || "Player 1", socket.id);
       if (!player) {
         socket.emit("room:error", {
@@ -223,6 +247,11 @@ export function createHalligalliServer() {
           message: "Only the host can start the game",
           messageZh: "只有房主可以开始游戏",
         });
+        return;
+      }
+
+      if (!isSupportedPlayerCount(room.players.size)) {
+        emitUnsupportedRoomSize(socket);
         return;
       }
 

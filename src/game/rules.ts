@@ -101,6 +101,11 @@ export function getSeatLayouts(playerCount: number): SeatLayout[] | undefined {
   return layouts[playerCount];
 }
 
+export function isSupportedPlayerCount(playerCount: number): boolean {
+  const seats = getSeatLayouts(playerCount);
+  return Number.isInteger(playerCount) && Boolean(seats && seats.length >= playerCount);
+}
+
 export function createPlayers(playerCount: number, fruits: readonly FruitDefinition[]): PlayerState[] {
   if (playerCount <= 0) {
     return [];
@@ -108,7 +113,7 @@ export function createPlayers(playerCount: number, fruits: readonly FruitDefinit
 
   const deck = createDeck(fruits);
   const seats = getSeatLayouts(playerCount);
-  if (!seats || seats.length < playerCount) {
+  if (!isSupportedPlayerCount(playerCount) || !seats) {
     throw new Error(`Unsupported player count: ${playerCount}`);
   }
 

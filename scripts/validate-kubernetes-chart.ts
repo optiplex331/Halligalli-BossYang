@@ -44,6 +44,7 @@ export function validateRenderedManifests(manifests: Manifest[]): string[] {
   if (replicas !== 1) {
     errors.push(`expected Deployment replicas to be 1, found ${String(replicas)}`);
   }
+  assertSinglePodRollbackStrategy(errors, deployment);
 
   const containers = readPath(deployment, ["spec", "template", "spec", "containers"]);
   if (!Array.isArray(containers) || containers.length === 0) {
@@ -100,6 +101,16 @@ export function runLocalKubernetesValidation(): void {
   }
 
   console.log("Rendered Kubernetes contract passed.");
+}
+
+function assertSinglePodRollbackStrategy(errors: string[], deployment: Manifest): void {
+  const strategyType = readPath(deployment, ["spec", "strategy", "type"]);
+  const maxSurge = readPath(deployment, ["spec", "strategy", "rollingUpdate", "maxSurge"]);
+  const maxUnavailable = readPath(deployment, ["spec", "strategy", "rollingUpdate", "maxUnavailable"]);
+
+  if (strategyType !== "RollingUpdate" || String(maxSurge) !== "0" || String(maxUnavailable) !== "1") {
+    errors.push("expected Deployment strategy to be RollingUpdate with maxSurge 0 and maxUnavailable 1");
+  }
 }
 
 function runHelm(args: string[]): string {

@@ -9,6 +9,7 @@ During Phase A, rendering or validating this chart is local/static review only. 
 ## Runtime Contract
 
 - Renders one `Deployment` with exactly one replica.
+- Defaults the `Deployment` strategy to `RollingUpdate` with `maxSurge: 0` and `maxUnavailable: 1` so single-node proof clusters do not need spare pod capacity for rollback.
 - Renders one `Service`.
 - Optionally renders one `Ingress`.
 - Uses `/readyz` for readiness and `/health` for liveness and release identity checks.
@@ -69,3 +70,17 @@ This command lints the chart, renders it with `examples/kubernetes/standalone-va
 ## Single Replica
 
 `replicaCount` is intentionally fixed at `1`. Multiplayer Authority is still in-process in the Node.js runtime, with room state and socket.io events owned by one server process. Multi-replica multiplayer is deferred until that authority is externalized or socket.io routing is redesigned.
+
+## Rollout Strategy
+
+The default strategy is proof-friendly for short-lived, single-replica clusters:
+
+```yaml
+deploymentStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 0
+    maxUnavailable: 1
+```
+
+This allows Kubernetes rollback or image changes to terminate the old pod before creating the replacement pod, avoiding an extra temporary pod on single-node clusters with tight pod-count limits. Set `deploymentStrategy.type: Recreate` or provide another Kubernetes `RollingUpdate` shape in real desired state only after confirming the target cluster has the required availability and capacity.
