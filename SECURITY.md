@@ -12,6 +12,7 @@ Please report security issues privately by emailing the repository owner or open
 - Node.js socket.io server.
 - Local browser progress stored in `localStorage`.
 - Manual Azure Production application deployment workflow.
+- Public Halligalli Helm Chart and safe Kubernetes examples used for local/static Phase A validation.
 
 ## Current Safety Boundaries
 
@@ -22,9 +23,11 @@ Please report security issues privately by emailing the repository owner or open
 - Multiplayer scoring is server-authoritative.
 - Browser progress stays local to the device.
 - Deployment secrets, generated config, and real cloud credentials are intentionally excluded from Git.
+- Real Azure Kubernetes Desired State, cluster credentials, and production values are intentionally kept out of this product repo.
 
 ## Out Of Scope
 
 - Vulnerabilities in unsupported local Node.js or browser versions.
 - Third-party deployment account compromise.
 - User-modified forks with changed infrastructure or credential handling.
+- Phase B AKS activation operations that were not explicitly confirmed and run through the infrastructure repo runbooks.

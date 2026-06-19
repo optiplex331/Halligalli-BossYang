@@ -20,6 +20,7 @@ Run these before opening a pull request:
 pnpm run test
 pnpm run typecheck
 pnpm run build
+pnpm run validate:kubernetes
 ```
 
 ## Contribution Guidelines
@@ -30,6 +31,8 @@ pnpm run build
 - Multiplayer clients should emit intent only; scoring and match authority stay on the server.
 - New `localStorage` keys need normalization and persistence tests.
 - Preserve keyboard, screen-reader, mobile touch-target, and `prefers-reduced-motion` behavior.
+- Keep the Halligalli Helm Chart and `docs/operations/kubernetes.md` aligned when changing standalone container or Kubernetes packaging behavior.
+- Do not put real Azure Kubernetes Desired State, Terraform roots, cloud credentials, or generated manifests in this repo; those belong in the infrastructure repo.
 
 ## Good First Areas
 

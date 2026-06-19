@@ -37,6 +37,7 @@
 		"preview": "vite preview",
 		"test": "vitest run",
 		"typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
+		"validate:kubernetes": "tsx scripts/validate-kubernetes-chart.ts",
 		"simulate:bell": "tsx scripts/simulate-bell.ts"
 	},
 	"engines": {
@@ -57,6 +58,7 @@
 		"tsx": "^4.22.4",
 		"typescript": "^6.0.3",
 		"vite": "^8.0.16",
-		"vitest": "^4.1.8"
+		"vitest": "^4.1.8",
+		"yaml": "^2.9.0"
 	}
 }

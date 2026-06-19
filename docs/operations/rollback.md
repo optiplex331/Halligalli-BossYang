@@ -2,6 +2,8 @@
 
 Rollback for Azure Production is an application deployment operation. Terraform should not be used for ordinary application rollback unless the infrastructure itself is broken.
 
+The current rollback path below is for the Container Apps-backed Azure Production path. The future AKS rollback shape, plus the implications of switching the default Release Image to standalone, is documented in [Standalone Release Image Migration Plan](standalone-release-image-migration.md).
+
 ## Preferred Rollback
 
 1. Find a known-good GitHub Release, Release Tag, or previously deployed GHCR backend image digest reference from workflow logs.

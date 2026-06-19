@@ -64,6 +64,8 @@ Release Please uses `HALLIGALLI_RELEASE_BOT_TOKEN` so the generated PR can trigg
 
 The `Container` workflow builds and scans the default Dockerfile target for product/runtime PRs, `master` integration pushes, and release tags. The default target is the Azure Container Apps backend runtime image: compiled Node.js server, shared runtime modules, production dependencies, `/readyz`, `/health`, and socket.io. It does not include Vite frontend assets because Azure Production publishes those separately to Static Web Apps.
 
+Azure Kubernetes Production will use the standalone image shape as the future default only after explicit Phase B migration confirmation. The required workflow and release identity changes are tracked in [Standalone Release Image Migration Plan](standalone-release-image-migration.md); current release workflow defaults stay backend-only until then.
+
 Pull request runs do not publish images.
 
 When the trigger is a normal `master` push, the workflow publishes a Development GHCR Image tagged from the latest Release Tag, first-parent commit distance, and short commit hash:

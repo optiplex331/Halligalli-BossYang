@@ -4,6 +4,8 @@ Azure Production is the visible manual deployment stage for Halligalli portfolio
 
 Azure Production infrastructure must be applied before product deployment. Product deployment uses Release PRs, GHCR Release Images, frontend/backend application deployment, and smoke checks.
 
+This document describes the current Container Apps-backed Azure Production path. It remains active until explicit Phase B Azure Kubernetes Production migration confirmation. The Phase A Kubernetes chart and validation docs do not create Azure resources, move DNS, change the default Release Image, or retire this path.
+
 ## Safety Boundary
 
 Normal pushes and pull requests do not create Azure resources, update Container Apps, publish Static Web Apps assets, or change DNS.
@@ -34,6 +36,8 @@ Do not commit Azure credentials, Static Web Apps deployment tokens, GitHub secre
 The frontend build uses `VITE_HALLIGALLI_BACKEND_URL=https://api.halligalli.games`. The backend Container App uses `HALLIGALLI_ALLOWED_ORIGINS=https://play.halligalli.games`.
 
 `/readyz` is the Readiness Surface for traffic checks. `/health` reports Release Identity for smoke checks and rollback verification.
+
+The future AKS path is different: it uses a same-origin standalone runtime at `https://play.halligalli.games` and does not set `VITE_HALLIGALLI_BACKEND_URL`. See [Kubernetes](kubernetes.md) and [Standalone Release Image Migration Plan](standalone-release-image-migration.md) for the inactive Phase A/Phase B boundary.
 
 ## Current Runtime Posture
 
