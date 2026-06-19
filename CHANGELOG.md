@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.4.1...v0.5.0) (2026-06-19)
+
+
+### Features
+
+* **kubernetes:** add Halligalli Helm chart ([77c93e2](https://github.com/optiplex331/Halligalli-BossYang/commit/77c93e2201835cb7243f72df7f706ec2ec293071))
+* **kubernetes:** prepare Azure Kubernetes Phase A packaging ([a7f4e84](https://github.com/optiplex331/Halligalli-BossYang/commit/a7f4e84be52d8bb66373fd5e9a42bf9e634cae8b))
+
+
+### Bug Fixes
+
+* **deps:** pin socket.io transitive patches ([7964055](https://github.com/optiplex331/Halligalli-BossYang/commit/79640553789a1a7d7de82ac5ea523f6b1e49ed2a))
+
 ## [0.4.1](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.4.0...v0.4.1) (2026-06-10)
 
 
