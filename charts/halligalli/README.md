@@ -4,7 +4,7 @@ This chart packages the standalone Halligalli runtime for Kubernetes. One Node.j
 
 The chart is public application packaging only. Real Azure Kubernetes Desired State, production values, Argo CD Applications, namespace binding, and image selection belong in the infrastructure repository.
 
-During Phase A, rendering or validating this chart is local/static review only. It does not create Azure resources, deploy to a cluster, move DNS, change the default Release Image, or retire the current Container Apps-backed Azure Production path.
+Rendering or validating this chart is local/static review only. It does not create Azure resources, deploy to a cluster, move DNS, publish images, or mutate Azure Kubernetes Desired State.
 
 ## Runtime Contract
 
@@ -33,7 +33,7 @@ releaseIdentity:
 
 When `image.digest` is set, the rendered image is `repository@sha256:...`. `image.tag` remains available for humans, labels, review, and `/health` identity. The chart rejects `image.tag: latest`.
 
-The current default CI release image is the Azure Container Apps backend image. Kubernetes activation must publish or select a standalone image built with:
+The current default CI Release Image is the standalone image built with:
 
 ```bash
 docker build --target standalone \
@@ -59,7 +59,7 @@ helm template halligalli charts/halligalli \
 
 The example values use placeholder hosts and a syntactically valid placeholder digest. Replace them in real desired state outside this repository.
 
-For the full Phase A local validation path, run:
+For the full local Kubernetes package validation path, run:
 
 ```bash
 pnpm run validate:kubernetes

@@ -88,7 +88,7 @@ export function runLocalKubernetesValidation(): void {
   const valuesPath = "examples/kubernetes/standalone-values.yaml";
 
   console.log("Validating Halligalli Helm Chart locally.");
-  console.log("Phase A check: this runs Helm rendering only and does not contact Azure or a cluster.");
+  console.log("Local/static check: this runs Helm rendering only and does not contact Azure or a cluster.");
 
   runHelm(["lint", chartPath]);
   runHelm(["lint", chartPath, "-f", valuesPath]);

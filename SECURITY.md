@@ -11,8 +11,9 @@ Please report security issues privately by emailing the repository owner or open
 - Client-side React app.
 - Node.js socket.io server.
 - Local browser progress stored in `localStorage`.
-- Manual Azure Production application deployment workflow.
-- Public Halligalli Helm Chart and safe Kubernetes examples used for local/static Phase A validation.
+- Azure Kubernetes Production package and runtime surfaces.
+- Historical Azure Production application deployment workflow retained for Container Apps inspection/smoke context.
+- Public Halligalli Helm Chart and safe Kubernetes examples used for local/static validation.
 
 ## Current Safety Boundaries
 
@@ -30,4 +31,4 @@ Please report security issues privately by emailing the repository owner or open
 - Vulnerabilities in unsupported local Node.js or browser versions.
 - Third-party deployment account compromise.
 - User-modified forks with changed infrastructure or credential handling.
-- Phase B AKS activation operations that were not explicitly confirmed and run through the infrastructure repo runbooks.
+- Future AKS topology changes, Container Apps reactivation, or infrastructure operations not explicitly confirmed and run through the infrastructure repo runbooks.

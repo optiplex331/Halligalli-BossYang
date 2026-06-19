@@ -190,9 +190,9 @@ curl --fail https://play.halligalli.games/health
 
 ## DNS And Browser WebSocket Proof
 
-If `play.halligalli.games` still points at the historical Container Apps-backed Azure Production frontend, AKS proof is incomplete for real public HTTPS and browser WebSocket traffic. Cluster-local or temporary-host checks can prove the pod, Service, Ingress controller, and placeholder host routing, but they do not prove the final browser origin.
+If `play.halligalli.games` ever points back at the historical Container Apps-backed Azure Production frontend or another non-AKS target, active AKS production is misconfigured. Cluster-local or temporary-host checks can prove the pod, Service, Ingress controller, and placeholder host routing, but they do not prove the final browser origin.
 
-Before treating a live AKS cutover run as complete, move or temporarily delegate `play.halligalli.games` to the AKS ingress endpoint with a valid TLS certificate, then verify:
+Restore DNS, ingress, and TLS through the infrastructure runbook, then verify:
 
 ```bash
 curl --fail https://play.halligalli.games/readyz

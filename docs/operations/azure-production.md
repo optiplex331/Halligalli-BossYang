@@ -43,7 +43,7 @@ The active AKS path is different: it uses a same-origin standalone runtime at `h
 
 The first external activation was verified before the AKS cutover. The later historical destroy operation removed the Terraform-managed Azure Production resources.
 
-| Field | Current value |
+| Field | Last known historical value |
 |---|---|
 | Frontend URL | `https://play.halligalli.games` |
 | Backend URL | `https://api.halligalli.games` |
@@ -52,7 +52,7 @@ The first external activation was verified before the AKS cutover. The later his
 | Backend replicas | `min=0`, `max=1` |
 | Log retention | `30` days |
 
-Before any future Terraform plan or apply for teardown or inspection, make sure the infrastructure repo's ignored local operation values match that posture unless you are intentionally changing it. For the current scaled-down environment, `AZURE_PRODUCTION_REGION` should be `northeurope` and `AZURE_PRODUCTION_BACKEND_MIN_REPLICAS` should be `0`.
+Before any future Terraform plan or apply for teardown or inspection, make sure the infrastructure repo's ignored local operation values match that posture unless you are intentionally changing it. For the last known Container Apps posture, `AZURE_PRODUCTION_REGION` should be `northeurope` and `AZURE_PRODUCTION_BACKEND_MIN_REPLICAS` should be `0`.
 
 ## Container Image Contract
 
@@ -143,9 +143,9 @@ The backend deploy script has safe defaults for the current scaffold names, but 
 
 `halligalli.games` remains on Name.com nameservers. Do not migrate DNS authority to Azure DNS for this Azure Production stage.
 
-Infrastructure outputs and Azure portal values provide the current Static Web Apps default hostname, Container Apps ingress hostname, and Container Apps domain verification ID. Name.com verification and routing records remain manual.
+Infrastructure outputs and Azure portal values provided the historical Static Web Apps default hostname, Container Apps ingress hostname, and Container Apps domain verification ID. Name.com verification and routing records remain manual.
 
-Current activation records are:
+Historical activation records retained for DNS cleanup or audit are:
 
 | Type | Name | Value |
 |---|---|---|

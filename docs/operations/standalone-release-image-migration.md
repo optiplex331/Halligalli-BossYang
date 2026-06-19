@@ -13,7 +13,7 @@ Azure Kubernetes Production deploys Halligalli as one same-origin Kubernetes wor
 - The Halligalli Helm Chart renders one single-replica Deployment because Multiplayer Authority remains in-process.
 - Argo CD consumes Azure Kubernetes Desired State from the infrastructure repository and reconciles a digest-pinned image.
 
-That shape requires the Dockerfile `standalone` target. The current backend-only image intentionally omits Vite `dist/index.html` and `dist/assets/`, so it cannot be the primary AKS artifact for same-origin frontend plus socket.io delivery.
+That shape requires the Dockerfile `standalone` target. The historical backend-only Azure Container Apps image target intentionally omitted Vite `dist/index.html` and `dist/assets/`, so it cannot be the primary AKS artifact for same-origin frontend plus socket.io delivery.
 
 Making standalone the default gives the portfolio story one immutable artifact path:
 

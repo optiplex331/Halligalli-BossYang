@@ -14,7 +14,7 @@ Create a room, ready up with friends, flip around a server-authoritative table, 
 [![socket.io](https://img.shields.io/badge/socket.io-4-111?style=flat-square)](https://socket.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-f0c44a?style=flat-square)](LICENSE)
 
-**Live demo**: `https://play.halligalli.games` when Azure Production is scaled up for demos.
+**Live demo**: `https://play.halligalli.games` on Azure Kubernetes Production.
 
 ![Halligalli Arena showcase](docs/assets/readme-showcase.svg)
 
@@ -73,7 +73,7 @@ Kubernetes package validation:
 pnpm run validate:kubernetes
 ```
 
-This is a Phase A local/static check for the public Helm Chart. It requires Helm on `PATH`, renders the chart with safe example values, and does not create Azure resources or deploy to a cluster.
+This is a local/static check for the public Helm Chart. It requires Helm on `PATH`, renders the chart with safe example values, and does not create Azure resources or deploy to a cluster.
 
 ## Rules Model
 
