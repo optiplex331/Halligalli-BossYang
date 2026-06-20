@@ -30,8 +30,8 @@ Before AKS cutover, these contracts existed:
 - `.github/workflows/container.yml` builds `docker build .` without `--target`; because the final Dockerfile stage is `azure-backend`, this publishes the Azure Container Apps backend image.
 - Release tags publish `ghcr.io/<owner>/<repo>:X.Y.Z` as the backend Release Image.
 - The image is scanned before publication and is never tagged `latest`.
-- `scripts/deploy-azure-production-backend.sh` resolves `ghcr.io/<owner>/<repo>:X.Y.Z` to `ghcr.io/<owner>/<repo>@sha256:<digest>` before updating Container Apps.
-- `.github/workflows/azure-production.yml` published Static Web Apps frontend assets separately with `VITE_HALLIGALLI_BACKEND_URL=https://api.halligalli.games`.
+- A local backend rollout script resolved `ghcr.io/<owner>/<repo>:X.Y.Z` to `ghcr.io/<owner>/<repo>@sha256:<digest>` before updating Container Apps.
+- A manual Azure Production workflow published Static Web Apps frontend assets separately with `VITE_HALLIGALLI_BACKEND_URL=https://api.halligalli.games`.
 - `api.halligalli.games` was the Backend Entry for the Container Apps-backed Azure Production path.
 
 ADR-0016 supersedes those defaults for active production.
@@ -124,16 +124,11 @@ If the failure is ingress, certificate, cluster, or Argo CD infrastructure rathe
 
 ### Historical Container Apps Path
 
-Before AKS cutover, legacy rollback used the Azure Production rollback:
+Before AKS cutover, legacy rollback used a backend Release Tag, local Container Apps backend rollout, optional Static Web Apps frontend redeploy, and split-origin smoke checks against `api.halligalli.games` plus `play.halligalli.games`.
 
-1. Pick a known-good backend Release Tag.
-2. Run `scripts/deploy-azure-production-backend.sh vX.Y.Z`.
-3. Redeploy Static Web Apps frontend assets only if frontend assets also need to roll back.
-4. Smoke `https://api.halligalli.games/readyz`, `https://api.halligalli.games/health`, `https://play.halligalli.games`, and socket.io.
+After ADR-0016, Container Apps is not a short-lived fallback or maintained legacy path. The executable workflow and backend deployment script have been removed. If a future decision reverses that, publish an explicitly named backend-only legacy artifact and add a new deployment adapter with fresh review.
 
-After ADR-0016, Container Apps is not a short-lived fallback or maintained legacy path. If a future decision reverses that, publish an explicitly named backend-only legacy artifact and update the backend deployment script to resolve that artifact by digest.
-
-The main risk is artifact identity ambiguity. Once `ghcr.io/<owner>/<repo>:X.Y.Z` becomes standalone, any script that assumes the same tag is backend-only must either be retired, constrained to pre-migration tags, or taught to select a separate legacy backend artifact.
+The main risk is artifact identity ambiguity. Once `ghcr.io/<owner>/<repo>:X.Y.Z` becomes standalone, any legacy adapter that assumes the same tag is backend-only must stay retired unless it selects a separate legacy backend artifact.
 
 ## Cutover Checklist
 

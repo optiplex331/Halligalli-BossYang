@@ -134,7 +134,7 @@ Container Apps-backed Azure Production is historical after cutover; its Terrafor
 - Versioning: Release Please creates human-merged release PRs and `vX.Y.Z` tags
 - Release image: release tags build, scan, and publish immutable GHCR standalone images
 - Azure infrastructure: AKS and GitOps desired state are operated from the infrastructure repo
-- Historical Azure deployment: `.github/workflows/azure-production.yml`
+- Historical Azure Production: docs-only Static Web Apps plus Container Apps record
 - Kubernetes production render surface: infrastructure-owned chart, values, and Argo CD Application
 - Health check: `/health`
 - Readiness check: `/readyz`
@@ -144,7 +144,7 @@ The first Container Apps-backed Azure Production activation has been verified hi
 Operations docs:
 
 - [CI/CD](docs/operations/ci-cd.md)
-- [Azure Production](docs/operations/azure-production.md)
+- [Azure Production History](docs/operations/azure-production.md)
 - [Kubernetes](docs/operations/kubernetes.md)
 - [Standalone Release Image Migration Plan](docs/operations/standalone-release-image-migration.md)
 - [Rollback](docs/operations/rollback.md)
