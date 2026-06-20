@@ -27,6 +27,7 @@ Short shell-native workflow orchestration stays in Bash, such as `git`, `docker`
 | Delivery control PR | Validate release config and utility tests, then run actionlint for GitHub Actions workflows. Skip heavy product work. | Skip image build work. |
 | Release PR | Validate release config and utility tests. Skip heavy product work. | Skip image build work. |
 | Docs or other metadata PR | Validate release config and utility tests. Skip heavy product work. | Skip image build work. |
+| Docs or metadata `master` push | Validate release config and utility tests. Skip heavy product work. | Skip image build and do not publish a Development GHCR Image. |
 
 Utility tests run unconditionally in the `Product checks` gate and do not require `pnpm install`.
 
@@ -57,13 +58,13 @@ Container Apps backend-only images are historical after the AKS cutover. The can
 
 Pull request runs do not publish images.
 
-When the trigger is a normal `master` push, the workflow publishes a Development GHCR Image tagged from the latest Release Tag, first-parent commit distance, and short commit hash:
+When the trigger is a normal `master` push that includes product runtime changes, the workflow publishes a Development GHCR Image tagged from the latest Release Tag, first-parent commit distance, and short commit hash:
 
 ```text
 ghcr.io/<owner>/<repo>:X.Y.Z-000N-gSHA
 ```
 
-Development GHCR Images are for traceability and rollback testing only. They do not feed active Azure Kubernetes Production.
+Development GHCR Images are for traceability and rollback testing only. They do not feed active Azure Kubernetes Production. Docs-only and metadata-only `master` pushes do not publish them.
 
 If the `master` push is exactly the same commit as a `vX.Y.Z` Release Tag, the workflow does not publish a duplicate `X.Y.Z-0000-gSHA` Development GHCR Image. The release-tagged `X.Y.Z` image is the canonical artifact for that commit.
 
