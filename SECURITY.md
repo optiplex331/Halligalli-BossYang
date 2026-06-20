@@ -12,8 +12,8 @@ Please report security issues privately by emailing the repository owner or open
 - Node.js socket.io server.
 - Local browser progress stored in `localStorage`.
 - Azure Kubernetes Production package and runtime surfaces.
-- Historical Azure Production application deployment workflow retained for Container Apps inspection/smoke context.
-- Public Halligalli Helm Chart and safe Kubernetes examples used for local/static validation.
+- Product release automation, GHCR image publication, `/readyz`, and `/health`.
+- Product-facing Kubernetes documentation for the standalone runtime contract.
 
 ## Current Safety Boundaries
 
@@ -24,7 +24,7 @@ Please report security issues privately by emailing the repository owner or open
 - Multiplayer scoring is server-authoritative.
 - Browser progress stays local to the device.
 - Deployment secrets, generated config, and real cloud credentials are intentionally excluded from Git.
-- Real Azure Kubernetes Desired State, cluster credentials, and production values are intentionally kept out of this product repo.
+- Production-used Helm chart templates, real Azure Kubernetes Desired State, cluster credentials, and production values are intentionally kept out of this product repo.
 
 ## Out Of Scope
 
