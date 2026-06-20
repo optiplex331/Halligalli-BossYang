@@ -4,12 +4,7 @@ Halligalli uses GitHub Actions as the product delivery control plane. Pull reque
 
 Active production rollout is reviewed through the infrastructure repo's Azure Kubernetes Desired State: Release Tag -> standalone GHCR image -> digest-pinned GitOps values -> Argo CD -> AKS.
 
-The historical Azure Production application deployment path remains as protected manual workflow plumbing plus a local backend deployment script because the Azure for Students school tenant blocked GitHub OIDC bootstrap:
-
-- `.github/workflows/azure-production.yml` for frontend deploy and backend smoke checks
-- `scripts/deploy-azure-production-backend.sh` for local backend rollout through Azure CLI
-
-Product deployment values copied from infrastructure outputs belong in this repo's protected `azure-production` GitHub Environment.
+The historical Azure Production application deployment path was Static Web Apps plus Container Apps. Its executable workflow and local backend rollout script have been removed from this product repo after AKS cutover, so the old path remains docs-only history.
 
 ## Pull Request Gates
 
@@ -32,24 +27,17 @@ Short shell-native workflow orchestration stays in Bash, such as `git`, `docker`
 | Delivery control PR | Validate release config and utility tests, then run actionlint for GitHub Actions workflows. Skip heavy product work. | Skip image build work. |
 | Release PR | Validate release config and utility tests. Skip heavy product work. | Skip image build work. |
 | Docs or other metadata PR | Validate release config and utility tests. Skip heavy product work. | Skip image build work. |
+| Docs or metadata `master` push | Validate release config and utility tests. Skip heavy product work. | Skip image build and do not publish a Development GHCR Image. |
 
 Utility tests run unconditionally in the `Product checks` gate and do not require `pnpm install`.
 
-## Azure Production
+## Azure Production History
 
-The Azure Production application deployment workflow only runs through `workflow_dispatch`; it is not attached to push, PR, or Release Tag events. The visible workflow and environment names use `azure-production`, but this is historical Static Web Apps/Container Apps plumbing and is not the active AKS production deployment path.
+The Child Repo no longer carries a runnable Azure Production workflow or Container Apps backend rollout script. The old `azure-production` environment, Static Web Apps token, split-origin backend URL, and Container Apps smoke shape are historical context only.
 
 Terraform `plan`, `apply`, `scale-down`, and `destroy` are separate from product deployment.
 
-The deployment workflow supports:
-
-- `validate`
-- `deploy-frontend` with `confirm_cost=AZURE_PRODUCTION_APPLY`
-- `smoke-backend`
-
-Azure Production deployment changes are Delivery Control. Changes to `.github/workflows/azure-production.yml` make `Product checks` run release utility validation and actionlint, but they do not publish Azure resources during PR checks.
-
-Azure Production operation details are documented in [Azure Production Reference](azure-production.md).
+Azure Production history is documented in [Azure Production History](azure-production.md). Do not reintroduce a mutating Static Web Apps or Container Apps workflow unless a future ADR explicitly reverses the AKS-only production decision.
 
 ## Release PR
 
@@ -70,13 +58,13 @@ Container Apps backend-only images are historical after the AKS cutover. The can
 
 Pull request runs do not publish images.
 
-When the trigger is a normal `master` push, the workflow publishes a Development GHCR Image tagged from the latest Release Tag, first-parent commit distance, and short commit hash:
+When the trigger is a normal `master` push that includes product runtime changes, the workflow publishes a Development GHCR Image tagged from the latest Release Tag, first-parent commit distance, and short commit hash:
 
 ```text
 ghcr.io/<owner>/<repo>:X.Y.Z-000N-gSHA
 ```
 
-Development GHCR Images are for traceability and rollback testing only. They do not deploy Azure Production.
+Development GHCR Images are for traceability and rollback testing only. They do not feed active Azure Kubernetes Production. Docs-only and metadata-only `master` pushes do not publish them.
 
 If the `master` push is exactly the same commit as a `vX.Y.Z` Release Tag, the workflow does not publish a duplicate `X.Y.Z-0000-gSHA` Development GHCR Image. The release-tagged `X.Y.Z` image is the canonical artifact for that commit.
 
@@ -86,7 +74,7 @@ When the trigger is a `vX.Y.Z` tag, the workflow publishes the release image ide
 ghcr.io/<owner>/<repo>:X.Y.Z
 ```
 
-It does not publish `latest`. Azure Kubernetes Desired State should resolve the selected GHCR standalone Release Image to a digest before Argo CD sync. Historical Container Apps backend deployment must not assume post-cutover canonical tags are backend-only.
+It does not publish `latest`. Azure Kubernetes Desired State should resolve the selected GHCR standalone Release Image to a digest before Argo CD sync. Historical Container Apps backend deployment is not a maintained path after AKS cutover.
 
 ## Branch Protection
 

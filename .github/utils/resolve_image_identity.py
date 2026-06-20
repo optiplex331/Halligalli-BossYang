@@ -51,7 +51,7 @@ def is_release_tag(ref_type, ref_name):
 
 
 def is_master_push(event_name, ref_type, ref_name):
-    """Normal master pushes may publish Development GHCR Images."""
+    """Master product-runtime pushes may publish Development GHCR Images."""
 
     return event_name == "push" and ref_type == "branch" and ref_name == "master"
 
@@ -87,8 +87,8 @@ def resolve_identity(env, git=run_git):
     should_push_image = False
 
     if is_release_tag(ref_type, ref_name):
-        # Release-tag builds are canonical GHCR release artifacts. Cloud
-        # scaffold rollout is manual and deploys these artifacts by digest.
+        # Release-tag builds are canonical standalone GHCR artifacts. The
+        # infrastructure repo deploys reviewed image digests through GitOps.
         version = ref_name.removeprefix("v")
         should_push_image = True
     elif is_master_push(event_name, ref_type, ref_name):

@@ -67,14 +67,6 @@ docker build --target standalone -t halligalli-arena:standalone .
 docker run --rm -p 3001:3001 halligalli-arena:standalone
 ```
 
-Kubernetes package validation:
-
-```bash
-pnpm run validate:kubernetes
-```
-
-This is a local/static check for the public Helm Chart. It requires Helm on `PATH`, renders the chart with safe example values, and does not create Azure resources or deploy to a cluster.
-
 ## Rules Model
 
 Cards flip clockwise around the table. Each player has a face-up pile, but only the top card counts. Older cards underneath are invisible to the rule engine.
@@ -134,16 +126,16 @@ See [SECURITY.md](SECURITY.md) for reporting and safety boundaries.
 
 ## Deployment
 
-Azure Kubernetes Production is the active production story after the AKS cutover decision. It uses the standalone Halligalli runtime, the public Helm Chart, infrastructure-owned Azure Kubernetes Desired State, Argo CD, and same-origin traffic at `play.halligalli.games`.
+Azure Kubernetes Production is the active production story after the June 19, 2026 AKS cutover. It uses the standalone Halligalli runtime, infrastructure-owned Helm Chart and Azure Kubernetes Desired State, Argo CD, and same-origin traffic at `play.halligalli.games`.
 
-Container Apps-backed Azure Production is historical after cutover; its Terraform-managed resources were destroyed and it is not an active fallback. The Kubernetes assets in this repo are the public application package, while real Azure Kubernetes Desired State and cloud operations live in the infrastructure repo.
+Container Apps-backed Azure Production is historical after cutover; its Terraform-managed resources were destroyed and it is not an active fallback. Production Kubernetes chart templates, real Azure Kubernetes Desired State, and cloud operations live in the infrastructure repo.
 
 - Release branch: `master`
 - Versioning: Release Please creates human-merged release PRs and `vX.Y.Z` tags
 - Release image: release tags build, scan, and publish immutable GHCR standalone images
 - Azure infrastructure: AKS and GitOps desired state are operated from the infrastructure repo
-- Historical Azure deployment: `.github/workflows/azure-production.yml`
-- Kubernetes package: `charts/halligalli/` with safe examples under `examples/kubernetes/`; real Azure Kubernetes Desired State lives in the infrastructure repo
+- Historical Azure Production: docs-only Static Web Apps plus Container Apps record
+- Kubernetes production render surface: infrastructure-owned chart, values, and Argo CD Application
 - Health check: `/health`
 - Readiness check: `/readyz`
 
@@ -152,7 +144,7 @@ The first Container Apps-backed Azure Production activation has been verified hi
 Operations docs:
 
 - [CI/CD](docs/operations/ci-cd.md)
-- [Azure Production](docs/operations/azure-production.md)
+- [Azure Production History](docs/operations/azure-production.md)
 - [Kubernetes](docs/operations/kubernetes.md)
 - [Standalone Release Image Migration Plan](docs/operations/standalone-release-image-migration.md)
 - [Rollback](docs/operations/rollback.md)
