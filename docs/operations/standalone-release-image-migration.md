@@ -10,7 +10,7 @@ Azure Kubernetes Production deploys Halligalli as one same-origin Kubernetes wor
 
 - `https://play.halligalli.games` serves the built frontend.
 - The same origin serves `/readyz`, `/health`, and `/socket.io`.
-- The Halligalli Helm Chart renders one single-replica Deployment because Multiplayer Authority remains in-process.
+- The infrastructure-owned Halligalli Helm Chart renders one single-replica Deployment because Multiplayer Authority remains in-process.
 - Argo CD consumes Azure Kubernetes Desired State from the infrastructure repository and reconciles a digest-pinned image.
 
 That shape requires the Dockerfile `standalone` target. The historical backend-only Azure Container Apps image target intentionally omitted Vite `dist/index.html` and `dist/assets/`, so it cannot be the primary AKS artifact for same-origin frontend plus socket.io delivery.
@@ -70,7 +70,7 @@ After explicit cutover confirmation, the release control-plane shape is:
 7. Operation docs now state:
 
    - `docs/operations/ci-cd.md`: default Release Image target is standalone.
-   - `docs/operations/kubernetes.md`: Azure Kubernetes Production is active and desired state consumes the canonical standalone release digest.
+   - `docs/operations/kubernetes.md`: Azure Kubernetes Production is active and the infrastructure repo owns the chart plus desired-state render surface.
    - `docs/operations/azure-production.md`: Container Apps is historical with destroyed Terraform-managed resources, not fallback.
    - `docs/operations/rollback.md`: AKS rollback is the primary rollback path.
 
@@ -85,7 +85,7 @@ The AKS deployment should use this flow:
 3. The `Container` workflow builds, scans, and pushes the standalone Release Image as `ghcr.io/<owner>/<repo>:X.Y.Z`.
 4. The workflow logs and job output record the pushed digest, for example `sha256:<64 lowercase hex characters>`.
 5. A human or later automation opens a desired-state change in the Azure Production Infrastructure Repo.
-6. The infrastructure-owned values select the public chart and pin the image by digest:
+6. The infrastructure-owned values select the infrastructure-owned chart and pin the image by digest:
 
    ```yaml
    image:
@@ -106,7 +106,7 @@ The AKS deployment should use this flow:
    curl --fail https://play.halligalli.games/health
    ```
 
-The Helm Chart renders `repository@sha256:<digest>` when `image.digest` is set. `image.tag` remains human-readable context for reviews, labels, and `/health`; it is not the mutable deployment selector.
+The infrastructure-owned Helm Chart renders `repository@sha256:<digest>` when `image.digest` is set. `image.tag` remains human-readable context for reviews, labels, and `/health`; it is not the mutable deployment selector.
 
 ## Rollback Implications
 
@@ -138,7 +138,7 @@ The main risk is artifact identity ambiguity. Once `ghcr.io/<owner>/<repo>:X.Y.Z
 ## Cutover Checklist
 
 - Explicit human confirmation says Azure Kubernetes Production is the only active production environment.
-- The Halligalli Helm Chart and `pnpm run validate:kubernetes` are green.
+- The infrastructure-owned Halligalli Helm Chart and GitOps desired-state validation are green.
 - Azure Kubernetes Desired State exists in the infrastructure repository and uses digest-pinned images.
 - The `Container` workflow scans and pushes the standalone target before desired state consumes it.
 - The selected standalone digest, release version, and commit SHA are recorded in the desired-state change.
