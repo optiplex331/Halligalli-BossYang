@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.5.0...v0.5.1) (2026-06-21)
+
+
+### Bug Fixes
+
+* **multiplayer:** use server reaction time ([#47](https://github.com/optiplex331/Halligalli-BossYang/issues/47)) ([95197c9](https://github.com/optiplex331/Halligalli-BossYang/commit/95197c946a92ad01b2f2420f1441c90509bae508))
+
 ## [0.5.0](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.4.1...v0.5.0) (2026-06-19)
 
 
