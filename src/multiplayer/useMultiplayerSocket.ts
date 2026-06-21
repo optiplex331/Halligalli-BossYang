@@ -3,6 +3,7 @@ import { getSocket } from "./socket.js";
 import { DAILY_TARGET_ROUNDS, INITIAL_BREAKDOWN } from "../game/constants.js";
 import { getSeatLayouts } from "../game/rules.js";
 import { appendHistoryEntry, saveDailyGoal } from "../game/persistence.js";
+import { getLocalCorrectBellReactionMs } from "./projection.js";
 import type { Language, PlayerState, ScoreBreakdown } from "../game/types.js";
 import type {
   GameBellResultPayload,
@@ -153,8 +154,8 @@ export function useMultiplayerSocket({
         a().setActiveBellFruit(null);
         a().bellStateRef.current = { available: false, fruitKey: null, startedAt: 0, handled: true };
 
-        if (data.winnerId === mySeatIndex) {
-          const reactionMs = Date.now() - a().bellStateRef.current.startedAt;
+        const reactionMs = getLocalCorrectBellReactionMs(data, mySeatIndex);
+        if (reactionMs !== null) {
           a().setScore((v: number) => v + data.earned);
           a().setCorrectHits((v: number) => v + 1);
           a().setReactionTimes((v: number[]) => [...v, reactionMs]);
