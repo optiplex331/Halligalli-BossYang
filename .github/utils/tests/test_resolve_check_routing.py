@@ -20,7 +20,7 @@ BASE_ENV = {
 }
 
 
-def route(**updates):
+def route(**updates: str) -> dict[str, str]:
     env = dict(BASE_ENV)
     env.update(updates)
     return resolve_routing(env)

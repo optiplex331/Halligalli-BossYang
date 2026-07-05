@@ -3,6 +3,8 @@
 import re
 import subprocess
 import sys
+from collections.abc import Callable, Sequence
+from typing import Mapping
 
 from release_utils import append_github_outputs
 
@@ -17,7 +19,7 @@ class ImageIdentityError(Exception):
     pass
 
 
-def normalize_image(repository):
+def normalize_image(repository: str) -> str:
     """Convert owner/repo from GitHub context into the canonical GHCR image name."""
 
     if not repository:
@@ -25,7 +27,7 @@ def normalize_image(repository):
     return f"ghcr.io/{repository}".lower()
 
 
-def short_sha(commit_sha):
+def short_sha(commit_sha: str) -> str:
     """Return the seven-character identity used for non-publishing PR builds."""
 
     if len(commit_sha) < 7:
@@ -33,7 +35,7 @@ def short_sha(commit_sha):
     return commit_sha[:7]
 
 
-def parse_extended_version(describe):
+def parse_extended_version(describe: str) -> str:
     """Convert git-describe output into the development image tag format."""
 
     match = re.fullmatch(r"v([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)-g([0-9a-fA-F]+)", describe)
@@ -44,19 +46,19 @@ def parse_extended_version(describe):
     return f"{base}-{int(count):04d}-g{git_ref}"
 
 
-def is_release_tag(ref_type, ref_name):
+def is_release_tag(ref_type: str, ref_name: str) -> bool:
     """Release tags are the only refs that may publish canonical release images."""
 
     return ref_type == "tag" and RELEASE_TAG_RE.fullmatch(ref_name or "") is not None
 
 
-def is_master_push(event_name, ref_type, ref_name):
+def is_master_push(event_name: str, ref_type: str, ref_name: str) -> bool:
     """Master product-runtime pushes may publish Development GHCR Images."""
 
     return event_name == "push" and ref_type == "branch" and ref_name == "master"
 
 
-def run_git(args, allow_failure=False):
+def run_git(args: Sequence[str], allow_failure: bool = False) -> str:
     """Run git and return trimmed stdout, optionally treating failure as empty."""
 
     result = subprocess.run(
@@ -76,14 +78,17 @@ def run_git(args, allow_failure=False):
     raise ImageIdentityError(message)
 
 
-def resolve_identity(env, git=run_git):
+def resolve_identity(
+    env: Mapping[str, str],
+    git: Callable[[Sequence[str], bool], str] = run_git,
+) -> dict[str, str]:
     """Resolve image tag, version, commit SHA, and publish/promotion decisions."""
 
     image = normalize_image(env.get("GITHUB_REPOSITORY", ""))
     ref_type = env.get("GITHUB_REF_TYPE", "")
     ref_name = env.get("GITHUB_REF_NAME", "")
     event_name = env.get("GITHUB_EVENT_NAME", "")
-    commit_sha = git(["rev-parse", "HEAD"])
+    commit_sha = git(["rev-parse", "HEAD"], False)
     should_push_image = False
 
     if is_release_tag(ref_type, ref_name):
@@ -135,7 +140,7 @@ def resolve_identity(env, git=run_git):
     }
 
 
-def main():
+def main() -> None:
     """CLI entry point used by GitHub Actions steps."""
 
     try:

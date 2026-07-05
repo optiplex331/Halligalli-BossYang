@@ -2,6 +2,7 @@
 
 import json
 import os
+from typing import Any, Mapping, NoReturn, Optional
 
 
 class ReleaseUtilityError(RuntimeError):
@@ -10,15 +11,18 @@ class ReleaseUtilityError(RuntimeError):
     pass
 
 
-def fail(message):
+def fail(message: str) -> NoReturn:
     raise ReleaseUtilityError(message)
 
 
-def check_health_release_identity(body, expected):
+def check_health_release_identity(
+    body: str,
+    expected: Mapping[str, Optional[str]],
+) -> dict[str, Any]:
     """Assert that a /health response exposes the expected release identity."""
 
     try:
-        health = json.loads(body)
+        health: dict[str, Any] = json.loads(body)
     except json.JSONDecodeError:
         fail(f"Health response is not valid JSON: {body}")
 
@@ -45,7 +49,10 @@ def check_health_release_identity(body, expected):
     return health
 
 
-def append_github_outputs(outputs, output_path=None):
+def append_github_outputs(
+    outputs: Mapping[str, object],
+    output_path: Optional[str] = None,
+) -> list[str]:
     """Append step outputs in GitHub's key=value format and echo them for logs."""
 
     lines = [f"{key}={value}" for key, value in outputs.items()]

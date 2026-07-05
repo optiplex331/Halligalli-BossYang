@@ -6,7 +6,7 @@ import sys
 from release_utils import ReleaseUtilityError, check_health_release_identity
 
 
-def main():
+def main() -> None:
     """Read HEALTH_RESPONSE and expected identity values from the environment."""
 
     try:

@@ -3,19 +3,21 @@
 import json
 import sys
 from pathlib import Path
+from typing import Any, NoReturn
 
-def read_json(path):
+
+def read_json(path: str) -> dict[str, Any]:
     """Read a UTF-8 JSON file used by release automation."""
 
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-def fail(message):
+def fail(message: str) -> NoReturn:
     print(message, file=sys.stderr)
     sys.exit(1)
 
 
-def main():
+def main() -> None:
     """Check that release versioning remains tag-driven, not package-driven."""
 
     release_config = read_json(".github/utils/release-please-config.json")

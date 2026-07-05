@@ -4,6 +4,7 @@ import unittest
 
 import sys
 from pathlib import Path
+from collections.abc import Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -14,10 +15,10 @@ from resolve_image_identity import (  # noqa: E402
 )
 
 
-def fake_git(outputs):
+def fake_git(outputs: dict[tuple[str, ...], str]):
     """Provide deterministic git command results to the resolver under test."""
 
-    def run(args, allow_failure=False):
+    def run(args: Sequence[str], allow_failure: bool = False) -> str:
         key = tuple(args)
         if key in outputs:
             return outputs[key]
