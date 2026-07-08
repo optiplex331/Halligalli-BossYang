@@ -1,4 +1,17 @@
-"""Validate a deployed /health payload against the expected release identity."""
+"""Validate a captured /health response against an expected release identity.
+
+Purpose:
+- Prove that the reachable runtime is the intended release artifact.
+Inputs:
+- Environment: HEALTH_RESPONSE, EXPECTED_VERSION, EXPECTED_COMMIT.
+- Optional environment: SUCCESS_MESSAGE.
+Outputs:
+- Prints SUCCESS_MESSAGE when validation passes and the variable is set.
+- Exits non-zero when the health payload is invalid or identity mismatches.
+Boundaries:
+- Does not perform HTTP requests.
+- Does not deploy, roll back, or mutate runtime state.
+"""
 
 import os
 import sys

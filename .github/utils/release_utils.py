@@ -1,4 +1,16 @@
-"""Provider-neutral helpers for release and deployment workflows."""
+"""Provide shared helpers for dependency-free release utility scripts.
+
+Purpose:
+- Centralize release identity validation and GitHub step-output formatting.
+Inputs:
+- Function arguments supplied by utility scripts under .github/utils.
+- Optional environment: GITHUB_OUTPUT for GitHub Actions step outputs.
+Outputs:
+- Parsed health payloads, formatted key=value output lines, or typed failures.
+Boundaries:
+- Does not resolve workflow routing or image identity.
+- Does not call the network, Docker, GitHub, Azure, or git.
+"""
 
 import json
 import os
@@ -56,7 +68,8 @@ def append_github_outputs(
     """Append step outputs in GitHub's key=value format and echo them for logs."""
 
     lines = [f"{key}={value}" for key, value in outputs.items()]
-    output_path = output_path if output_path is not None else os.environ.get("GITHUB_OUTPUT")
+    if output_path is None:
+        output_path = os.environ.get("GITHUB_OUTPUT")
 
     if output_path:
         with open(output_path, "a", encoding="utf-8") as output_file:

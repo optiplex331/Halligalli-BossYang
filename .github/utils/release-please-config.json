@@ -7,7 +7,7 @@
 	"pull-request-title-pattern": "chore: release v${version}",
 	"packages": {
 		".": {
-			"release-type": "go",
+			"release-type": "simple",
 			"package-name": "halligalli",
 			"changelog-path": "CHANGELOG.md"
 		}

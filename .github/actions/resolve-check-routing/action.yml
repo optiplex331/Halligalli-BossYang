@@ -50,7 +50,7 @@ runs:
         RELEASE_METADATA: ${{ steps.paths.outputs.release_metadata || 'false' }}
       run: |
         set -euo pipefail
-        mapfile -t outputs < <(python3 .github/utils/resolve_check_routing.py)
+
         echo "::group::Check routing"
-        printf '%s\n' "${outputs[@]}"
+        python3 .github/utils/resolve_check_routing.py
         echo "::endgroup::"

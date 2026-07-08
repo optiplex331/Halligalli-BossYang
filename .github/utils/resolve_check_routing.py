@@ -1,4 +1,19 @@
-"""Resolve CI check routing from GitHub context and changed file groups."""
+"""Resolve Two-Gate CI routing decisions for required check jobs.
+
+Purpose:
+- Keep Product checks and Container build and scan present while routing heavy
+  work by change type.
+Inputs:
+- Environment from dorny/paths-filter: PRODUCT_RUNTIME, DELIVERY_CONTROL,
+  RELEASE_METADATA.
+- GitHub environment: GITHUB_EVENT_NAME, GITHUB_REF_TYPE, GITHUB_REF_NAME.
+Outputs:
+- GitHub step outputs for classification, changed groups, and required work
+  booleans.
+Boundaries:
+- Does not inspect changed files directly.
+- Does not run product tests, actionlint, Docker builds, or image scans.
+"""
 
 import os
 import re
@@ -6,7 +21,6 @@ import sys
 from typing import Mapping
 
 from release_utils import append_github_outputs
-
 
 RELEASE_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
 
@@ -30,17 +44,9 @@ def resolve_routing(env: Mapping[str, str]) -> dict[str, str]:
     tag_release = is_release_tag(ref_type, ref_name)
     workflow_dispatch = event_name == "workflow_dispatch"
 
-    product_checks_required = product_runtime
-    delivery_control_checks_required = delivery_control
-    container_build_required = product_runtime
-
-    if workflow_dispatch:
-        product_checks_required = True
-        delivery_control_checks_required = True
-        container_build_required = True
-
-    if tag_release:
-        container_build_required = True
+    product_checks_required = product_runtime or workflow_dispatch
+    delivery_control_checks_required = delivery_control or workflow_dispatch
+    container_build_required = product_runtime or workflow_dispatch or tag_release
 
     if tag_release:
         classification = "release-tag"
@@ -56,12 +62,14 @@ def resolve_routing(env: Mapping[str, str]) -> dict[str, str]:
         classification = "metadata-or-docs"
 
     return {
-        "classification": classification,
         "product_runtime": str(product_runtime).lower(),
         "delivery_control": str(delivery_control).lower(),
         "release_metadata": str(release_metadata).lower(),
+        "classification": classification,
         "product_checks_required": str(product_checks_required).lower(),
-        "delivery_control_checks_required": str(delivery_control_checks_required).lower(),
+        "delivery_control_checks_required": str(
+            delivery_control_checks_required
+        ).lower(),
         "container_build_required": str(container_build_required).lower(),
     }
 

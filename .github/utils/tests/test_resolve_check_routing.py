@@ -1,4 +1,17 @@
-"""Tests for CI check routing decisions."""
+"""Test Two-Gate CI routing decisions.
+
+Purpose:
+- Protect required-check routing for CI and Container workflows.
+Fixtures:
+- Fake GitHub event/ref values and fake dorny/paths-filter output variables.
+Coverage:
+- Release tags require container builds.
+- Product runtime changes require product checks and container builds.
+- Delivery-control, release-metadata, docs-only, and manual-dispatch paths route
+  to the expected work.
+Boundaries:
+- Does not invoke GitHub Actions or inspect real changed files.
+"""
 
 import unittest
 
