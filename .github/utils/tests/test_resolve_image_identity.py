@@ -1,23 +1,39 @@
-"""Tests for release, development, and pull request image identity routing."""
+"""Test container image identity and push-policy resolution.
+
+Purpose:
+- Protect GHCR image naming, version derivation, and push decisions.
+Fixtures:
+- Fake GitHub context values and a fake git runner with deterministic command
+  outputs.
+Coverage:
+- Release tags publish canonical release images.
+- Master pushes publish development images unless HEAD is already release-tagged.
+- Pull requests receive non-publishing build tags.
+- Missing required release history fails explicitly.
+Boundaries:
+- Does not use real git history, Docker, GHCR, or GitHub Actions.
+"""
 
 import unittest
 
 import sys
 from pathlib import Path
+from collections.abc import Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from resolve_image_identity import (  # noqa: E402
     ImageIdentityError,
     parse_extended_version,
+    release_please_version,
     resolve_identity,
 )
 
 
-def fake_git(outputs):
+def fake_git(outputs: dict[tuple[str, ...], str]):
     """Provide deterministic git command results to the resolver under test."""
 
-    def run(args, allow_failure=False):
+    def run(args: Sequence[str], allow_failure: bool = False) -> str:
         key = tuple(args)
         if key in outputs:
             return outputs[key]
@@ -34,6 +50,15 @@ class ResolveImageIdentityTest(unittest.TestCase):
             parse_extended_version("v0.2.0-48-gc08fdca"),
             "0.2.0-0048-gc08fdca",
         )
+
+    def test_parses_release_please_subject_with_pull_request_suffix(self):
+        self.assertEqual(
+            release_please_version("chore: release v0.6.0 (#50)"),
+            "0.6.0",
+        )
+
+    def test_ignores_non_release_please_subject(self):
+        self.assertIsNone(release_please_version("feat(game): add room options"))
 
     def test_release_tag_publishes_canonical_release_image(self):
         outputs = resolve_identity(
@@ -64,6 +89,7 @@ class ResolveImageIdentityTest(unittest.TestCase):
             fake_git(
                 {
                     ("rev-parse", "HEAD"): "c08fdcaf00d1234",
+                    ("log", "-1", "--pretty=%s"): "feat(game): add room options",
                     (
                         "describe",
                         "--tags",
@@ -106,6 +132,47 @@ class ResolveImageIdentityTest(unittest.TestCase):
         )
 
         self.assertEqual(outputs["version"], "0.3.0")
+        self.assertEqual(outputs["should_push_image"], "false")
+
+    def test_release_please_commit_does_not_publish_development_image(self):
+        outputs = resolve_identity(
+            {
+                "GITHUB_REPOSITORY": "owner/repo",
+                "GITHUB_REF_TYPE": "branch",
+                "GITHUB_REF_NAME": "master",
+                "GITHUB_EVENT_NAME": "push",
+                "GITHUB_SHA": "abc1234def5678",
+            },
+            fake_git(
+                {
+                    ("rev-parse", "HEAD"): "abc1234def5678",
+                    ("log", "-1", "--pretty=%s"): "chore: release v0.6.0 (#50)",
+                }
+            ),
+        )
+
+        self.assertEqual(outputs["version"], "0.6.0")
+        self.assertEqual(outputs["image_tag"], "ghcr.io/owner/repo:0.6.0")
+        self.assertEqual(outputs["should_push_image"], "false")
+
+    def test_release_please_commit_without_pr_suffix_does_not_publish(self):
+        outputs = resolve_identity(
+            {
+                "GITHUB_REPOSITORY": "owner/repo",
+                "GITHUB_REF_TYPE": "branch",
+                "GITHUB_REF_NAME": "master",
+                "GITHUB_EVENT_NAME": "push",
+                "GITHUB_SHA": "abc1234def5678",
+            },
+            fake_git(
+                {
+                    ("rev-parse", "HEAD"): "abc1234def5678",
+                    ("log", "-1", "--pretty=%s"): "chore: release v0.6.0",
+                }
+            ),
+        )
+
+        self.assertEqual(outputs["version"], "0.6.0")
         self.assertEqual(outputs["should_push_image"], "false")
 
     def test_pull_request_does_not_publish(self):

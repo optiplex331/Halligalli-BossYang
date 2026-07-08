@@ -1,7 +1,20 @@
-"""Provider-neutral helpers for release and deployment workflows."""
+"""Provide shared helpers for dependency-free release utility scripts.
+
+Purpose:
+- Centralize release identity validation and GitHub step-output formatting.
+Inputs:
+- Function arguments supplied by utility scripts under .github/utils.
+- Optional environment: GITHUB_OUTPUT for GitHub Actions step outputs.
+Outputs:
+- Parsed health payloads, formatted key=value output lines, or typed failures.
+Boundaries:
+- Does not resolve workflow routing or image identity.
+- Does not call the network, Docker, GitHub, Azure, or git.
+"""
 
 import json
 import os
+from typing import Any, Mapping, NoReturn, Optional
 
 
 class ReleaseUtilityError(RuntimeError):
@@ -10,15 +23,18 @@ class ReleaseUtilityError(RuntimeError):
     pass
 
 
-def fail(message):
+def fail(message: str) -> NoReturn:
     raise ReleaseUtilityError(message)
 
 
-def check_health_release_identity(body, expected):
+def check_health_release_identity(
+    body: str,
+    expected: Mapping[str, Optional[str]],
+) -> dict[str, Any]:
     """Assert that a /health response exposes the expected release identity."""
 
     try:
-        health = json.loads(body)
+        health: dict[str, Any] = json.loads(body)
     except json.JSONDecodeError:
         fail(f"Health response is not valid JSON: {body}")
 
@@ -45,11 +61,15 @@ def check_health_release_identity(body, expected):
     return health
 
 
-def append_github_outputs(outputs, output_path=None):
+def append_github_outputs(
+    outputs: Mapping[str, object],
+    output_path: Optional[str] = None,
+) -> list[str]:
     """Append step outputs in GitHub's key=value format and echo them for logs."""
 
     lines = [f"{key}={value}" for key, value in outputs.items()]
-    output_path = output_path if output_path is not None else os.environ.get("GITHUB_OUTPUT")
+    if output_path is None:
+        output_path = os.environ.get("GITHUB_OUTPUT")
 
     if output_path:
         with open(output_path, "a", encoding="utf-8") as output_file:
