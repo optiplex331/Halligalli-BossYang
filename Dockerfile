@@ -8,7 +8,6 @@ RUN npm install -g pnpm@11.0.9
 FROM base AS deps
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY server/package.json ./server/package.json
 RUN pnpm install --frozen-lockfile
 
 FROM deps AS build
@@ -19,7 +18,6 @@ RUN pnpm run build
 FROM base AS prod-deps
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY server/package.json ./server/package.json
 RUN pnpm install --frozen-lockfile --prod
 
 FROM node:24-alpine AS runtime-base
@@ -56,8 +54,3 @@ CMD ["node", "dist/server/index.js"]
 FROM runtime-base AS standalone
 
 COPY --from=build --chown=node:node /app/dist ./dist
-
-FROM runtime-base AS azure-backend
-
-COPY --from=build --chown=node:node /app/dist/server ./dist/server
-COPY --from=build --chown=node:node /app/dist/src ./dist/src

@@ -1,6 +1,5 @@
 packages:
   - .
-  - server
 
 overrides:
   engine.io: 6.6.9

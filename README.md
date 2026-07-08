@@ -20,7 +20,7 @@ Create a room, ready up with friends, flip around a server-authoritative table, 
 
 ## What It Does
 
-- **Real-time rooms**: create a 4-character room code, ready up, and race friends on one shared table.
+- **Real-time rooms**: create a 3-6 player room with a 4-character code, ready up, and race friends on one shared table.
 - **Halligalli race loop**: flip cards, read the visible fruit count, and compete for the exact-five hit.
 - **Table-true rules**: clockwise flips, top-card-only counting, exact-five bell windows.
 - **Server authority**: multiplayer clients emit intent; the server owns flips, scoring, and match finish.
@@ -34,6 +34,7 @@ Independent browser project; not affiliated with any commercial card-game publis
 
 ```bash
 node --version       # v24.x
+pnpm --version       # 11.x
 pnpm install
 pnpm run dev         # Vite dev server on :5173
 pnpm run dev:server  # socket.io server on :3001, in a second terminal
@@ -41,7 +42,7 @@ pnpm run dev:server  # socket.io server on :3001, in a second terminal
 
 Open http://localhost:5173.
 
-Single-player works with only `pnpm run dev`. Multiplayer needs `pnpm run dev:server`.
+Single-player works with only `pnpm run dev`. Multiplayer needs `pnpm run dev:server`; Vite proxies `/socket.io` to `http://localhost:3001`, so local browsers should still open the Vite origin at `http://localhost:5173`.
 
 ## Commands
 
@@ -49,23 +50,20 @@ Single-player works with only `pnpm run dev`. Multiplayer needs `pnpm run dev:se
 pnpm run test
 pnpm run typecheck
 pnpm run build
-pnpm start
+pnpm start          # after pnpm run build
+pnpm run simulate:bell
 ```
 
-Container checks:
-
-```bash
-docker build -t halligalli-arena:local .
-docker run --rm -p 3001:3001 halligalli-arena:local
-curl --fail http://localhost:3001/readyz
-```
-
-For a local all-in-one image that serves the built frontend and socket.io from one Node process:
+Standalone container check:
 
 ```bash
 docker build --target standalone -t halligalli-arena:standalone .
 docker run --rm -p 3001:3001 halligalli-arena:standalone
+curl --fail http://localhost:3001/readyz
+curl --fail http://localhost:3001/health
 ```
+
+The standalone image serves the built frontend and socket.io from one Node process. The historical backend-only Docker target has been removed because Container Apps-backed Azure Production is not an active fallback path.
 
 ## Rules Model
 
@@ -73,11 +71,13 @@ Cards flip clockwise around the table. Each player has a face-up pile, but only 
 
 Ring when one fruit totals exactly five across visible top cards.
 
+Solo and multiplayer both use the supported 3-6 player layouts. The default is 4 players; multiplayer rooms can be created for 3, 4, 5, or 6 players, and the server rejects starting a match while only 2 players are present.
+
 | Event | Points |
 |---|---:|
 | Correct ring base | +120 |
 | Collected cards | +6 per card |
-| Speed bonus | up to +~50 |
+| Speed bonus | difficulty window, up to ~95 / ~75 / ~50 |
 | Consecutive streak | +10 per hit in current streak |
 | Wrong ring | -50 |
 | Penalty cards paid | -4 per card |
@@ -85,9 +85,9 @@ Ring when one fruit totals exactly five across visible top cards.
 
 | Mode | Flip speed | Speed-bonus window |
 |---|---:|---|
-| Easy | ~1.85 s | generous |
-| Normal | ~1.4 s | standard |
-| Boss | ~900 ms | tight |
+| Easy | ~1.85 s | ~1.9 s |
+| Normal | ~1.4 s | ~1.5 s |
+| Boss Mode | ~900 ms | ~1.0 s |
 
 ## Project Shape
 
@@ -112,6 +112,7 @@ docs/operations/            # release, Azure, and rollback docs
 - React 19 + Vite 8 + TypeScript + plain CSS.
 - Node.js 24 + socket.io 4.
 - Browser progress stays in `localStorage`.
+- Local multiplayer development uses same-origin socket.io through the Vite `/socket.io` proxy; `VITE_HALLIGALLI_BACKEND_URL` is only for deliberate split-origin runs.
 - No account system, database, router, state library, or CSS framework.
 - Stable visible copy stays bilingual in Chinese and English.
 - New animations must respect `prefers-reduced-motion`.
@@ -136,17 +137,17 @@ Container Apps-backed Azure Production is historical after cutover; its Terrafor
 - Azure infrastructure: AKS and GitOps desired state are operated from the infrastructure repo
 - Historical Azure Production: docs-only Static Web Apps plus Container Apps record
 - Kubernetes production render surface: infrastructure-owned chart, values, and Argo CD Application
-- Health check: `/health`
-- Readiness check: `/readyz`
+- Health check: `/health` returns `status`, active `rooms`, `version`, and `commit`
+- Readiness check: `/readyz` returns `status: "ready"`
 
-The first Container Apps-backed Azure Production activation has been verified historically. Current production language should use Azure Kubernetes Production; old Container Apps resources should be inspected or destroyed only through deliberate local infrastructure operations.
+The first Container Apps-backed Azure Production activation has been verified historically. Current production language should use Azure Kubernetes Production; Container Apps reactivation or further infrastructure cleanup requires an explicit future decision and the infrastructure repo runbooks.
 
 Operations docs:
 
+- [Operations](docs/operations/README.md)
 - [CI/CD](docs/operations/ci-cd.md)
 - [Azure Production History](docs/operations/azure-production.md)
 - [Kubernetes](docs/operations/kubernetes.md)
-- [Standalone Release Image Migration Plan](docs/operations/standalone-release-image-migration.md)
 - [Rollback](docs/operations/rollback.md)
 
 ## Contributing
