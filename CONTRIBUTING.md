@@ -5,12 +5,14 @@ Thanks for taking a look at Halligalli Arena. This project is intentionally smal
 ## Local Setup
 
 ```bash
+node --version       # >=24.0.0 <25
+pnpm --version       # >=11.0.9
 pnpm install
-pnpm run dev
-pnpm run dev:server
+pnpm run dev         # Vite on :5173
+pnpm run dev:server  # socket.io server on :3001, in a second terminal
 ```
 
-Open http://localhost:5173.
+Open http://localhost:5173. Local multiplayer should still use the Vite origin; `vite.config.ts` proxies `/socket.io` to the server on `:3001`.
 
 ## Checks
 
@@ -28,6 +30,7 @@ pnpm run build
 - Keep stable visible copy bilingual in `COPY.zh` and `COPY.en`.
 - Do not add a router, state library, CSS framework, Express, or a database for normal gameplay changes.
 - Multiplayer clients should emit intent only; scoring and match authority stay on the server.
+- Multiplayer room settings and docs should stay aligned with the supported 3-6 player layouts; the server rejects 2-player starts even if a lobby exists.
 - New `localStorage` keys need normalization and persistence tests.
 - Preserve keyboard, screen-reader, mobile touch-target, and `prefers-reduced-motion` behavior.
 - Keep `docs/operations/kubernetes.md` aligned when changing the standalone container or production-facing runtime contract.

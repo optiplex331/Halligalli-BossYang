@@ -15,7 +15,23 @@ curl --fail http://localhost:3001/readyz
 curl --fail http://localhost:3001/health
 ```
 
+The Dockerfile final target is the standalone image. Use `--target standalone` in production-facing validation for clarity and to match the container workflow.
+
 For active production, Release Tags build, scan, and publish immutable standalone GHCR images. The infrastructure repo then selects a reviewed image digest in Azure Kubernetes Desired State.
+
+## Runtime Environment
+
+The standalone server defaults are intentionally small:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `3001` | HTTP, `/readyz`, `/health`, static frontend, and socket.io listener. |
+| `APP_VERSION` | `local` | Human-readable release version reported by `/health`. Release images receive this from the workflow build args. |
+| `COMMIT_SHA` | `unknown` | Release commit reported by `/health`. If unset, the server falls back to `GITHUB_SHA` when present. |
+| `HALLIGALLI_ALLOWED_ORIGINS` | unset | Optional comma-separated socket.io CORS allow-list for deliberate split-origin runs. Active AKS same-origin production leaves this unset. |
+| `HALLIGALLI_DIST_DIR` | auto-detected `dist` | Optional static asset root override for local or test runs. |
+
+`/readyz` returns `{"status":"ready"}`. `/health` returns `status`, active `rooms`, `version`, and `commit`; rollback verification should check both the endpoint status and the expected release identity.
 
 ## Same-Origin Traffic
 

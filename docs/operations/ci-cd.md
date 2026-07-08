@@ -56,6 +56,8 @@ The `Container` workflow builds and scans the Dockerfile `standalone` target for
 
 Container Apps backend-only images are historical after the AKS cutover. The canonical `ghcr.io/<owner>/<repo>:X.Y.Z` Release Image now means the standalone AKS image.
 
+This is the completed standalone release-image migration. Before cutover, the same canonical tag identified a backend-only Container Apps image because the Dockerfile's final target was `azure-backend`. After cutover, the workflow explicitly builds `--target standalone`, and the historical backend-only target has been removed; any future legacy backend artifact must use a separately named identity instead of overloading the canonical release tag.
+
 Pull request runs do not publish images.
 
 When the trigger is a normal `master` push that includes product runtime changes, the workflow publishes a Development GHCR Image tagged from the latest Release Tag, first-parent commit distance, and short commit hash:
@@ -76,6 +78,17 @@ ghcr.io/<owner>/<repo>:X.Y.Z
 
 It does not publish `latest`. Azure Kubernetes Desired State should resolve the selected GHCR standalone Release Image to a digest before Argo CD sync. Historical Container Apps backend deployment is not a maintained path after AKS cutover.
 
+The active digest handoff is:
+
+1. Merge a Release PR.
+2. Release Please creates `vX.Y.Z`.
+3. The `Container` workflow builds, scans, and pushes `ghcr.io/<owner>/<repo>:X.Y.Z` from the `standalone` target.
+4. The workflow records the pushed `sha256:<digest>`.
+5. A reviewed infrastructure repo change pins that digest in Azure Kubernetes Desired State.
+6. Argo CD reconciles the desired state into AKS.
+
+The tag remains human-readable release context. The digest is the deployment selector.
+
 ## Branch Protection
 
 The protected `master` ruleset should require:
@@ -90,7 +103,6 @@ Do not add separate required checks for release metadata or Azure deployment. Ac
 Dependabot opens weekly PRs against `master` for:
 
 - root pnpm dependencies
-- `server/` pnpm dependencies
 - GitHub Actions
 
 Dependabot does not auto-merge and does not bypass PR checks.

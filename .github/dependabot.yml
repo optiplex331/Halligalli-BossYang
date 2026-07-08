@@ -18,20 +18,6 @@ updates:
         patterns:
           - "*"
 
-  - package-ecosystem: npm
-    directory: /server
-    target-branch: master
-    schedule:
-      interval: weekly
-      day: monday
-      time: "09:30"
-      timezone: Europe/Amsterdam
-    open-pull-requests-limit: 2
-    groups:
-      server-dependencies:
-        patterns:
-          - "*"
-
   - package-ecosystem: github-actions
     directory: /
     target-branch: master
