@@ -44,6 +44,7 @@ import {
   totalTableCards,
   visibleTotals,
 } from "./game/rules.js";
+import { FRUITS, MODES } from "./game/catalog.js";
 import { clearGameLoopHandles } from "./game/lifecycle.js";
 import { connectSocket, disconnectSocket, getSocket } from "./multiplayer/socket.js";
 import { useMultiplayerSocket } from "./multiplayer/useMultiplayerSocket.js";
@@ -55,7 +56,6 @@ import type {
   Card,
   DailyGoal,
   Difficulty,
-  FruitDefinition,
   FruitKey,
   GameSettings,
   HistoryEntry,
@@ -122,13 +122,6 @@ interface GameSnapshot extends RoundSnapshot {
   maxStreak: number;
 }
 
-const FRUITS = [
-  { key: "banana", label: "香蕉", labelEn: "banana", icon: "🍌" },
-  { key: "strawberry", label: "草莓", labelEn: "strawberry", icon: "🍓" },
-  { key: "lemon", label: "柠檬", labelEn: "lemon", icon: "🍋" },
-  { key: "grape", label: "葡萄", labelEn: "grape", icon: "🍇" },
-] as const satisfies readonly FruitDefinition[];
-
 const PIP_LAYOUTS = {
   1: ["center"],
   2: ["mid-left", "mid-right"],
@@ -136,34 +129,6 @@ const PIP_LAYOUTS = {
   4: ["top-left", "top-right", "bottom-left", "bottom-right"],
   5: ["top-left", "top-right", "center", "bottom-left", "bottom-right"],
 } as const satisfies Record<number, readonly string[]>;
-
-const MODES = {
-  easy: {
-    label: "简单",
-    labelEn: "Easy",
-    revealMs: 1850,
-    scoreBonusWindow: 1900,
-  },
-  normal: {
-    label: "标准",
-    labelEn: "Normal",
-    revealMs: 1400,
-    scoreBonusWindow: 1500,
-  },
-  hard: {
-    label: "Boss模式",
-    labelEn: "Boss Mode",
-    revealMs: 900,
-    scoreBonusWindow: 1000,
-    isBoss: true,
-  },
-} as const satisfies Record<Difficulty, {
-  label: string;
-  labelEn: string;
-  revealMs: number;
-  scoreBonusWindow: number;
-  isBoss?: boolean;
-}>;
 
 const MODE_ENTRIES = Object.entries(MODES) as Array<[Difficulty, (typeof MODES)[Difficulty]]>;
 const HISTORY_TABS: ActiveTab[] = ["recent", "trend", "achievements"];
