@@ -9,13 +9,14 @@ import {
   getTopCard,
   calcAccuracy,
 } from "../src/game/rules.js";
+import { FRUITS, MODES } from "../src/game/catalog.js";
 import type {
   BellState,
   Difficulty,
-  FruitDefinition,
   PlayerState,
   ScoreBreakdown,
 } from "../src/game/types.js";
+import type { GameModeConfig } from "../src/game/catalog.js";
 import type {
   CorrectBellResultPayload,
   GameBellResultPayload,
@@ -27,19 +28,6 @@ import type {
   MultiplayerResults,
   WrongBellResultPayload,
 } from "../src/multiplayer/protocol.js";
-
-const FRUITS: readonly FruitDefinition[] = [
-  { key: "banana", label: "香蕉", labelEn: "banana", icon: "🍌" },
-  { key: "strawberry", label: "草莓", labelEn: "strawberry", icon: "🍓" },
-  { key: "lemon", label: "柠檬", labelEn: "lemon", icon: "🍋" },
-  { key: "grape", label: "葡萄", labelEn: "grape", icon: "🍇" },
-];
-
-interface ModeConfig {
-  revealMs: number;
-  scoreBonusWindow: number;
-  isBoss: boolean;
-}
 
 interface PlayerStats {
   score: number;
@@ -66,14 +54,8 @@ type GameEngineEmitter = <EventName extends keyof GameEngineEventMap>(
   data: GameEngineEventMap[EventName],
 ) => void;
 
-const MODES: Record<Difficulty, ModeConfig> = {
-  easy: { revealMs: 1850, scoreBonusWindow: 1900, isBoss: false },
-  normal: { revealMs: 1400, scoreBonusWindow: 1500, isBoss: false },
-  hard: { revealMs: 900, scoreBonusWindow: 1000, isBoss: true },
-};
-
 export class GameEngine {
-  private mode: ModeConfig;
+  private mode: GameModeConfig;
   private players: PlayerState[] = [];
   private currentTurn = 0;
   private secondsLeft: number;

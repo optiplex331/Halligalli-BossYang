@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getLocalCorrectBellReactionMs } from "./projection.js";
+import { getLocalCorrectBellReactionMs, projectBellResult } from "./projection.js";
 import type { GameBellResultPayload } from "./protocol.js";
 
 const topCards: GameBellResultPayload["topCards"] = [null, null, null];
@@ -51,5 +51,26 @@ describe("multiplayer socket projection", () => {
         1,
       ),
     ).toBeNull();
+  });
+
+  it("projects a local wrong bell without assigning client authority", () => {
+    expect(
+      projectBellResult(
+        {
+          type: "wrong",
+          playerId: 1,
+          penaltyCount: 2,
+          bellAvailable: true,
+          bellFruitKey: "grape",
+          topCards,
+        },
+        1,
+      ),
+    ).toEqual({
+      topCards,
+      currentTurn: null,
+      bellState: { available: true, fruitKey: "grape" },
+      localOutcome: { type: "wrong", penaltyCount: 2 },
+    });
   });
 });

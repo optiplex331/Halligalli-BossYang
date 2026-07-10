@@ -44,7 +44,12 @@ import {
   totalTableCards,
   visibleTotals,
 } from "./game/rules.js";
-import { clearGameLoopHandles } from "./game/lifecycle.js";
+import { FRUITS, MODES } from "./game/catalog.js";
+import {
+  clearGameLoopHandles,
+  finishSinglePlayerMatch,
+  resolveSinglePlayerBell,
+} from "./game/lifecycle.js";
 import { connectSocket, disconnectSocket, getSocket } from "./multiplayer/socket.js";
 import { useMultiplayerSocket } from "./multiplayer/useMultiplayerSocket.js";
 import { useAudioEngine } from "./audio/useAudioEngine.js";
@@ -55,7 +60,6 @@ import type {
   Card,
   DailyGoal,
   Difficulty,
-  FruitDefinition,
   FruitKey,
   GameSettings,
   HistoryEntry,
@@ -122,13 +126,6 @@ interface GameSnapshot extends RoundSnapshot {
   maxStreak: number;
 }
 
-const FRUITS = [
-  { key: "banana", label: "香蕉", labelEn: "banana", icon: "🍌" },
-  { key: "strawberry", label: "草莓", labelEn: "strawberry", icon: "🍓" },
-  { key: "lemon", label: "柠檬", labelEn: "lemon", icon: "🍋" },
-  { key: "grape", label: "葡萄", labelEn: "grape", icon: "🍇" },
-] as const satisfies readonly FruitDefinition[];
-
 const PIP_LAYOUTS = {
   1: ["center"],
   2: ["mid-left", "mid-right"],
@@ -136,34 +133,6 @@ const PIP_LAYOUTS = {
   4: ["top-left", "top-right", "bottom-left", "bottom-right"],
   5: ["top-left", "top-right", "center", "bottom-left", "bottom-right"],
 } as const satisfies Record<number, readonly string[]>;
-
-const MODES = {
-  easy: {
-    label: "简单",
-    labelEn: "Easy",
-    revealMs: 1850,
-    scoreBonusWindow: 1900,
-  },
-  normal: {
-    label: "标准",
-    labelEn: "Normal",
-    revealMs: 1400,
-    scoreBonusWindow: 1500,
-  },
-  hard: {
-    label: "Boss模式",
-    labelEn: "Boss Mode",
-    revealMs: 900,
-    scoreBonusWindow: 1000,
-    isBoss: true,
-  },
-} as const satisfies Record<Difficulty, {
-  label: string;
-  labelEn: string;
-  revealMs: number;
-  scoreBonusWindow: number;
-  isBoss?: boolean;
-}>;
 
 const MODE_ENTRIES = Object.entries(MODES) as Array<[Difficulty, (typeof MODES)[Difficulty]]>;
 const HISTORY_TABS: ActiveTab[] = ["recent", "trend", "achievements"];
@@ -1140,85 +1109,48 @@ function App() {
       return;
     }
 
-    const snapshot = gameStateRef.current;
-    const bell = bellStateRef.current;
+    const resolution = resolveSinglePlayerBell({
+      state: { ...gameStateRef.current, streak },
+      bellState: bellStateRef.current,
+      userSeatId: gameStateRef.current.userSeatId,
+      mode,
+      now: Date.now(),
+    });
+    const next = resolution.state;
+    bellStateRef.current = resolution.bellState;
+    setPlayers(next.players);
+    setCurrentTurn(next.currentTurn);
+    setActingPlayer(next.actingPlayer);
+    setActiveBellFruit(resolution.bellState.fruitKey);
+    setScore(next.score);
+    setScoreBreakdown(next.scoreBreakdown);
+    setCorrectHits(next.correctHits);
+    setWrongHits(next.wrongHits);
+    setReactionTimes(next.reactionTimes);
+    setStreak(next.streak);
+    setMaxStreak(next.maxStreak);
 
-    if (bell.available && !bell.handled) {
-      const reactionMs = Date.now() - bell.startedAt;
-      const { players: nextPlayers, collectedCount } = collectFaceUpCards(
-        snapshot.players,
-        snapshot.userSeatId,
-      );
-      const speedBonus = Math.max(
-        0,
-        Math.round((mode.scoreBonusWindow - reactionMs) / 20),
-      );
-      const streakBonus = streak * 10;
-      const earned = 120 + collectedCount * 6 + speedBonus + streakBonus;
-
-      bellStateRef.current = {
-        ...bell,
-        handled: true,
-      };
-      setPlayers(nextPlayers);
-      setCurrentTurn(snapshot.userSeatId);
-      setActingPlayer(snapshot.userSeatId);
-      setActiveBellFruit(null);
-      setScore((value) => value + earned);
-      setScoreBreakdown((value) => ({
-        ...value,
-        correctBase: value.correctBase + 120,
-        collectionBonus: value.collectionBonus + collectedCount * 6,
-        speedBonus: value.speedBonus + speedBonus,
-        streakBonus: value.streakBonus + streakBonus,
-      }));
-      setCorrectHits((value) => value + 1);
-      setReactionTimes((value) => [...value, reactionMs]);
-      setStreak((value) => value + 1);
-      setMaxStreak((value) => Math.max(value, streak + 1));
+    if (resolution.kind === "correct") {
       updateFeedback(
         "success",
-        t("bellSuccess", { count: collectedCount }),
+        t("bellSuccess", { count: resolution.collectedCount }),
       );
       playFeedbackSound("success");
-      applyBellAvailability(nextPlayers);
       triggerBellPress();
       spawnBellParticles();
       triggerCollectAnimation();
       return;
     }
-
-    const tableCount = totalTableCards(snapshot.players);
-    const penaltyTarget = Math.ceil(tableCount / 2);
-    const nextPlayers = clonePlayers(snapshot.players);
-    const penaltyPlayer = nextPlayers[snapshot.userSeatId];
-    if (!penaltyPlayer) {
-      return;
-    }
-    const penaltyResult = takePenaltyCards(penaltyPlayer, penaltyTarget);
-
-    nextPlayers[snapshot.userSeatId] = penaltyResult.player;
-
-    setPlayers(nextPlayers);
-    setWrongHits((value) => value + 1);
-    setScore((value) => Math.max(0, value - 50 - penaltyResult.penaltyCount * 4));
-    setScoreBreakdown((value) => ({
-      ...value,
-      wrongPenalty: value.wrongPenalty + 50,
-      cardPenalty: value.cardPenalty + penaltyResult.penaltyCount * 4,
-    }));
-    setStreak(0);
     updateFeedback(
       "error",
-      penaltyResult.penaltyCount
-        ? t("bellPenalty", { count: penaltyResult.penaltyCount })
+      resolution.penaltyCount
+        ? t("bellPenalty", { count: resolution.penaltyCount })
         : t("bellPenaltyNone"),
     );
-    if (penaltyResult.penaltyCount) {
-      showPenalty(penaltyResult.penaltyCount);
+    if (resolution.penaltyCount) {
+      showPenalty(resolution.penaltyCount);
     }
     playFeedbackSound("penalty");
-    applyBellAvailability(nextPlayers);
     triggerBellPress();
   }
 
@@ -1229,12 +1161,13 @@ function App() {
 
     gameRunningRef.current = false;
     stopGameLoops();
-    const pendingResolution = reconcilePendingBellWindow(
+    const lifecycleResult = finishSinglePlayerMatch(
       gameStateRef.current,
       bellStateRef.current,
     );
+    const { pendingResolution } = lifecycleResult;
     const resolvedSnapshot = pendingResolution.snapshot;
-    const summary = normalizeSummary(createRoundSummary(resolvedSnapshot));
+    const summary = normalizeSummary(lifecycleResult.summary);
 
     if (pendingResolution.missed) {
       setMissedHits(resolvedSnapshot.missedHits);
@@ -1294,12 +1227,7 @@ function App() {
       setAchievementQueue((q) => [...q, ...newlyUnlocked]);
     }
 
-    bellStateRef.current = {
-      available: false,
-      fruitKey: null,
-      startedAt: 0,
-      handled: true,
-    };
+    bellStateRef.current = lifecycleResult.bellState;
     gameStateRef.current = {
       ...gameStateRef.current,
       ...resolvedSnapshot,

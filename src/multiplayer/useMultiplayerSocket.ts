@@ -3,7 +3,7 @@ import { getSocket } from "./socket.js";
 import { DAILY_TARGET_ROUNDS, INITIAL_BREAKDOWN } from "../game/constants.js";
 import { getSeatLayouts } from "../game/rules.js";
 import { appendHistoryEntry, saveDailyGoal } from "../game/persistence.js";
-import { getLocalCorrectBellReactionMs } from "./projection.js";
+import { projectBellResult } from "./projection.js";
 import type { Language, PlayerState, ScoreBreakdown } from "../game/types.js";
 import type {
   GameBellResultPayload,
@@ -143,24 +143,26 @@ export function useMultiplayerSocket({
     }
 
     function onBellResult(data: GameBellResultPayload) {
+      const projection = projectBellResult(data, mySeatIndex);
+      a().setPlayers((prev: PlayerState[]) =>
+        prev.map((p: PlayerState, i: number) => ({
+          ...p,
+          faceUpPile: projection.topCards[i] ? [projection.topCards[i]] : [],
+        })),
+      );
+
       if (data.type === "correct") {
-        a().setPlayers((prev: PlayerState[]) =>
-          prev.map((p: PlayerState, i: number) => ({
-            ...p,
-            faceUpPile: data.topCards[i] ? [data.topCards[i]] : [],
-          })),
-        );
-        a().setCurrentTurn(data.winnerId);
+        a().setCurrentTurn(projection.currentTurn ?? data.winnerId);
         a().setActiveBellFruit(null);
         a().bellStateRef.current = { available: false, fruitKey: null, startedAt: 0, handled: true };
 
-        const reactionMs = getLocalCorrectBellReactionMs(data, mySeatIndex);
-        if (reactionMs !== null) {
-          a().setScore((v: number) => v + data.earned);
+        const localOutcome = projection.localOutcome;
+        if (localOutcome?.type === "correct") {
+          a().setScore((v: number) => v + localOutcome.earned);
           a().setCorrectHits((v: number) => v + 1);
-          a().setReactionTimes((v: number[]) => [...v, reactionMs]);
+          a().setReactionTimes((v: number[]) => [...v, localOutcome.reactionMs]);
           a().setStreak((v: number) => v + 1);
-          a().updateFeedback("success", a().t("bellSuccess", { count: data.collectedCount }));
+          a().updateFeedback("success", a().t("bellSuccess", { count: localOutcome.collectedCount }));
           a().playFeedbackSound("success");
           a().spawnBellParticles();
         } else {
@@ -174,39 +176,33 @@ export function useMultiplayerSocket({
         a().triggerBellPress();
         a().triggerCollectAnimation();
       } else if (data.type === "wrong") {
-        a().setPlayers((prev: PlayerState[]) =>
-          prev.map((p: PlayerState, i: number) => ({
-            ...p,
-            faceUpPile: data.topCards[i] ? [data.topCards[i]] : [],
-          })),
-        );
-
-        if (data.bellAvailable) {
+        if (projection.bellState.available) {
           a().bellStateRef.current = {
             available: true,
-            fruitKey: data.bellFruitKey,
+            fruitKey: projection.bellState.fruitKey,
             startedAt: Date.now(),
             handled: false,
           };
-          a().setActiveBellFruit(data.bellFruitKey);
+          a().setActiveBellFruit(projection.bellState.fruitKey);
         }
 
-        if (data.playerId === mySeatIndex) {
+        const localOutcome = projection.localOutcome;
+        if (localOutcome?.type === "wrong") {
           a().setWrongHits((v: number) => v + 1);
-          a().setScore((v: number) => Math.max(0, v - 50 - data.penaltyCount * 4));
+          a().setScore((v: number) => Math.max(0, v - 50 - localOutcome.penaltyCount * 4));
           a().setScoreBreakdown((v: ScoreBreakdown) => ({
             ...v,
             wrongPenalty: v.wrongPenalty + 50,
-            cardPenalty: v.cardPenalty + data.penaltyCount * 4,
+            cardPenalty: v.cardPenalty + localOutcome.penaltyCount * 4,
           }));
           a().setStreak(0);
           a().updateFeedback(
             "error",
-            data.penaltyCount
-              ? a().t("bellPenalty", { count: data.penaltyCount })
+            localOutcome.penaltyCount
+              ? a().t("bellPenalty", { count: localOutcome.penaltyCount })
               : a().t("bellPenaltyNone"),
           );
-          if (data.penaltyCount) a().showPenalty(data.penaltyCount);
+          if (localOutcome.penaltyCount) a().showPenalty(localOutcome.penaltyCount);
           a().playFeedbackSound("penalty");
         } else {
           const penaltyName =
