@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.6.0](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.5.1...v0.6.0) (2026-07-10)
+
+
+### Features
+
+* **platform:** prepare attested GitOps release baseline ([016f380](https://github.com/optiplex331/Halligalli-BossYang/commit/016f380edf44f39fa3fea19713171b02d9015b3c))
+* **release:** publish attestation release assets ([e108ef5](https://github.com/optiplex331/Halligalli-BossYang/commit/e108ef5995793199a1a2561902e19fbffd6e4117))
+* **release:** publish release attestation ([26cfcc0](https://github.com/optiplex331/Halligalli-BossYang/commit/26cfcc0fa93924e9b375c41dceda11b48f5d9c8d))
+
+
+### Bug Fixes
+
+* **ci:** align release utility routing and image identity ([d655207](https://github.com/optiplex331/Halligalli-BossYang/commit/d6552074d2a4b440d659b0ab322db52684257bf7))
+* **ci:** align release utility routing and image identity ([a160577](https://github.com/optiplex331/Halligalli-BossYang/commit/a16057709b53a4dfcc2ca71529d6a8482292f3a1))
+* **multiplayer:** narrow projected bell outcomes ([396a5cc](https://github.com/optiplex331/Halligalli-BossYang/commit/396a5cc1ea8e2b10feb57f91601c017a1e639e5f))
+
 ## [0.5.1](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.5.0...v0.5.1) (2026-06-21)
 
 
