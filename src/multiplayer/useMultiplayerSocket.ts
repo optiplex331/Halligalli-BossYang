@@ -156,12 +156,13 @@ export function useMultiplayerSocket({
         a().setActiveBellFruit(null);
         a().bellStateRef.current = { available: false, fruitKey: null, startedAt: 0, handled: true };
 
-        if (projection.localOutcome?.type === "correct") {
-          a().setScore((v: number) => v + projection.localOutcome.earned);
+        const localOutcome = projection.localOutcome;
+        if (localOutcome?.type === "correct") {
+          a().setScore((v: number) => v + localOutcome.earned);
           a().setCorrectHits((v: number) => v + 1);
-          a().setReactionTimes((v: number[]) => [...v, projection.localOutcome.reactionMs]);
+          a().setReactionTimes((v: number[]) => [...v, localOutcome.reactionMs]);
           a().setStreak((v: number) => v + 1);
-          a().updateFeedback("success", a().t("bellSuccess", { count: projection.localOutcome.collectedCount }));
+          a().updateFeedback("success", a().t("bellSuccess", { count: localOutcome.collectedCount }));
           a().playFeedbackSound("success");
           a().spawnBellParticles();
         } else {
@@ -185,22 +186,23 @@ export function useMultiplayerSocket({
           a().setActiveBellFruit(projection.bellState.fruitKey);
         }
 
-        if (projection.localOutcome?.type === "wrong") {
+        const localOutcome = projection.localOutcome;
+        if (localOutcome?.type === "wrong") {
           a().setWrongHits((v: number) => v + 1);
-          a().setScore((v: number) => Math.max(0, v - 50 - projection.localOutcome.penaltyCount * 4));
+          a().setScore((v: number) => Math.max(0, v - 50 - localOutcome.penaltyCount * 4));
           a().setScoreBreakdown((v: ScoreBreakdown) => ({
             ...v,
             wrongPenalty: v.wrongPenalty + 50,
-            cardPenalty: v.cardPenalty + projection.localOutcome.penaltyCount * 4,
+            cardPenalty: v.cardPenalty + localOutcome.penaltyCount * 4,
           }));
           a().setStreak(0);
           a().updateFeedback(
             "error",
-            projection.localOutcome.penaltyCount
-              ? a().t("bellPenalty", { count: projection.localOutcome.penaltyCount })
+            localOutcome.penaltyCount
+              ? a().t("bellPenalty", { count: localOutcome.penaltyCount })
               : a().t("bellPenaltyNone"),
           );
-          if (projection.localOutcome.penaltyCount) a().showPenalty(projection.localOutcome.penaltyCount);
+          if (localOutcome.penaltyCount) a().showPenalty(localOutcome.penaltyCount);
           a().playFeedbackSound("penalty");
         } else {
           const penaltyName =
