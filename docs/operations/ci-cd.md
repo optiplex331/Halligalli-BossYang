@@ -76,18 +76,21 @@ When the trigger is a `vX.Y.Z` tag, the workflow publishes the release image ide
 ghcr.io/<owner>/<repo>:X.Y.Z
 ```
 
-It does not publish `latest`. Azure Kubernetes Desired State should resolve the selected GHCR standalone Release Image to a digest before Argo CD sync. Historical Container Apps backend deployment is not a maintained path after AKS cutover.
+It does not publish `latest`. After the image push resolves an immutable digest, the workflow writes `release-attestation.json` with the Release Tag, release commit, standalone image repository and tag, digest, and runtime identity. A tag-only job uploads that file to the existing GitHub Release as a public Release asset. Workflow reruns reuse an identical asset and fail if the same asset name already contains different evidence; they never overwrite it.
+
+Azure Kubernetes Desired State should consume the Release Attestation and independently verify the selected GHCR standalone Release Image before Argo CD sync. Historical Container Apps backend deployment is not a maintained path after AKS cutover.
 
 The active digest handoff is:
 
 1. Merge a Release PR.
 2. Release Please creates `vX.Y.Z`.
 3. The `Container` workflow builds, scans, and pushes `ghcr.io/<owner>/<repo>:X.Y.Z` from the `standalone` target.
-4. The workflow records the pushed `sha256:<digest>`.
-5. A reviewed infrastructure repo change pins that digest in Azure Kubernetes Desired State.
-6. Argo CD reconciles the desired state into AKS.
+4. The workflow records the pushed `sha256:<digest>` and publishes `release-attestation.json` on the GitHub Release.
+5. The Infrastructure Repo pulls the public asset, verifies tag, commit, digest, `/readyz`, and `/health`, then creates or updates one Draft promotion PR.
+6. A human reviews and merges the Infrastructure Repo promotion PR.
+7. Argo CD reconciles the reviewed desired state into AKS.
 
-The tag remains human-readable release context. The digest is the deployment selector.
+The Child Repo has no Infrastructure write credential. The tag remains human-readable release context, the digest is the deployment selector, and the Infrastructure Repo remains the owner of production intent.
 
 ## Branch Protection
 
