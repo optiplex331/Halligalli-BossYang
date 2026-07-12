@@ -15,13 +15,17 @@ from pydantic import Field
 from .authority import (
     ApiModel,
     AdvanceTurn,
+    AdvancePostMatch,
     AuthorityError,
     Bell,
     CreateRoom,
     EntryResult,
+    ContinueMatch,
+    Forfeit,
     JoinRoom,
     MultiplayerAuthority,
     Ready,
+    Leave,
     RedisMultiplayerAuthority,
     RoomSnapshot,
     Start,
@@ -48,7 +52,8 @@ class WebSocketAuthentication(ApiModel):
 
 
 class WebSocketRoomCommand(ApiModel):
-    type: Literal["ready", "start", "bell"]
+    type: Literal["ready", "start", "bell", "leave", "forfeit", "continue", "post_match_leave"]
+    command_id: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 class RoomSocketHub:
@@ -101,10 +106,16 @@ def _room_command(payload: WebSocketRoomCommand, credential: str):
     verifier = credential_verifier(credential)
     now_ms = time.time_ns() // 1_000_000
     if payload.type == "ready":
-        return Ready(verifier)
+        return Ready(verifier, payload.command_id)
     if payload.type == "start":
-        return Start(verifier, now_ms=now_ms)
-    return Bell(verifier, now_ms=now_ms)
+        return Start(verifier, now_ms=now_ms, command_id=payload.command_id)
+    if payload.type == "bell":
+        return Bell(verifier, now_ms=now_ms, command_id=payload.command_id)
+    if payload.type == "leave":
+        return Leave(verifier, payload.command_id)
+    if payload.type == "forfeit":
+        return Forfeit(verifier, now_ms=now_ms, command_id=payload.command_id)
+    return ContinueMatch(verifier, payload.type == "continue", payload.command_id)
 
 
 def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
@@ -126,8 +137,27 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
             await hub.publish(room_code, selected_authority)
             if result.snapshot.phase == "playing" and result.snapshot.turn_deadline_at is not None:
                 schedule_turn(room_code, result.snapshot.turn_deadline_at)
+            elif result.snapshot.phase == "post_match" and result.snapshot.post_match_deadline_at is not None:
+                schedule_post_match(room_code, result.snapshot.post_match_deadline_at)
 
         task = asyncio.create_task(advance_when_due())
+        deadline_tasks.add(task)
+        task.add_done_callback(deadline_tasks.discard)
+
+    def schedule_post_match(room_code: str, deadline_at: int) -> None:
+        async def close_when_due() -> None:
+            delay_seconds = max(0, deadline_at - (time.time_ns() // 1_000_000)) / 1_000
+            await asyncio.sleep(delay_seconds)
+            try:
+                await selected_authority.execute(
+                    room_code,
+                    AdvancePostMatch(now_ms=time.time_ns() // 1_000_000, command_id=f"deadline:{deadline_at}"),
+                )
+            except AuthorityError:
+                return
+            await hub.publish(room_code, selected_authority)
+
+        task = asyncio.create_task(close_when_due())
         deadline_tasks.add(task)
         task.add_done_callback(deadline_tasks.discard)
 
@@ -273,6 +303,8 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
                 await hub.publish(canonical_room_code, app.state.authority)
                 if command_payload.type == "start" and result.snapshot.turn_deadline_at is not None:
                     schedule_turn(canonical_room_code, result.snapshot.turn_deadline_at)
+                if result.snapshot.phase == "post_match" and result.snapshot.post_match_deadline_at is not None:
+                    schedule_post_match(canonical_room_code, result.snapshot.post_match_deadline_at)
         except (AuthorityError, ValueError):
             await websocket.close(code=1008)
         except WebSocketDisconnect:

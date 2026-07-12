@@ -107,6 +107,11 @@ export interface components {
         };
         /** ParticipantSnapshot */
         ParticipantSnapshot: {
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
             /** Name */
             name: string;
             /**
@@ -141,6 +146,11 @@ export interface components {
             currentTurn?: number | null;
             /** Lastevent */
             lastEvent?: ("correct_bell" | "wrong_bell" | "missed_bell") | null;
+            /**
+             * Matchnumber
+             * @default 0
+             */
+            matchNumber: number;
             /** Maxparticipants */
             maxParticipants: number;
             /** Minparticipants */
@@ -152,6 +162,8 @@ export interface components {
              * @enum {string}
              */
             phase: "lobby" | "playing" | "post_match";
+            /** Postmatchdeadlineat */
+            postMatchDeadlineAt?: number | null;
             result?: components["schemas"]["MatchResult"] | null;
             /** Revision */
             revision: number;

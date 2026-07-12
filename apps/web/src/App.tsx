@@ -139,6 +139,9 @@ const COPY = {
     correctBellEvent: "抢铃成功，得分已由服务器确认。",
     wrongBellEvent: "错拍，已按当前得分应用惩罚。",
     missedBellEvent: "漏拍，已按当前得分应用惩罚。",
+    continueMatch: "继续下一局",
+    leaveRoom: "离开房间",
+    forfeitMatch: "认输并退出本局",
   },
   en: {
     heroRule: "Flip cards clockwise, count only the top visible cards, ring when one fruit totals exactly 5",
@@ -216,6 +219,9 @@ const COPY = {
     correctBellEvent: "Successful ring. The server confirmed the score.",
     wrongBellEvent: "Wrong ring. The penalty was applied to the current score.",
     missedBellEvent: "Missed bell. The penalty was applied to the current score.",
+    continueMatch: "Continue to next match",
+    leaveRoom: "Leave room",
+    forfeitMatch: "Forfeit this match",
   },
 } as const;
 
@@ -821,6 +827,9 @@ export default function App() {
                       >
                         {t("ringMultiplayerBell")}
                       </button>
+                      <button className="ghost-button" disabled={!roomEntry.connected} onClick={roomEntry.forfeit}>
+                        {t("forfeitMatch")}
+                      </button>
                     </div>
                   )}
                   {roomProjection.lastEvent === "correct_bell" && (
@@ -863,10 +872,18 @@ export default function App() {
                     </section>
                   )}
                   {roomProjection.snapshot.phase === "post_match" && roomProjection.snapshot.result && (
-                    <p>{t("matchResult", {
-                      seat: roomProjection.snapshot.result.winnerSeatIndex + 1,
-                      score: roomProjection.snapshot.result.score,
-                    })}</p>
+                    <>
+                      <p>{t("matchResult", {
+                        seat: roomProjection.snapshot.result.winnerSeatIndex + 1,
+                        score: roomProjection.snapshot.result.score,
+                      })}</p>
+                      <button className="primary-button" disabled={!roomEntry.connected} onClick={roomEntry.continueMatch}>
+                        {t("continueMatch")}
+                      </button>
+                      <button className="ghost-button" disabled={!roomEntry.connected} onClick={roomEntry.leaveAfterMatch}>
+                        {t("leaveRoom")}
+                      </button>
+                    </>
                   )}
                 </div>
               )}

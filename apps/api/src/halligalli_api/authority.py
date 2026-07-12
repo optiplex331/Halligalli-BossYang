@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import secrets
+import time
 from dataclasses import asdict, dataclass, field
 from typing import Literal, Protocol, TypeAlias
 
@@ -10,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 ROOM_TTL_SECONDS = 60 * 60
+POST_MATCH_DURATION_MS = 30_000
 ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 TURN_DURATION_MS = 700
 SCORE_BONUS_WINDOW_MS = 1_500
@@ -62,6 +64,7 @@ class ParticipantSnapshot(ApiModel):
     name: str
     seat_index: int
     ready: bool = False
+    active: bool = True
 
 
 class CardSnapshot(ApiModel):
@@ -144,6 +147,8 @@ class RoomSnapshot(ApiModel):
     scoreboard: list[ParticipantScore] = Field(default_factory=list)
     last_event: Literal["correct_bell", "wrong_bell", "missed_bell"] | None = None
     result: MatchResult | None = None
+    match_number: int = 0
+    post_match_deadline_at: int | None = None
 
 
 class AuthorityResult(ApiModel):
@@ -180,26 +185,56 @@ class JoinRoom:
 @dataclass(frozen=True)
 class Ready:
     credential_verifier: str
+    command_id: str | None = None
 
 
 @dataclass(frozen=True)
 class Start:
     credential_verifier: str
     now_ms: int
+    command_id: str | None = None
 
 
 @dataclass(frozen=True)
 class Bell:
     credential_verifier: str
     now_ms: int
+    command_id: str | None = None
 
 
 @dataclass(frozen=True)
 class AdvanceTurn:
     now_ms: int
+    command_id: str | None = None
 
 
-AuthorityCommand: TypeAlias = CreateRoom | JoinRoom | Ready | Start | Bell | AdvanceTurn
+@dataclass(frozen=True)
+class Leave:
+    credential_verifier: str
+    command_id: str | None = None
+
+
+@dataclass(frozen=True)
+class Forfeit:
+    credential_verifier: str
+    now_ms: int
+    command_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ContinueMatch:
+    credential_verifier: str
+    continue_playing: bool
+    command_id: str | None = None
+
+
+@dataclass(frozen=True)
+class AdvancePostMatch:
+    now_ms: int
+    command_id: str | None = None
+
+
+AuthorityCommand: TypeAlias = CreateRoom | JoinRoom | Ready | Start | Bell | AdvanceTurn | Leave | Forfeit | ContinueMatch | AdvancePostMatch
 
 
 @dataclass(frozen=True)
@@ -223,12 +258,19 @@ class _Participant:
     credential_verifier: str
     seat_index: int
     ready: bool = False
+    active: bool = True
+    continue_playing: bool | None = None
 
 
 @dataclass
 class _IdempotencyEntry:
     fingerprint: str
     seat_index: int
+
+
+@dataclass
+class _CommandEntry:
+    fingerprint: str
 
 
 @dataclass
@@ -273,6 +315,7 @@ class _Match:
     scores: list[_ParticipantScore] = field(default_factory=list)
     last_event: Literal["correct_bell", "wrong_bell", "missed_bell"] | None = None
     result: _MatchResult | None = None
+    number: int = 0
 
 
 @dataclass
@@ -283,7 +326,11 @@ class _Room:
     phase: Literal["lobby", "playing", "post_match"] = "lobby"
     participants: list[_Participant] = field(default_factory=list)
     idempotency: dict[str, _IdempotencyEntry] = field(default_factory=dict)
+    commands: dict[str, _CommandEntry] = field(default_factory=dict)
     match: _Match | None = None
+    match_number: int = 0
+    host_seat_index: int = 0
+    post_match_deadline_at: int | None = None
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), separators=(",", ":"), sort_keys=True)
@@ -301,6 +348,10 @@ class _Room:
                 key: _IdempotencyEntry(**entry)
                 for key, entry in raw["idempotency"].items()
             },
+            commands={key: _CommandEntry(**entry) for key, entry in raw.get("commands", {}).items()},
+            match_number=raw.get("match_number", 0),
+            host_seat_index=raw.get("host_seat_index", 0),
+            post_match_deadline_at=raw.get("post_match_deadline_at"),
             match=(
                 _Match(
                     current_turn=raw["match"]["current_turn"],
@@ -319,6 +370,7 @@ class _Room:
                         if raw["match"]["result"] is not None
                         else None
                     ),
+                    number=raw["match"].get("number", 0),
                 )
                 if raw["match"] is not None
                 else None
@@ -334,8 +386,7 @@ def _command_fingerprint(command: AuthorityCommand) -> str:
     source = json.dumps(
         {
             "kind": type(command).__name__,
-            "name": command.name,
-            "credentialVerifier": command.credential_verifier,
+            "payload": asdict(command),
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -379,8 +430,8 @@ def _snapshot_for_verifier(room: _Room, verifier: str) -> RoomSnapshot:
                 max_participants=room.max_participants,
                 viewer_seat_index=participant.seat_index,
                 participants=[
-                    ParticipantSnapshot(name=item.name, seat_index=item.seat_index, ready=item.ready)
-                    for item in room.participants
+                    ParticipantSnapshot(name=item.name, seat_index=item.seat_index, ready=item.ready, active=item.active)
+                    for item in _active_participants(room)
                 ],
                 current_turn=match.current_turn if match and room.phase == "playing" else None,
                 turn_deadline_at=match.turn_deadline_at if match and room.phase == "playing" else None,
@@ -405,6 +456,8 @@ def _snapshot_for_verifier(room: _Room, verifier: str) -> RoomSnapshot:
                     if match and match.result
                     else None
                 ),
+                match_number=room.match_number,
+                post_match_deadline_at=room.post_match_deadline_at,
             )
     raise AuthorityError("credential_invalid", 401, "Participant credential is invalid")
 
@@ -418,12 +471,42 @@ def _require_room(room: _Room | None) -> _Room:
 def _participant_for_verifier(room: _Room, verifier: str) -> _Participant:
     for participant in room.participants:
         if secrets.compare_digest(participant.credential_verifier, verifier):
+            if not participant.active:
+                raise AuthorityError("participant_departed", 409, "Participant has left the room")
             return participant
     raise AuthorityError("credential_invalid", 401, "Participant credential is invalid")
 
 
 def _result_for_verifier(room: _Room, verifier: str) -> AuthorityResult:
     return AuthorityResult(room_code=room.code, snapshot=_snapshot_for_verifier(room, verifier))
+
+
+def _active_participants(room: _Room) -> list[_Participant]:
+    return [participant for participant in room.participants if participant.active]
+
+
+def _next_active_seat(room: _Room, current_seat: int) -> int:
+    seats = [participant.seat_index for participant in _active_participants(room)]
+    if not seats:
+        raise AuthorityError("room_empty", 409, "Room has no participants")
+    return next((seat for seat in seats if seat > current_seat), seats[0])
+
+
+def _cache_or_conflict(room: _Room, command: AuthorityCommand) -> AuthorityResult | None:
+    command_id = getattr(command, "command_id", None)
+    if command_id is None:
+        return None
+    fingerprint = _command_fingerprint(command)
+    cached = room.commands.get(command_id)
+    if cached is not None:
+        if not secrets.compare_digest(cached.fingerprint, fingerprint):
+            raise AuthorityError("command_id_conflict", 409, "Command ID was reused")
+        verifier = getattr(command, "credential_verifier", None)
+        if verifier is None:
+            verifier = _active_participants(room)[0].credential_verifier
+        return _result_for_verifier(room, verifier)
+    room.commands[command_id] = _CommandEntry(fingerprint=fingerprint)
+    return None
 
 
 def _bell_fruit(top_cards: list[_Card | None]) -> Literal["banana", "strawberry", "lemon", "grape"] | None:
@@ -476,11 +559,14 @@ def _finish_match(room: _Room) -> None:
     match.bell_fruit = None
     match.bell_opened_at = None
     room.phase = "post_match"
+    room.post_match_deadline_at = int(time.time_ns() // 1_000_000) + POST_MATCH_DURATION_MS
+    for participant in _active_participants(room):
+        participant.continue_playing = None
 
 
 def _flip_next(room: _Room, now_ms: int) -> None:
     match = room.match
-    if match is None or not room.participants:
+    if match is None or not _active_participants(room):
         raise AuthorityError("match_not_running", 409, "Match is not running")
     if match.next_card_index >= len(CARD_SEQUENCE):
         raise AuthorityError("match_complete", 409, "Match has no more cards")
@@ -488,13 +574,16 @@ def _flip_next(room: _Room, now_ms: int) -> None:
     fruit, count = CARD_SEQUENCE[match.next_card_index]
     match.top_cards[match.current_turn] = _Card(fruit=fruit, count=count)
     match.next_card_index += 1
-    match.current_turn = (match.current_turn + 1) % len(room.participants)
+    match.current_turn = _next_active_seat(room, match.current_turn)
     match.turn_deadline_at = now_ms + TURN_DURATION_MS
     match.bell_fruit = _bell_fruit(match.top_cards)
     match.bell_opened_at = now_ms if match.bell_fruit is not None else None
 
 
 def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResult:
+    cached = _cache_or_conflict(room, command)
+    if cached is not None:
+        return cached
     if isinstance(command, Ready):
         if room.phase != "lobby":
             raise AuthorityError("room_not_joinable", 409, "Room is not in the lobby")
@@ -509,18 +598,21 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
         participant = _participant_for_verifier(room, command.credential_verifier)
         if room.phase != "lobby":
             raise AuthorityError("match_already_started", 409, "Match already started")
-        if participant.seat_index != 0:
+        if participant.seat_index != room.host_seat_index:
             raise AuthorityError("host_required", 403, "Only the host can start the match")
-        if len(room.participants) < MIN_PARTICIPANTS or not all(item.ready for item in room.participants):
+        active = _active_participants(room)
+        if len(active) < MIN_PARTICIPANTS or not all(item.ready for item in active):
             raise AuthorityError("players_not_ready", 409, "All participants must be ready")
 
         room.phase = "playing"
         room.match = _Match(
             current_turn=0,
             turn_deadline_at=None,
-            top_cards=[None] * len(room.participants),
-            scores=[_ParticipantScore() for _ in room.participants],
+            top_cards=[None] * (max(item.seat_index for item in active) + 1),
+            scores=[_ParticipantScore() for _ in range(max(item.seat_index for item in active) + 1)],
+            number=room.match_number + 1,
         )
+        room.match_number += 1
         _flip_next(room, command.now_ms)
         room.revision += 1
         return _result_for_verifier(room, command.credential_verifier)
@@ -531,7 +623,8 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
         if room.match.turn_deadline_at is None or command.now_ms < room.match.turn_deadline_at:
             raise AuthorityError("deadline_not_due", 409, "Turn deadline is not due")
         if room.match.bell_fruit is not None:
-            for score in room.match.scores:
+            for participant in _active_participants(room):
+                score = room.match.scores[participant.seat_index]
                 _apply_penalty_to(score, missed_penalty=30)
                 score.missed_hits += 1
                 score.streak = 0
@@ -545,7 +638,7 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
         else:
             _flip_next(room, command.now_ms)
         room.revision += 1
-        return _result_for_verifier(room, room.participants[0].credential_verifier)
+        return _result_for_verifier(room, _active_participants(room)[0].credential_verifier)
 
     if isinstance(command, Bell):
         participant = _participant_for_verifier(room, command.credential_verifier)
@@ -578,6 +671,56 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
         room.revision += 1
         return _result_for_verifier(room, command.credential_verifier)
 
+    if isinstance(command, Leave):
+        if room.phase != "lobby":
+            raise AuthorityError("leave_not_allowed", 409, "Lobby leave is not available during a match")
+        participant = _participant_for_verifier(room, command.credential_verifier)
+        participant.active = False
+        participant.ready = False
+        if participant.seat_index == room.host_seat_index and _active_participants(room):
+            room.host_seat_index = _active_participants(room)[0].seat_index
+        room.revision += 1
+        return _result_for_verifier(room, command.credential_verifier)
+
+    if isinstance(command, Forfeit):
+        participant = _participant_for_verifier(room, command.credential_verifier)
+        if room.phase != "playing" or room.match is None:
+            raise AuthorityError("forfeit_not_allowed", 409, "Forfeit is only available during a match")
+        participant.active = False
+        participant.continue_playing = False
+        room.match.last_event = "wrong_bell"
+        _finish_match(room)
+        room.revision += 1
+        return _result_for_verifier(room, command.credential_verifier)
+
+    if isinstance(command, ContinueMatch):
+        participant = _participant_for_verifier(room, command.credential_verifier)
+        if room.phase != "post_match":
+            raise AuthorityError("post_match_not_active", 409, "Match is not awaiting decisions")
+        participant.continue_playing = command.continue_playing
+        room.revision += 1
+        return _result_for_verifier(room, command.credential_verifier)
+
+    if isinstance(command, AdvancePostMatch):
+        if room.phase != "post_match" or room.post_match_deadline_at is None:
+            raise AuthorityError("post_match_not_active", 409, "Match is not awaiting decisions")
+        if command.now_ms < room.post_match_deadline_at:
+            raise AuthorityError("deadline_not_due", 409, "Post-match deadline is not due")
+        for participant in _active_participants(room):
+            if participant.continue_playing is True:
+                participant.ready = False
+                participant.continue_playing = None
+            else:
+                participant.active = False
+        active = _active_participants(room)
+        room.match = None
+        room.post_match_deadline_at = None
+        room.phase = "lobby"
+        if active:
+            room.host_seat_index = active[0].seat_index
+        room.revision += 1
+        return _result_for_verifier(room, active[0].credential_verifier if active else room.participants[0].credential_verifier)
+
     raise AuthorityError("command_unsupported", 400, "Command is not supported")
 
 
@@ -602,7 +745,8 @@ def _join_room(room: _Room, command: JoinRoom) -> EntryResult:
     ):
         raise AuthorityError("credential_in_use", 409, "Participant credential is already in use")
 
-    seat_index = len(room.participants)
+    occupied = {participant.seat_index for participant in _active_participants(room)}
+    seat_index = next(index for index in range(room.max_participants) if index not in occupied)
     room.participants.append(
         _Participant(
             name=command.name,
@@ -706,6 +850,19 @@ class RedisMultiplayerAuthority:
         return f"halligalli:room:{{{room_code}}}"
 
     @staticmethod
+    def _channel(room_code: str) -> str:
+        return f"halligalli:room:{{{room_code}}}:snapshots"
+
+    @staticmethod
+    def _ttl_seconds(room: _Room) -> int:
+        deadline = room.post_match_deadline_at
+        if room.phase == "playing" and room.match is not None:
+            deadline = room.match.turn_deadline_at
+        if deadline is None:
+            return ROOM_TTL_SECONDS
+        return max(1, min(ROOM_TTL_SECONDS, (deadline - (time.time_ns() // 1_000_000)) // 1_000 + 60))
+
+    @staticmethod
     def _entry_key(idempotency_key: str) -> str:
         return f"halligalli:entry:{idempotency_key}"
 
@@ -759,7 +916,7 @@ class RedisMultiplayerAuthority:
                         continue
                     pipeline.multi()
                     pipeline.hset(room_key, mapping={"state": room.to_json()})
-                    pipeline.expire(room_key, ROOM_TTL_SECONDS)
+                    pipeline.expire(room_key, self._ttl_seconds(room))
                     pipeline.set(
                         entry_key,
                         json.dumps({"fingerprint": fingerprint, "room_code": room.code}),
@@ -790,7 +947,8 @@ class RedisMultiplayerAuthority:
                         return result
                     pipeline.multi()
                     pipeline.hset(room_key, mapping={"state": room.to_json()})
-                    pipeline.expire(room_key, ROOM_TTL_SECONDS)
+                    pipeline.expire(room_key, self._ttl_seconds(room))
+                    pipeline.publish(self._channel(room_code), str(room.revision))
                     await pipeline.execute()
                     return result
             except WatchError:
@@ -800,7 +958,7 @@ class RedisMultiplayerAuthority:
     async def _execute_room_command(
         self,
         room_code: str,
-        command: Ready | Start | Bell | AdvanceTurn,
+        command: Ready | Start | Bell | AdvanceTurn | Leave | Forfeit | ContinueMatch | AdvancePostMatch,
     ) -> AuthorityResult:
         from redis.exceptions import WatchError
 
@@ -814,7 +972,8 @@ class RedisMultiplayerAuthority:
                     result = _apply_room_command(room, command)
                     pipeline.multi()
                     pipeline.hset(room_key, mapping={"state": room.to_json()})
-                    pipeline.expire(room_key, ROOM_TTL_SECONDS)
+                    pipeline.expire(room_key, self._ttl_seconds(room))
+                    pipeline.publish(self._channel(room_code), str(room.revision))
                     await pipeline.execute()
                     return result
             except WatchError:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import os
 import unittest
+import asyncio
 
 from redis.asyncio import Redis
 
@@ -79,3 +80,18 @@ class RedisAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.snapshot.phase, "playing")
         self.assertIsNone(result.snapshot.result)
         self.assertEqual(result.snapshot.scoreboard[5].score, 231)
+
+    async def test_redis_serializes_concurrent_commands_and_replays_a_command_id(self) -> None:
+        host, guest = "host-credential", "guest-credential"
+        created = await self.authority.execute(None, CreateRoom("create-race", "Host", verifier(host)))
+        await self.authority.execute(created.room_code, JoinRoom("join-race", "Guest", verifier(guest)))
+        left = RedisMultiplayerAuthority(self.redis)
+        right = RedisMultiplayerAuthority(self.redis)
+        first, second = await asyncio.gather(
+            left.execute(created.room_code, Ready(verifier(host), "ready-host")),
+            right.execute(created.room_code, Ready(verifier(guest), "ready-guest")),
+        )
+        replay = await self.authority.execute(created.room_code, Ready(verifier(host), "ready-host"))
+
+        self.assertEqual(sorted((first.snapshot.revision, second.snapshot.revision)), [3, 4])
+        self.assertEqual(replay.snapshot.revision, 4)

@@ -37,6 +37,7 @@ function snapshotForCapacity(fixture: MultiplayerCapacityFixture): RoomSnapshot 
     name: `Player ${seatIndex + 1}`,
     seatIndex,
     ready: true,
+    active: true,
   }));
   const scoreboard = participants.map((participant) => {
     return {
@@ -60,6 +61,7 @@ function snapshotForCapacity(fixture: MultiplayerCapacityFixture): RoomSnapshot 
   return {
     roomCode: "ABCD",
     revision: fixture.participants,
+    matchNumber: 1,
     phase: "playing",
     minParticipants: 2,
     maxParticipants: fixture.expected.maxParticipants,
@@ -84,13 +86,14 @@ describe("projectRoomSnapshot", () => {
     const snapshot = {
       roomCode: "ABCD",
       revision: 6,
+      matchNumber: 1,
       phase: "playing",
       minParticipants: 2,
       maxParticipants: 2,
       viewerSeatIndex: 0,
       participants: [
-        { name: "Host", seatIndex: 0, ready: true },
-        { name: "Guest", seatIndex: 1, ready: true },
+        { name: "Host", seatIndex: 0, ready: true, active: true },
+        { name: "Guest", seatIndex: 1, ready: true, active: true },
       ],
       currentTurn: 0,
       turnDeadlineAt: 2_700,

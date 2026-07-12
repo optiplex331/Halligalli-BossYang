@@ -129,6 +129,11 @@
       },
       "ParticipantSnapshot": {
         "properties": {
+          "active": {
+            "default": true,
+            "title": "Active",
+            "type": "boolean"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -229,6 +234,11 @@
             ],
             "title": "Lastevent"
           },
+          "matchNumber": {
+            "default": 0,
+            "title": "Matchnumber",
+            "type": "integer"
+          },
           "maxParticipants": {
             "title": "Maxparticipants",
             "type": "integer"
@@ -252,6 +262,17 @@
             ],
             "title": "Phase",
             "type": "string"
+          },
+          "postMatchDeadlineAt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Postmatchdeadlineat"
           },
           "result": {
             "anyOf": [
