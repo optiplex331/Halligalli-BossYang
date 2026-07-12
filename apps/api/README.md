@@ -2,9 +2,9 @@
 
 This package owns FastAPI transport and the Redis-backed Multiplayer Authority.
 It currently delivers authenticated two-seat room entry plus the authority-owned
-happy path: ready, host start, timed card progression, a valid bell, and an
-ephemeral result. Score-breakdown parity and larger room sizes follow in later
-slices.
+match path: ready, host start, timed card progression, correct/wrong/missed
+bell windows, the shared score-breakdown ledger, and an ephemeral result.
+Larger room sizes follow in later slices.
 
 Run the API against an ephemeral Redis instance with:
 

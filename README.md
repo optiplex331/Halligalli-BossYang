@@ -11,8 +11,8 @@ two-seat FastAPI/Redis authoritative happy-path match.
 It is a Product Monorepo with two application owners. The Web application keeps
 all active round state in memory and preserves only normalized presentation
 preferences in browser storage. The API owns ephemeral Redis room state and
-the initial ready/start/turn/bell/result path; full scoring parity and larger
-room sizes arrive in the following slices.
+the two-seat ready/start/turn/bell/result path, including the shared scoring
+ledger; larger room sizes arrive in the following slices.
 
 ## Start the Web application
 

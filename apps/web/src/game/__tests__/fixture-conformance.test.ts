@@ -23,7 +23,7 @@ interface FixtureCase {
   reactionMs?: number;
   startingScore?: number;
   award?: number;
-  assessed?: { wrongPenalty: number; cardPenalty: number };
+  assessed?: { wrongPenalty?: number; cardPenalty?: number; missedPenalty?: number };
   topCards?: FixtureCard[];
 }
 
@@ -118,6 +118,37 @@ describe("v1 single-player behavior fixtures", () => {
     expect(result.state.scoreBreakdown).toMatchObject(current.expected.breakdown as object);
   });
 
+  it("shares the two-seat correct-bell vector with the multiplayer authority", () => {
+    const current = fixtureCase("two-seat-correct-bell");
+    if (!current.topCards) throw new Error("Fixture top cards are required");
+    const mode = current.mode ?? "normal";
+    const result = resolveSinglePlayerBell({
+      state: {
+        players: current.topCards.map((card, index) => player(index, [{ id: `${card.fruit}-${index}`, ...card }])),
+        currentTurn: 0,
+        actingPlayer: 0,
+        score: 0,
+        correctHits: 0,
+        wrongHits: 0,
+        missedHits: 0,
+        reactionTimes: [],
+        scoreBreakdown: INITIAL_BREAKDOWN,
+        difficulty: mode,
+        durationSec: 60,
+        playerCount: 2,
+        maxStreak: 0,
+        streak: 0,
+      },
+      bellState: { available: true, fruitKey: "banana", startedAt: 1_000, handled: false },
+      userSeatId: 0,
+      mode: MODES[mode],
+      now: 1_000 + (current.reactionMs ?? 0),
+    });
+
+    expect(result.state.score).toBe(current.expected.score);
+    expect(result.state.scoreBreakdown).toMatchObject(current.expected.breakdown as object);
+  });
+
   it("applies wrong-ring penalties in base-before-card order", () => {
     const current = fixtureCase("partial-wrong-penalty");
     if (!current.assessed) throw new Error("Fixture assessed penalty is required");
@@ -144,6 +175,29 @@ describe("v1 single-player behavior fixtures", () => {
     expect(afterPenalty.wrongPenalty).toBe(current.expected.wrongPenalty);
     expect(afterPenalty.cardPenalty).toBe(current.expected.cardPenalty);
     expect(sumBreakdown(afterAward)).toBe(current.expected.scoreAfterAward);
+  });
+
+  it("shares wrong and missed floor vectors with the multiplayer authority", () => {
+    const wrong = fixtureCase("two-seat-wrong-floor");
+    const missed = fixtureCase("two-seat-missed-floor");
+    if (!wrong.assessed || !missed.assessed) throw new Error("Fixture penalties are required");
+
+    const wrongBreakdown = applyScoringPenalty(
+      { ...INITIAL_BREAKDOWN, correctBase: wrong.startingScore ?? 0 },
+      wrong.assessed,
+    );
+    const missedBreakdown = applyScoringPenalty(
+      { ...INITIAL_BREAKDOWN, correctBase: missed.startingScore ?? 0 },
+      missed.assessed,
+    );
+
+    expect(sumBreakdown(wrongBreakdown)).toBe(wrong.expected.score);
+    expect(wrongBreakdown).toMatchObject({
+      wrongPenalty: wrong.expected.wrongPenalty,
+      cardPenalty: wrong.expected.cardPenalty,
+    });
+    expect(sumBreakdown(missedBreakdown)).toBe(missed.expected.score);
+    expect(missedBreakdown.missedPenalty).toBe(missed.expected.missedPenalty);
   });
 
   it("reconciles a pending final window once through the score ledger", () => {

@@ -71,4 +71,4 @@ class RedisAdapterTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.snapshot.phase, "post_match")
         self.assertEqual(result.snapshot.result.winner_seat_index, 1)
-        self.assertEqual(result.snapshot.result.score, 132)
+        self.assertEqual(result.snapshot.result.score, 207)

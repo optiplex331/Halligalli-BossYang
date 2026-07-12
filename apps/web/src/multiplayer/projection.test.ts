@@ -5,7 +5,7 @@ import type { RoomSnapshot } from "./room-entry.js";
 
 describe("projectRoomSnapshot", () => {
   it("renders an authority-owned valid bell window without client scoring", () => {
-    const projection = projectRoomSnapshot({
+    const snapshot = {
       roomCode: "ABCD",
       revision: 6,
       phase: "playing",
@@ -23,11 +23,33 @@ describe("projectRoomSnapshot", () => {
       ],
       bellAvailable: true,
       bellFruit: "banana",
-    } satisfies RoomSnapshot);
+      scoreboard: [
+        {
+          seatIndex: 0,
+          score: 207,
+          correctHits: 1,
+          wrongHits: 0,
+          missedHits: 0,
+          scoreBreakdown: {
+            correctBase: 120,
+            collectionBonus: 12,
+            speedBonus: 75,
+            streakBonus: 0,
+            wrongPenalty: 0,
+            missedPenalty: 0,
+            cardPenalty: 0,
+          },
+        },
+      ],
+      lastEvent: "correct_bell",
+    } satisfies RoomSnapshot;
+    const projection = projectRoomSnapshot(snapshot);
 
     expect(projection.canReady).toBe(false);
     expect(projection.canStart).toBe(false);
     expect(projection.canRing).toBe(true);
     expect(projection.cards.map((card) => card?.count)).toEqual([2, 3]);
+    expect(projection.scoreboard).toBe(snapshot.scoreboard);
+    expect(projection.lastEvent).toBe("correct_bell");
   });
 });

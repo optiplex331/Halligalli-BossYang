@@ -117,13 +117,15 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
             delay_seconds = max(0, deadline_at - (time.time_ns() // 1_000_000)) / 1_000
             await asyncio.sleep(delay_seconds)
             try:
-                await selected_authority.execute(
+                result = await selected_authority.execute(
                     room_code,
                     AdvanceTurn(now_ms=time.time_ns() // 1_000_000),
                 )
             except AuthorityError:
                 return
             await hub.publish(room_code, selected_authority)
+            if result.snapshot.phase == "playing" and result.snapshot.turn_deadline_at is not None:
+                schedule_turn(room_code, result.snapshot.turn_deadline_at)
 
         task = asyncio.create_task(advance_when_due())
         deadline_tasks.add(task)

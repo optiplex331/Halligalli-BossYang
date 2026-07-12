@@ -84,10 +84,26 @@ export interface components {
         };
         /** MatchResult */
         MatchResult: {
+            /** Participants */
+            participants: components["schemas"]["ParticipantScore"][];
             /** Score */
             score: number;
             /** Winnerseatindex */
             winnerSeatIndex: number;
+        };
+        /** ParticipantScore */
+        ParticipantScore: {
+            /** Correcthits */
+            correctHits: number;
+            /** Missedhits */
+            missedHits: number;
+            /** Score */
+            score: number;
+            scoreBreakdown: components["schemas"]["ScoreBreakdown"];
+            /** Seatindex */
+            seatIndex: number;
+            /** Wronghits */
+            wrongHits: number;
         };
         /** ParticipantSnapshot */
         ParticipantSnapshot: {
@@ -123,6 +139,8 @@ export interface components {
             bellFruit?: ("banana" | "strawberry" | "lemon" | "grape") | null;
             /** Currentturn */
             currentTurn?: number | null;
+            /** Lastevent */
+            lastEvent?: ("correct_bell" | "wrong_bell" | "missed_bell") | null;
             /** Maxparticipants */
             maxParticipants: number;
             /** Participants */
@@ -137,12 +155,52 @@ export interface components {
             revision: number;
             /** Roomcode */
             roomCode: string;
+            /** Scoreboard */
+            scoreboard?: components["schemas"]["ParticipantScore"][];
             /** Topcards */
             topCards?: (components["schemas"]["CardSnapshot"] | null)[];
             /** Turndeadlineat */
             turnDeadlineAt?: number | null;
             /** Viewerseatindex */
             viewerSeatIndex: number;
+        };
+        /** ScoreBreakdown */
+        ScoreBreakdown: {
+            /**
+             * Cardpenalty
+             * @default 0
+             */
+            cardPenalty: number;
+            /**
+             * Collectionbonus
+             * @default 0
+             */
+            collectionBonus: number;
+            /**
+             * Correctbase
+             * @default 0
+             */
+            correctBase: number;
+            /**
+             * Missedpenalty
+             * @default 0
+             */
+            missedPenalty: number;
+            /**
+             * Speedbonus
+             * @default 0
+             */
+            speedBonus: number;
+            /**
+             * Streakbonus
+             * @default 0
+             */
+            streakBonus: number;
+            /**
+             * Wrongpenalty
+             * @default 0
+             */
+            wrongPenalty: number;
         };
     };
     responses: never;

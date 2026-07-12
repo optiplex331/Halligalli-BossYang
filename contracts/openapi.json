@@ -66,6 +66,13 @@
       },
       "MatchResult": {
         "properties": {
+          "participants": {
+            "items": {
+              "$ref": "#/components/schemas/ParticipantScore"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
           "score": {
             "title": "Score",
             "type": "integer"
@@ -77,9 +84,47 @@
         },
         "required": [
           "winnerSeatIndex",
-          "score"
+          "score",
+          "participants"
         ],
         "title": "MatchResult",
+        "type": "object"
+      },
+      "ParticipantScore": {
+        "properties": {
+          "correctHits": {
+            "title": "Correcthits",
+            "type": "integer"
+          },
+          "missedHits": {
+            "title": "Missedhits",
+            "type": "integer"
+          },
+          "score": {
+            "title": "Score",
+            "type": "integer"
+          },
+          "scoreBreakdown": {
+            "$ref": "#/components/schemas/ScoreBreakdown"
+          },
+          "seatIndex": {
+            "title": "Seatindex",
+            "type": "integer"
+          },
+          "wrongHits": {
+            "title": "Wronghits",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "seatIndex",
+          "score",
+          "correctHits",
+          "wrongHits",
+          "missedHits",
+          "scoreBreakdown"
+        ],
+        "title": "ParticipantScore",
         "type": "object"
       },
       "ParticipantSnapshot": {
@@ -168,6 +213,22 @@
             ],
             "title": "Currentturn"
           },
+          "lastEvent": {
+            "anyOf": [
+              {
+                "enum": [
+                  "correct_bell",
+                  "wrong_bell",
+                  "missed_bell"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastevent"
+          },
           "maxParticipants": {
             "title": "Maxparticipants",
             "type": "integer"
@@ -205,6 +266,13 @@
           "roomCode": {
             "title": "Roomcode",
             "type": "string"
+          },
+          "scoreboard": {
+            "items": {
+              "$ref": "#/components/schemas/ParticipantScore"
+            },
+            "title": "Scoreboard",
+            "type": "array"
           },
           "topCards": {
             "items": {
@@ -245,6 +313,47 @@
           "participants"
         ],
         "title": "RoomSnapshot",
+        "type": "object"
+      },
+      "ScoreBreakdown": {
+        "properties": {
+          "cardPenalty": {
+            "default": 0,
+            "title": "Cardpenalty",
+            "type": "integer"
+          },
+          "collectionBonus": {
+            "default": 0,
+            "title": "Collectionbonus",
+            "type": "integer"
+          },
+          "correctBase": {
+            "default": 0,
+            "title": "Correctbase",
+            "type": "integer"
+          },
+          "missedPenalty": {
+            "default": 0,
+            "title": "Missedpenalty",
+            "type": "integer"
+          },
+          "speedBonus": {
+            "default": 0,
+            "title": "Speedbonus",
+            "type": "integer"
+          },
+          "streakBonus": {
+            "default": 0,
+            "title": "Streakbonus",
+            "type": "integer"
+          },
+          "wrongPenalty": {
+            "default": 0,
+            "title": "Wrongpenalty",
+            "type": "integer"
+          }
+        },
+        "title": "ScoreBreakdown",
         "type": "object"
       }
     }

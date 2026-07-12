@@ -134,6 +134,11 @@ const COPY = {
     waitingForReady: "等待两位玩家准备",
     turnOwner: "当前翻牌：{name}",
     matchResult: "座位 {seat} 获胜，获得 {score} 分",
+    scoreboardTitle: "多人得分明细",
+    seatLabel: "座位 {seat}",
+    correctBellEvent: "抢铃成功，得分已由服务器确认。",
+    wrongBellEvent: "错拍，已按当前得分应用惩罚。",
+    missedBellEvent: "漏拍，已按当前得分应用惩罚。",
   },
   en: {
     heroRule: "Flip cards clockwise, count only the top visible cards, ring when one fruit totals exactly 5",
@@ -206,6 +211,11 @@ const COPY = {
     waitingForReady: "Waiting for both players to be ready",
     turnOwner: "Current turn: {name}",
     matchResult: "Seat {seat} wins {score} points",
+    scoreboardTitle: "Multiplayer score breakdown",
+    seatLabel: "Seat {seat}",
+    correctBellEvent: "Successful ring. The server confirmed the score.",
+    wrongBellEvent: "Wrong ring. The penalty was applied to the current score.",
+    missedBellEvent: "Missed bell. The penalty was applied to the current score.",
   },
 } as const;
 
@@ -793,6 +803,45 @@ export default function App() {
                         {t("ringMultiplayerBell")}
                       </button>
                     </div>
+                  )}
+                  {roomProjection.lastEvent === "correct_bell" && (
+                    <p className="multiplayer-event">{t("correctBellEvent")}</p>
+                  )}
+                  {roomProjection.lastEvent === "wrong_bell" && (
+                    <p className="multiplayer-event">{t("wrongBellEvent")}</p>
+                  )}
+                  {roomProjection.lastEvent === "missed_bell" && (
+                    <p className="multiplayer-event">{t("missedBellEvent")}</p>
+                  )}
+                  {roomProjection.scoreboard.length > 0 && (
+                    <section className="multiplayer-scoreboard" aria-label={t("scoreboardTitle")}>
+                      <h3>{t("scoreboardTitle")}</h3>
+                      {roomProjection.scoreboard.map((score) => {
+                        const participant = roomProjection.snapshot.participants.find(
+                          (item) => item.seatIndex === score.seatIndex,
+                        );
+                        return (
+                          <article className="multiplayer-score-row" key={score.seatIndex}>
+                            <div className="multiplayer-score-heading">
+                              <strong>{participant?.name ?? t("seatLabel", { seat: score.seatIndex + 1 })}</strong>
+                              <span>{score.score} {t("scoreUnit")}</span>
+                            </div>
+                            <p>
+                              {t("correctHits")} {score.correctHits} · {t("wrongHits")} {score.wrongHits} · {t("missedHits")} {score.missedHits}
+                            </p>
+                            <div className="multiplayer-score-breakdown">
+                              <span>{t("scoreCorrectBase")} +{score.scoreBreakdown.correctBase}</span>
+                              <span>{t("scoreCollectionBonus")} +{score.scoreBreakdown.collectionBonus}</span>
+                              <span>{t("scoreSpeedBonus")} +{score.scoreBreakdown.speedBonus}</span>
+                              <span>{t("scoreStreakBonus")} +{score.scoreBreakdown.streakBonus}</span>
+                              <span>{t("scoreWrongPenalty")} −{score.scoreBreakdown.wrongPenalty}</span>
+                              <span>{t("scoreMissedPenalty")} −{score.scoreBreakdown.missedPenalty}</span>
+                              <span>{t("scoreCardPenalty")} −{score.scoreBreakdown.cardPenalty}</span>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </section>
                   )}
                   {roomProjection.snapshot.phase === "post_match" && roomProjection.snapshot.result && (
                     <p>{t("matchResult", {

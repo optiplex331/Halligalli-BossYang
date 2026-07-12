@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 ROOM_TTL_SECONDS = 60 * 60
 ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 TURN_DURATION_MS = 700
+SCORE_BONUS_WINDOW_MS = 1_500
 CARD_SEQUENCE = (("banana", 2), ("banana", 3))
 FRUIT_ORDER = ("banana", "strawberry", "lemon", "grape")
 
@@ -36,9 +37,63 @@ class CardSnapshot(ApiModel):
     count: int
 
 
+class ScoreBreakdown(ApiModel):
+    correct_base: int = 0
+    collection_bonus: int = 0
+    speed_bonus: int = 0
+    streak_bonus: int = 0
+    wrong_penalty: int = 0
+    missed_penalty: int = 0
+    card_penalty: int = 0
+
+
+def sum_breakdown(breakdown: ScoreBreakdown) -> int:
+    return (
+        breakdown.correct_base
+        + breakdown.collection_bonus
+        + breakdown.speed_bonus
+        + breakdown.streak_bonus
+        - breakdown.wrong_penalty
+        - breakdown.missed_penalty
+        - breakdown.card_penalty
+    )
+
+
+class ParticipantScore(ApiModel):
+    seat_index: int
+    score: int
+    correct_hits: int
+    wrong_hits: int
+    missed_hits: int
+    score_breakdown: ScoreBreakdown
+
+
 class MatchResult(ApiModel):
     winner_seat_index: int
     score: int
+    participants: list[ParticipantScore]
+
+
+def apply_scoring_penalty(
+    breakdown: ScoreBreakdown,
+    *,
+    wrong_penalty: int = 0,
+    card_penalty: int = 0,
+    missed_penalty: int = 0,
+) -> ScoreBreakdown:
+    available = max(0, sum_breakdown(breakdown))
+    applied_wrong = min(available, wrong_penalty)
+    available -= applied_wrong
+    applied_card = min(available, card_penalty)
+    available -= applied_card
+    applied_missed = min(available, missed_penalty)
+    return breakdown.model_copy(
+        update={
+            "wrong_penalty": breakdown.wrong_penalty + applied_wrong,
+            "card_penalty": breakdown.card_penalty + applied_card,
+            "missed_penalty": breakdown.missed_penalty + applied_missed,
+        },
+    )
 
 
 class RoomSnapshot(ApiModel):
@@ -53,6 +108,8 @@ class RoomSnapshot(ApiModel):
     top_cards: list[CardSnapshot | None] = Field(default_factory=list)
     bell_available: bool = False
     bell_fruit: Literal["banana", "strawberry", "lemon", "grape"] | None = None
+    scoreboard: list[ParticipantScore] = Field(default_factory=list)
+    last_event: Literal["correct_bell", "wrong_bell", "missed_bell"] | None = None
     result: MatchResult | None = None
 
 
@@ -154,12 +211,34 @@ class _MatchResult:
 
 
 @dataclass
+class _ParticipantScore:
+    correct_hits: int = 0
+    wrong_hits: int = 0
+    missed_hits: int = 0
+    streak: int = 0
+    breakdown: dict[str, int] = field(
+        default_factory=lambda: {
+            "correct_base": 0,
+            "collection_bonus": 0,
+            "speed_bonus": 0,
+            "streak_bonus": 0,
+            "wrong_penalty": 0,
+            "missed_penalty": 0,
+            "card_penalty": 0,
+        },
+    )
+
+
+@dataclass
 class _Match:
     current_turn: int
     turn_deadline_at: int | None
     top_cards: list[_Card | None]
     next_card_index: int = 0
     bell_fruit: Literal["banana", "strawberry", "lemon", "grape"] | None = None
+    bell_opened_at: int | None = None
+    scores: list[_ParticipantScore] = field(default_factory=list)
+    last_event: Literal["correct_bell", "wrong_bell", "missed_bell"] | None = None
     result: _MatchResult | None = None
 
 
@@ -199,6 +278,9 @@ class _Room:
                     ],
                     next_card_index=raw["match"]["next_card_index"],
                     bell_fruit=raw["match"]["bell_fruit"],
+                    bell_opened_at=raw["match"]["bell_opened_at"],
+                    scores=[_ParticipantScore(**score) for score in raw["match"]["scores"]],
+                    last_event=raw["match"]["last_event"],
                     result=(
                         _MatchResult(**raw["match"]["result"])
                         if raw["match"]["result"] is not None
@@ -228,6 +310,30 @@ def _command_fingerprint(command: AuthorityCommand) -> str:
     return hashlib.sha256(source.encode("utf-8")).hexdigest()
 
 
+def _breakdown_for(score: _ParticipantScore) -> ScoreBreakdown:
+    return ScoreBreakdown(**score.breakdown)
+
+
+def _score_for(score: _ParticipantScore) -> int:
+    return max(0, sum_breakdown(_breakdown_for(score)))
+
+
+def _scoreboard_for(match: _Match | None) -> list[ParticipantScore]:
+    if match is None:
+        return []
+    return [
+        ParticipantScore(
+            seat_index=seat_index,
+            score=_score_for(score),
+            correct_hits=score.correct_hits,
+            wrong_hits=score.wrong_hits,
+            missed_hits=score.missed_hits,
+            score_breakdown=_breakdown_for(score),
+        )
+        for seat_index, score in enumerate(match.scores)
+    ]
+
+
 def _snapshot_for_verifier(room: _Room, verifier: str) -> RoomSnapshot:
     for participant in room.participants:
         if secrets.compare_digest(participant.credential_verifier, verifier):
@@ -254,10 +360,13 @@ def _snapshot_for_verifier(room: _Room, verifier: str) -> RoomSnapshot:
                 ),
                 bell_available=bool(match and match.bell_fruit),
                 bell_fruit=match.bell_fruit if match else None,
+                scoreboard=_scoreboard_for(match),
+                last_event=match.last_event if match else None,
                 result=(
                     MatchResult(
                         winner_seat_index=match.result.winner_seat_index,
                         score=match.result.score,
+                        participants=_scoreboard_for(match),
                     )
                     if match and match.result
                     else None
@@ -291,6 +400,50 @@ def _bell_fruit(top_cards: list[_Card | None]) -> Literal["banana", "strawberry"
     return next((fruit for fruit in FRUIT_ORDER if totals[fruit] == 5), None)
 
 
+def _apply_penalty_to(
+    score: _ParticipantScore,
+    *,
+    wrong_penalty: int = 0,
+    card_penalty: int = 0,
+    missed_penalty: int = 0,
+) -> None:
+    score.breakdown = apply_scoring_penalty(
+        _breakdown_for(score),
+        wrong_penalty=wrong_penalty,
+        card_penalty=card_penalty,
+        missed_penalty=missed_penalty,
+    ).model_dump()
+
+
+def _award_correct(score: _ParticipantScore, *, collected_count: int, reaction_ms: int) -> None:
+    speed_bonus = max(0, (SCORE_BONUS_WINDOW_MS - reaction_ms + 10) // 20)
+    streak_bonus = score.streak * 10
+    score.breakdown["correct_base"] += 120
+    score.breakdown["collection_bonus"] += collected_count * 6
+    score.breakdown["speed_bonus"] += speed_bonus
+    score.breakdown["streak_bonus"] += streak_bonus
+    score.correct_hits += 1
+    score.streak += 1
+
+
+def _finish_match(room: _Room) -> None:
+    match = room.match
+    if match is None:
+        raise AuthorityError("match_not_running", 409, "Match is not running")
+    winner_seat_index = min(
+        range(len(match.scores)),
+        key=lambda seat_index: (-_score_for(match.scores[seat_index]), seat_index),
+    )
+    match.result = _MatchResult(
+        winner_seat_index=winner_seat_index,
+        score=_score_for(match.scores[winner_seat_index]),
+    )
+    match.turn_deadline_at = None
+    match.bell_fruit = None
+    match.bell_opened_at = None
+    room.phase = "post_match"
+
+
 def _flip_next(room: _Room, now_ms: int) -> None:
     match = room.match
     if match is None or not room.participants:
@@ -304,6 +457,7 @@ def _flip_next(room: _Room, now_ms: int) -> None:
     match.current_turn = (match.current_turn + 1) % len(room.participants)
     match.turn_deadline_at = now_ms + TURN_DURATION_MS
     match.bell_fruit = _bell_fruit(match.top_cards)
+    match.bell_opened_at = now_ms if match.bell_fruit is not None else None
 
 
 def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResult:
@@ -331,6 +485,7 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
             current_turn=0,
             turn_deadline_at=None,
             top_cards=[None] * len(room.participants),
+            scores=[_ParticipantScore() for _ in room.participants],
         )
         _flip_next(room, command.now_ms)
         room.revision += 1
@@ -339,11 +494,22 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
     if isinstance(command, AdvanceTurn):
         if room.phase != "playing" or room.match is None:
             raise AuthorityError("match_not_running", 409, "Match is not running")
-        if room.match.bell_fruit is not None:
-            raise AuthorityError("bell_window_open", 409, "Bell window is still open")
         if room.match.turn_deadline_at is None or command.now_ms < room.match.turn_deadline_at:
             raise AuthorityError("deadline_not_due", 409, "Turn deadline is not due")
-        _flip_next(room, command.now_ms)
+        if room.match.bell_fruit is not None:
+            for score in room.match.scores:
+                _apply_penalty_to(score, missed_penalty=30)
+                score.missed_hits += 1
+                score.streak = 0
+            room.match.last_event = "missed_bell"
+            if room.match.next_card_index >= len(CARD_SEQUENCE):
+                _finish_match(room)
+            else:
+                _flip_next(room, command.now_ms)
+        elif room.match.next_card_index >= len(CARD_SEQUENCE):
+            _finish_match(room)
+        else:
+            _flip_next(room, command.now_ms)
         room.revision += 1
         return _result_for_verifier(room, room.participants[0].credential_verifier)
 
@@ -351,17 +517,25 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
         participant = _participant_for_verifier(room, command.credential_verifier)
         if room.phase != "playing" or room.match is None:
             raise AuthorityError("match_not_running", 409, "Match is not running")
+        score = room.match.scores[participant.seat_index]
         if room.match.bell_fruit is None:
-            raise AuthorityError("wrong_bell", 409, "Bell is not available")
+            penalty_target = (sum(card is not None for card in room.match.top_cards) + 1) // 2
+            _apply_penalty_to(
+                score,
+                wrong_penalty=50,
+                card_penalty=penalty_target * 4,
+            )
+            score.wrong_hits += 1
+            score.streak = 0
+            room.match.last_event = "wrong_bell"
+            room.revision += 1
+            return _result_for_verifier(room, command.credential_verifier)
 
         collected_count = sum(card is not None for card in room.match.top_cards)
-        room.match.result = _MatchResult(
-            winner_seat_index=participant.seat_index,
-            score=120 + collected_count * 6,
-        )
-        room.match.turn_deadline_at = None
-        room.match.bell_fruit = None
-        room.phase = "post_match"
+        reaction_ms = max(0, command.now_ms - (room.match.bell_opened_at or command.now_ms))
+        _award_correct(score, collected_count=collected_count, reaction_ms=reaction_ms)
+        room.match.last_event = "correct_bell"
+        _finish_match(room)
         room.revision += 1
         return _result_for_verifier(room, command.credential_verifier)
 

@@ -37,6 +37,40 @@
       }
     },
     {
+      "id": "two-seat-correct-bell",
+      "kind": "correct-bell",
+      "mode": "normal",
+      "reactionMs": 1,
+      "topCards": [
+        { "fruit": "banana", "count": 2 },
+        { "fruit": "banana", "count": 3 }
+      ],
+      "expected": {
+        "score": 207,
+        "correctHits": 1,
+        "breakdown": {
+          "correctBase": 120,
+          "collectionBonus": 12,
+          "speedBonus": 75,
+          "streakBonus": 0
+        }
+      }
+    },
+    {
+      "id": "two-seat-wrong-floor",
+      "kind": "wrong-bell",
+      "startingScore": 0,
+      "assessed": { "wrongPenalty": 50, "cardPenalty": 4 },
+      "expected": { "score": 0, "wrongPenalty": 0, "cardPenalty": 0, "wrongHits": 1 }
+    },
+    {
+      "id": "two-seat-missed-floor",
+      "kind": "missed-bell",
+      "startingScore": 0,
+      "assessed": { "missedPenalty": 30 },
+      "expected": { "score": 0, "missedPenalty": 0, "missedHits": 1 }
+    },
+    {
       "id": "partial-wrong-penalty",
       "kind": "wrong-penalty",
       "startingScore": 54,
