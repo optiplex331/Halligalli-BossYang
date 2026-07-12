@@ -10,12 +10,14 @@ root commands as the thin human-facing facade.
 node --version       # >=24.0.0 <25
 pnpm --version       # 11.x
 pnpm install
-pnpm run dev         # focused Web development on :5173
+pnpm run dev         # Web, API, and Redis; Web is exposed on :5173
 ```
 
-Run the authenticated-room API against ephemeral Redis with `pnpm run dev:api`
-and `HALLIGALLI_REDIS_URL` set. Do not add a placeholder HTTP or Socket.IO
-runtime as a fallback.
+Compose is the ordinary paired-runtime path. It exposes only Web; Vite keeps
+`/api/v1` and `/ws/v1` same-origin through its internal API proxy. Use
+`pnpm run dev:web` or `pnpm run dev:api` only for focused host-process work,
+and stop Compose with `pnpm run dev:down`. Do not add a placeholder HTTP or
+Socket.IO runtime as a fallback.
 
 ## Checks
 
@@ -24,6 +26,7 @@ pnpm run test
 pnpm run typecheck
 pnpm run build
 pnpm run check
+pnpm run test:e2e    # after pnpm run dev
 ```
 
 ## Contribution rules

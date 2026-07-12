@@ -31,11 +31,13 @@
 		}
 	},
 	"scripts": {
-		"dev": "pnpm run dev:web",
+		"dev": "docker compose up --detach --wait",
+		"dev:down": "docker compose down --volumes",
 		"dev:web": "pnpm --dir apps/web run dev",
 		"dev:api": "uv run --project apps/api uvicorn halligalli_api.app:app --reload --port 8000",
 		"test": "pnpm --dir apps/web run test && pnpm run test:api",
 		"test:api": "uv run --project apps/api python -m unittest discover -s apps/api/tests -p 'test_*.py'",
+		"test:e2e": "docker compose exec -T web node tests/e2e/compose-journeys.mjs",
 		"typecheck": "pnpm --dir apps/web run typecheck",
 		"build": "pnpm --dir apps/web run build",
 		"check": "pnpm run test && pnpm run typecheck",

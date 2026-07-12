@@ -1,6 +1,8 @@
 import react from "@vitejs/plugin-react";
 import { configDefaults, defineConfig } from "vitest/config";
 
+const apiOrigin = process.env.HALLIGALLI_API_ORIGIN ?? "http://localhost:8000";
+
 export default defineConfig({
   plugins: [react()],
   test: {
@@ -11,9 +13,9 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/api": "http://localhost:8000",
+      "/api": apiOrigin,
       "/ws": {
-        target: "ws://localhost:8000",
+        target: apiOrigin.replace(/^http/, "ws"),
         ws: true,
       },
     },

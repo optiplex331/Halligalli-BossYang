@@ -14,19 +14,23 @@ preferences in browser storage. The API owns ephemeral Redis room state and
 the two-through-six-seat ready/start/turn/bell/result path, including the
 shared scoring ledger and stable Seat Indexes.
 
-## Start the Web application
+## Local development
 
 ```bash
 node --version       # v24.x
 pnpm --version       # 11.x
 pnpm install
-pnpm run dev         # Web on http://localhost:5173
-HALLIGALLI_REDIS_URL=redis://localhost:6379/0 pnpm run dev:api
+pnpm run dev         # Web, API, Redis; open http://localhost:5173
 ```
 
-The root `dev` command deliberately starts focused Web development in this
-slice. `compose.yaml` records the future Web/API/Redis ownership shape; the
-clean three-service local path arrives in ticket 25.
+Compose exposes only the Web on `http://localhost:5173`. Vite proxies `/api/v1`
+and `/ws/v1` to the internal API, so browser traffic remains same-origin. Room
+state belongs only to the disposable Redis container; Compose commits neither
+credentials nor a data volume.
+
+For focused host-process work, run `pnpm run dev:web` or set
+`HALLIGALLI_REDIS_URL=redis://localhost:6379/0` and run `pnpm run dev:api`.
+Stop the local stack with `pnpm run dev:down`.
 
 ## Checks
 
@@ -35,6 +39,7 @@ pnpm run test
 pnpm run typecheck
 pnpm run build
 pnpm run check
+pnpm run test:e2e    # after pnpm run dev; includes two-seat, six-seat, reconnect, and sequential-room journeys
 ```
 
 ## Current game behavior
@@ -76,8 +81,8 @@ contracts/
 ├── fixtures/               # Versioned language-neutral behavior data
 └── openapi.json            # Pydantic-generated REST contract snapshot
 tests/
-└── e2e/                    # Future cross-Web/API browser journeys
-compose.yaml                # Future Web + API + Redis local ownership shape
+└── e2e/                    # Cross-Web/API Compose journeys
+compose.yaml                # Web + API + Redis local development stack
 ```
 
 `contracts/` is data only. The TypeScript browser rules and Python authority
