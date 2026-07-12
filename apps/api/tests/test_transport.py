@@ -68,6 +68,7 @@ class RoomTransportTest(unittest.TestCase):
         self.assertEqual(guest_snapshot.status_code, 200)
         self.assertEqual(snapshot.json()["viewerSeatIndex"], 0)
         self.assertEqual(guest_snapshot.json()["viewerSeatIndex"], 1)
+        self.assertEqual(snapshot.json()["minParticipants"], 2)
         self.assertEqual(snapshot.json()["revision"], guest_snapshot.json()["revision"])
         self.assertEqual([item["name"] for item in snapshot.json()["participants"]], ["Host", "Guest"])
         self.assertNotIn(host_credential, json.dumps(snapshot.json()))

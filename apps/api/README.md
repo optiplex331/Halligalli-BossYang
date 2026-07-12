@@ -1,10 +1,14 @@
 # Halligalli API
 
 This package owns FastAPI transport and the Redis-backed Multiplayer Authority.
-It currently delivers authenticated two-seat room entry plus the authority-owned
-match path: ready, host start, timed card progression, correct/wrong/missed
-bell windows, the shared score-breakdown ledger, and an ephemeral result.
-Larger room sizes follow in later slices.
+It currently delivers authenticated two-through-six-seat room entry plus the
+authority-owned match path: ready, host start, timed card progression,
+correct/wrong/missed bell windows, the shared score-breakdown ledger, stable
+Seat Indexes, and an ephemeral result. A room has six stable slots and a match
+starts once two through six current participants are all ready.
+While a match is active, the Authority advances one deterministic 72-card
+inventory clockwise through its occupied Seats; its snapshots expose the
+Authority-owned minimum participant count alongside the room capacity.
 
 Run the API against an ephemeral Redis instance with:
 

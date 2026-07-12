@@ -13,8 +13,40 @@ ROOM_TTL_SECONDS = 60 * 60
 ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 TURN_DURATION_MS = 700
 SCORE_BONUS_WINDOW_MS = 1_500
-CARD_SEQUENCE = (("banana", 2), ("banana", 3))
+MIN_PARTICIPANTS = 2
+MAX_PARTICIPANTS = 6
 FRUIT_ORDER = ("banana", "strawberry", "lemon", "grape")
+CARD_DISTRIBUTION = ((1, 3), (2, 5), (3, 5), (4, 3), (5, 2))
+
+CardValue: TypeAlias = tuple[Literal["banana", "strawberry", "lemon", "grape"], int]
+OPENING_CARD_SEQUENCE: tuple[CardValue, ...] = (
+    ("banana", 2),
+    ("banana", 3),
+    ("strawberry", 1),
+    ("lemon", 1),
+    ("grape", 1),
+    ("strawberry", 1),
+)
+
+
+def _card_sequence() -> tuple[CardValue, ...]:
+    sequence = list(OPENING_CARD_SEQUENCE)
+    remaining = {
+        (fruit, count): repetitions
+        for fruit in FRUIT_ORDER
+        for count, repetitions in CARD_DISTRIBUTION
+    }
+    for card in OPENING_CARD_SEQUENCE:
+        remaining[card] -= 1
+
+    for fruit in FRUIT_ORDER:
+        for count, _ in CARD_DISTRIBUTION:
+            sequence.extend((fruit, count) for _ in range(remaining[(fruit, count)]))
+
+    return tuple(sequence)
+
+
+CARD_SEQUENCE = _card_sequence()
 
 
 def _camel_case(value: str) -> str:
@@ -100,6 +132,7 @@ class RoomSnapshot(ApiModel):
     room_code: str
     revision: int
     phase: Literal["lobby", "playing", "post_match"]
+    min_participants: int
     max_participants: int
     viewer_seat_index: int
     participants: list[ParticipantSnapshot]
@@ -246,7 +279,7 @@ class _Match:
 class _Room:
     code: str
     revision: int = 1
-    max_participants: int = 2
+    max_participants: int = MAX_PARTICIPANTS
     phase: Literal["lobby", "playing", "post_match"] = "lobby"
     participants: list[_Participant] = field(default_factory=list)
     idempotency: dict[str, _IdempotencyEntry] = field(default_factory=dict)
@@ -342,6 +375,7 @@ def _snapshot_for_verifier(room: _Room, verifier: str) -> RoomSnapshot:
                 room_code=room.code,
                 revision=room.revision,
                 phase=room.phase,
+                min_participants=MIN_PARTICIPANTS,
                 max_participants=room.max_participants,
                 viewer_seat_index=participant.seat_index,
                 participants=[
@@ -477,7 +511,7 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
             raise AuthorityError("match_already_started", 409, "Match already started")
         if participant.seat_index != 0:
             raise AuthorityError("host_required", 403, "Only the host can start the match")
-        if len(room.participants) != room.max_participants or not all(item.ready for item in room.participants):
+        if len(room.participants) < MIN_PARTICIPANTS or not all(item.ready for item in room.participants):
             raise AuthorityError("players_not_ready", 409, "All participants must be ready")
 
         room.phase = "playing"
@@ -535,7 +569,12 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
         reaction_ms = max(0, command.now_ms - (room.match.bell_opened_at or command.now_ms))
         _award_correct(score, collected_count=collected_count, reaction_ms=reaction_ms)
         room.match.last_event = "correct_bell"
-        _finish_match(room)
+        room.match.top_cards = [None] * len(room.match.top_cards)
+        room.match.current_turn = participant.seat_index
+        room.match.bell_fruit = None
+        room.match.bell_opened_at = None
+        if room.match.next_card_index >= len(CARD_SEQUENCE):
+            _finish_match(room)
         room.revision += 1
         return _result_for_verifier(room, command.credential_verifier)
 

@@ -52,12 +52,13 @@ class WebSocketMatchTest(unittest.TestCase):
                 bell_window = host_socket.receive_json()
                 guest_socket.receive_json()
                 host_socket.send_json({"type": "bell"})
-                finished = host_socket.receive_json()
+                continued = host_socket.receive_json()
 
         self.assertEqual(started["snapshot"]["phase"], "playing")
         self.assertEqual(bell_window["snapshot"]["bellFruit"], "banana")
-        self.assertEqual(finished["snapshot"]["phase"], "post_match")
-        self.assertEqual(finished["snapshot"]["result"]["score"], 207)
+        self.assertEqual(continued["snapshot"]["phase"], "playing")
+        self.assertIsNone(continued["snapshot"]["result"])
+        self.assertEqual(continued["snapshot"]["scoreboard"][0]["score"], 207)
 
     def test_deadlines_publish_a_missed_bell_result(self) -> None:
         authority = InMemoryMultiplayerAuthority(room_codes=iter(["WXYZ"]))
@@ -99,6 +100,6 @@ class WebSocketMatchTest(unittest.TestCase):
                 missed = host_socket.receive_json()
 
         self.assertEqual(bell_window["snapshot"]["bellFruit"], "banana")
-        self.assertEqual(missed["snapshot"]["phase"], "post_match")
+        self.assertEqual(missed["snapshot"]["phase"], "playing")
         self.assertEqual(missed["snapshot"]["lastEvent"], "missed_bell")
         self.assertEqual(missed["snapshot"]["scoreboard"][0]["missedHits"], 1)

@@ -6,13 +6,13 @@
 
 Halligalli Arena is a bilingual exact-five card-reaction game. The current
 product slice delivers the complete browser-local Single-Player Path plus a
-two-seat FastAPI/Redis authoritative happy-path match.
+two-through-six-seat FastAPI/Redis authoritative match.
 
 It is a Product Monorepo with two application owners. The Web application keeps
 all active round state in memory and preserves only normalized presentation
 preferences in browser storage. The API owns ephemeral Redis room state and
-the two-seat ready/start/turn/bell/result path, including the shared scoring
-ledger; larger room sizes arrive in the following slices.
+the two-through-six-seat ready/start/turn/bell/result path, including the
+shared scoring ledger and stable Seat Indexes.
 
 ## Start the Web application
 
@@ -42,6 +42,8 @@ pnpm run check
 - 72-card Halligalli inventory: banana, strawberry, lemon, and grape.
 - Two through six browser-local seats with clockwise flips and top-card-only
   totals.
+- Multiplayer rooms have six stable slots and use one authority-owned,
+  deterministic 72-card sequence for two through six occupied Seats.
 - Ring only when one fruit totals exactly five; a correct ring collects the
   table, while a wrong ring pays ceiling-half of the table cards.
 - Easy, Normal, and Boss difficulties; 45/60/90-second rounds; button and

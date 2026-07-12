@@ -143,6 +143,8 @@ export interface components {
             lastEvent?: ("correct_bell" | "wrong_bell" | "missed_bell") | null;
             /** Maxparticipants */
             maxParticipants: number;
+            /** Minparticipants */
+            minParticipants: number;
             /** Participants */
             participants: components["schemas"]["ParticipantSnapshot"][];
             /**

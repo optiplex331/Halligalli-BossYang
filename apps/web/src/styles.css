@@ -1584,6 +1584,12 @@ h2 {
   margin: 8px 0 0;
 }
 
+.room-participants {
+  display: grid;
+  gap: 4px;
+  padding-left: 20px;
+}
+
 .multiplayer-match-state {
   display: grid;
   gap: 12px;
@@ -1592,18 +1598,40 @@ h2 {
 
 .multiplayer-cards {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+}
+
+.multiplayer-cards-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .multiplayer-card {
   display: grid;
-  min-height: 68px;
+  align-content: center;
+  gap: 8px;
+  min-height: 92px;
+  padding: 10px;
   place-items: center;
   border: 1px solid var(--border-1);
   border-radius: var(--r-sm);
   background: rgba(8, 13, 23, 0.72);
+  text-align: center;
+}
+
+.multiplayer-card strong {
   font-size: 1.25rem;
+}
+
+.multiplayer-seat-heading {
+  color: var(--text-1);
+  font-size: 0.76rem;
+  line-height: 1.25;
+}
+
+.multiplayer-card.current-turn {
+  border-color: rgba(201, 162, 39, 0.7);
+  box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.12);
 }
 
 .multiplayer-card.empty {
@@ -1658,6 +1686,10 @@ h2 {
 @media (max-width: 720px) {
   .room-entry-controls {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .multiplayer-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

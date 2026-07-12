@@ -71,6 +71,119 @@
       "expected": { "score": 0, "missedPenalty": 0, "missedHits": 1 }
     },
     {
+      "id": "multiplayer-two-seat-capacity",
+      "kind": "multiplayer-capacity",
+      "participants": 2,
+      "reactionMs": 1,
+      "expected": {
+        "maxParticipants": 6,
+        "topCardSeatIndexes": [0, 1],
+        "currentTurn": 0,
+        "ringingSeatIndex": 1,
+        "score": 207,
+        "missedHits": 0,
+        "breakdown": {
+          "correctBase": 120,
+          "collectionBonus": 12,
+          "speedBonus": 75,
+          "streakBonus": 0
+        }
+      }
+    },
+    {
+      "id": "multiplayer-three-seat-capacity",
+      "kind": "multiplayer-capacity",
+      "participants": 3,
+      "reactionMs": 1,
+      "expected": {
+        "maxParticipants": 6,
+        "topCardSeatIndexes": [0, 1, 2],
+        "currentTurn": 0,
+        "ringingSeatIndex": 2,
+        "score": 213,
+        "missedHits": 1,
+        "breakdown": {
+          "correctBase": 120,
+          "collectionBonus": 18,
+          "speedBonus": 75,
+          "streakBonus": 0
+        }
+      }
+    },
+    {
+      "id": "multiplayer-four-seat-capacity",
+      "kind": "multiplayer-capacity",
+      "participants": 4,
+      "reactionMs": 1,
+      "expected": {
+        "maxParticipants": 6,
+        "topCardSeatIndexes": [0, 1, 2, 3],
+        "currentTurn": 0,
+        "ringingSeatIndex": 3,
+        "score": 219,
+        "missedHits": 2,
+        "breakdown": {
+          "correctBase": 120,
+          "collectionBonus": 24,
+          "speedBonus": 75,
+          "streakBonus": 0
+        }
+      }
+    },
+    {
+      "id": "multiplayer-five-seat-capacity",
+      "kind": "multiplayer-capacity",
+      "participants": 5,
+      "reactionMs": 1,
+      "expected": {
+        "maxParticipants": 6,
+        "topCardSeatIndexes": [0, 1, 2, 3, 4],
+        "currentTurn": 0,
+        "ringingSeatIndex": 4,
+        "score": 225,
+        "missedHits": 3,
+        "breakdown": {
+          "correctBase": 120,
+          "collectionBonus": 30,
+          "speedBonus": 75,
+          "streakBonus": 0
+        }
+      }
+    },
+    {
+      "id": "multiplayer-six-seat-capacity",
+      "kind": "multiplayer-capacity",
+      "participants": 6,
+      "reactionMs": 1,
+      "expected": {
+        "maxParticipants": 6,
+        "topCardSeatIndexes": [0, 1, 2, 3, 4, 5],
+        "currentTurn": 0,
+        "ringingSeatIndex": 5,
+        "score": 231,
+        "missedHits": 4,
+        "breakdown": {
+          "correctBase": 120,
+          "collectionBonus": 36,
+          "speedBonus": 75,
+          "streakBonus": 0
+        }
+      }
+    },
+    {
+      "id": "multiplayer-full-deck-clockwise",
+      "kind": "multiplayer-deck",
+      "participants": 6,
+      "expected": {
+        "cardCount": 72,
+        "firstCards": [
+          { "fruit": "banana", "count": 2 },
+          { "fruit": "banana", "count": 3 }
+        ],
+        "distribution": [[1, 3], [2, 5], [3, 5], [4, 3], [5, 2]]
+      }
+    },
+    {
       "id": "partial-wrong-penalty",
       "kind": "wrong-penalty",
       "startingScore": 54,

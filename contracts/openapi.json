@@ -233,6 +233,10 @@
             "title": "Maxparticipants",
             "type": "integer"
           },
+          "minParticipants": {
+            "title": "Minparticipants",
+            "type": "integer"
+          },
           "participants": {
             "items": {
               "$ref": "#/components/schemas/ParticipantSnapshot"
@@ -308,6 +312,7 @@
           "roomCode",
           "revision",
           "phase",
+          "minParticipants",
           "maxParticipants",
           "viewerSeatIndex",
           "participants"

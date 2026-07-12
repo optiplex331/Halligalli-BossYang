@@ -123,7 +123,7 @@ const COPY = {
     multiplayer: "多人房间",
     playerName: "玩家名",
     roomCode: "房间码",
-    createRoom: "创建两人房间",
+    createRoom: "创建房间（2–6 人）",
     joinRoom: "加入房间",
     roomStatus: "大厅：{current}/{max} 位玩家",
     entryHint: "凭证只保留在当前页面内；刷新后需要重新加入。",
@@ -131,7 +131,7 @@ const COPY = {
     readyForMatch: "准备对局",
     startMatch: "开始对局",
     ringMultiplayerBell: "抢铃",
-    waitingForReady: "等待两位玩家准备",
+    waitingForReady: "等待至少两位玩家全部准备",
     turnOwner: "当前翻牌：{name}",
     matchResult: "座位 {seat} 获胜，获得 {score} 分",
     scoreboardTitle: "多人得分明细",
@@ -200,7 +200,7 @@ const COPY = {
     multiplayer: "Multiplayer room",
     playerName: "Player name",
     roomCode: "Room code",
-    createRoom: "Create two-seat room",
+    createRoom: "Create room (2–6 players)",
     joinRoom: "Join room",
     roomStatus: "Lobby: {current}/{max} players",
     entryHint: "The participant credential stays only in this page; rejoin after refresh.",
@@ -208,7 +208,7 @@ const COPY = {
     readyForMatch: "Ready for match",
     startMatch: "Start match",
     ringMultiplayerBell: "Ring bell",
-    waitingForReady: "Waiting for both players to be ready",
+    waitingForReady: "Waiting for at least two ready players",
     turnOwner: "Current turn: {name}",
     matchResult: "Seat {seat} wins {score} points",
     scoreboardTitle: "Multiplayer score breakdown",
@@ -753,10 +753,10 @@ export default function App() {
                     current: roomProjection.snapshot.participants.length,
                     max: roomProjection.snapshot.maxParticipants,
                   })}</p>
-                  <ul>
-                    {roomProjection.snapshot.participants.map((participant) => (
-                      <li key={participant.seatIndex}>
-                        {participant.name}{participant.ready ? " ✓" : ""}
+                  <ul className="room-participants">
+                    {roomProjection.seats.map((seat) => (
+                      <li key={seat.seatIndex}>
+                        {t("seatLabel", { seat: seat.seatNumber })} · {seat.name}{seat.ready ? " ✓" : ""}
                       </li>
                     ))}
                   </ul>
@@ -785,13 +785,32 @@ export default function App() {
                   {roomProjection.snapshot.phase === "playing" && (
                     <div className="multiplayer-match-state">
                       {activeRoomParticipant && <p>{t("turnOwner", { name: activeRoomParticipant.name })}</p>}
-                      <div className="multiplayer-cards" aria-label={t("multiplayer")}>
-                        {roomProjection.cards.map((card, index) => {
-                          const fruit = card && FRUITS.find((item) => item.key === card.fruit);
+                      <div
+                        className={[
+                          "multiplayer-cards",
+                          roomProjection.seats.length === 2 ? "multiplayer-cards-2" : "",
+                        ].filter(Boolean).join(" ")}
+                        aria-label={t("multiplayer")}
+                      >
+                        {roomProjection.seats.map((seat) => {
+                          const card = seat.card;
+                          const fruit = card
+                            ? FRUITS.find((item) => item.key === card.fruit)
+                            : null;
                           return (
-                            <span key={index} className={card ? "multiplayer-card" : "multiplayer-card empty"}>
-                              {card ? `${fruit?.icon ?? ""} ×${card.count}` : "—"}
-                            </span>
+                            <article
+                              key={seat.seatIndex}
+                              className={[
+                                "multiplayer-card",
+                                card ? "" : "empty",
+                                seat.currentTurn ? "current-turn" : "",
+                              ].filter(Boolean).join(" ")}
+                            >
+                              <span className="multiplayer-seat-heading">
+                                {t("seatLabel", { seat: seat.seatNumber })} · {seat.name}
+                              </span>
+                              <strong>{card ? `${fruit?.icon ?? ""} ×${card.count}` : "—"}</strong>
+                            </article>
                           );
                         })}
                       </div>
