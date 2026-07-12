@@ -5,13 +5,14 @@
 # Halligalli Arena
 
 Halligalli Arena is a bilingual exact-five card-reaction game. The current
-product slice delivers the complete browser-local Single-Player Path plus
-authenticated two-seat FastAPI/Redis lobby entry and viewer snapshots.
+product slice delivers the complete browser-local Single-Player Path plus a
+two-seat FastAPI/Redis authoritative happy-path match.
 
 It is a Product Monorepo with two application owners. The Web application keeps
 all active round state in memory and preserves only normalized presentation
-preferences in browser storage. The API owns ephemeral Redis room state; full
-authoritative gameplay arrives in the following slices.
+preferences in browser storage. The API owns ephemeral Redis room state and
+the initial ready/start/turn/bell/result path; full scoring parity and larger
+room sizes arrive in the following slices.
 
 ## Start the Web application
 

@@ -1,6 +1,30 @@
 {
   "components": {
     "schemas": {
+      "CardSnapshot": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "fruit": {
+            "enum": [
+              "banana",
+              "strawberry",
+              "lemon",
+              "grape"
+            ],
+            "title": "Fruit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fruit",
+          "count"
+        ],
+        "title": "CardSnapshot",
+        "type": "object"
+      },
       "EntryRequest": {
         "properties": {
           "credentialVerifier": {
@@ -38,6 +62,24 @@
           "snapshot"
         ],
         "title": "EntryResult",
+        "type": "object"
+      },
+      "MatchResult": {
+        "properties": {
+          "score": {
+            "title": "Score",
+            "type": "integer"
+          },
+          "winnerSeatIndex": {
+            "title": "Winnerseatindex",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "winnerSeatIndex",
+          "score"
+        ],
+        "title": "MatchResult",
         "type": "object"
       },
       "ParticipantSnapshot": {
@@ -93,6 +135,39 @@
       },
       "RoomSnapshot": {
         "properties": {
+          "bellAvailable": {
+            "default": false,
+            "title": "Bellavailable",
+            "type": "boolean"
+          },
+          "bellFruit": {
+            "anyOf": [
+              {
+                "enum": [
+                  "banana",
+                  "strawberry",
+                  "lemon",
+                  "grape"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bellfruit"
+          },
+          "currentTurn": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentturn"
+          },
           "maxParticipants": {
             "title": "Maxparticipants",
             "type": "integer"
@@ -105,9 +180,23 @@
             "type": "array"
           },
           "phase": {
-            "const": "lobby",
+            "enum": [
+              "lobby",
+              "playing",
+              "post_match"
+            ],
             "title": "Phase",
             "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MatchResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "revision": {
             "title": "Revision",
@@ -116,6 +205,31 @@
           "roomCode": {
             "title": "Roomcode",
             "type": "string"
+          },
+          "topCards": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/CardSnapshot"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Topcards",
+            "type": "array"
+          },
+          "turnDeadlineAt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turndeadlineat"
           },
           "viewerSeatIndex": {
             "title": "Viewerseatindex",

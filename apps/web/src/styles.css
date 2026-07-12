@@ -1584,6 +1584,32 @@ h2 {
   margin: 8px 0 0;
 }
 
+.multiplayer-match-state {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.multiplayer-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.multiplayer-card {
+  display: grid;
+  min-height: 68px;
+  place-items: center;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: rgba(8, 13, 23, 0.72);
+  font-size: 1.25rem;
+}
+
+.multiplayer-card.empty {
+  color: var(--text-2);
+}
+
 @media (max-width: 720px) {
   .room-entry-controls {
     grid-template-columns: 1fr 1fr;

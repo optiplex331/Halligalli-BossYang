@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import asyncio
+import time
 from contextlib import asynccontextmanager
 from typing import Annotated, Literal
 from uuid import UUID
@@ -12,14 +14,19 @@ from pydantic import Field
 
 from .authority import (
     ApiModel,
+    AdvanceTurn,
     AuthorityError,
+    Bell,
     CreateRoom,
     EntryResult,
     JoinRoom,
     MultiplayerAuthority,
+    Ready,
     RedisMultiplayerAuthority,
     RoomSnapshot,
+    Start,
     Viewer,
+    credential_verifier,
 )
 
 
@@ -38,6 +45,37 @@ class ProblemDetails(ApiModel):
 class WebSocketAuthentication(ApiModel):
     type: Literal["authenticate"]
     credential: str = Field(min_length=1)
+
+
+class WebSocketRoomCommand(ApiModel):
+    type: Literal["ready", "start", "bell"]
+
+
+class RoomSocketHub:
+    def __init__(self) -> None:
+        self._members: dict[str, dict[WebSocket, str]] = {}
+
+    def attach(self, room_code: str, websocket: WebSocket, credential: str) -> None:
+        self._members.setdefault(room_code, {})[websocket] = credential
+
+    def detach(self, room_code: str, websocket: WebSocket) -> None:
+        members = self._members.get(room_code)
+        if members is None:
+            return
+        members.pop(websocket, None)
+        if not members:
+            self._members.pop(room_code, None)
+
+    async def publish(self, room_code: str, authority: MultiplayerAuthority) -> None:
+        members = list(self._members.get(room_code, {}).items())
+        for websocket, credential in members:
+            try:
+                snapshot = await authority.snapshot(room_code, Viewer(credential=credential))
+                await websocket.send_json(
+                    {"type": "snapshot", "snapshot": snapshot.model_dump(by_alias=True)},
+                )
+            except (AuthorityError, RuntimeError):
+                self.detach(room_code, websocket)
 
 
 def _runtime_authority() -> RedisMultiplayerAuthority:
@@ -59,12 +97,46 @@ def _viewer_from_authorization(authorization: str | None) -> Viewer:
     return Viewer(credential=credential)
 
 
+def _room_command(payload: WebSocketRoomCommand, credential: str):
+    verifier = credential_verifier(credential)
+    now_ms = time.time_ns() // 1_000_000
+    if payload.type == "ready":
+        return Ready(verifier)
+    if payload.type == "start":
+        return Start(verifier, now_ms=now_ms)
+    return Bell(verifier, now_ms=now_ms)
+
+
 def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
     selected_authority = authority or _runtime_authority()
+    hub = RoomSocketHub()
+    deadline_tasks: set[asyncio.Task[None]] = set()
+
+    def schedule_turn(room_code: str, deadline_at: int) -> None:
+        async def advance_when_due() -> None:
+            delay_seconds = max(0, deadline_at - (time.time_ns() // 1_000_000)) / 1_000
+            await asyncio.sleep(delay_seconds)
+            try:
+                await selected_authority.execute(
+                    room_code,
+                    AdvanceTurn(now_ms=time.time_ns() // 1_000_000),
+                )
+            except AuthorityError:
+                return
+            await hub.publish(room_code, selected_authority)
+
+        task = asyncio.create_task(advance_when_due())
+        deadline_tasks.add(task)
+        task.add_done_callback(deadline_tasks.discard)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         yield
+        pending_tasks = tuple(deadline_tasks)
+        for task in pending_tasks:
+            task.cancel()
+        if pending_tasks:
+            await asyncio.gather(*pending_tasks, return_exceptions=True)
         close = getattr(selected_authority, "aclose", None)
         if close is not None:
             await close()
@@ -76,6 +148,7 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.authority = selected_authority
+    app.state.room_socket_hub = hub
 
     @app.exception_handler(AuthorityError)
     async def authority_error_handler(_: Request, error: AuthorityError) -> JSONResponse:
@@ -171,10 +244,11 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
     @app.websocket("/ws/v1/rooms/{room_code}")
     async def room_websocket(websocket: WebSocket, room_code: str) -> None:
         await websocket.accept()
+        canonical_room_code = _canonical_room_code(room_code)
         try:
             payload = WebSocketAuthentication.model_validate(await websocket.receive_json())
             snapshot = await app.state.authority.snapshot(
-                _canonical_room_code(room_code),
+                canonical_room_code,
                 Viewer(credential=payload.credential),
             )
         except (AuthorityError, ValueError):
@@ -186,6 +260,23 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
         await websocket.send_json(
             {"type": "snapshot", "snapshot": snapshot.model_dump(by_alias=True)},
         )
+        hub.attach(canonical_room_code, websocket, payload.credential)
+        try:
+            while True:
+                command_payload = WebSocketRoomCommand.model_validate(await websocket.receive_json())
+                result = await app.state.authority.execute(
+                    canonical_room_code,
+                    _room_command(command_payload, payload.credential),
+                )
+                await hub.publish(canonical_room_code, app.state.authority)
+                if command_payload.type == "start" and result.snapshot.turn_deadline_at is not None:
+                    schedule_turn(canonical_room_code, result.snapshot.turn_deadline_at)
+        except (AuthorityError, ValueError):
+            await websocket.close(code=1008)
+        except WebSocketDisconnect:
+            pass
+        finally:
+            hub.detach(canonical_room_code, websocket)
 
     return app
 

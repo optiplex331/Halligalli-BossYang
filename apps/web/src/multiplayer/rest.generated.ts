@@ -59,6 +59,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** CardSnapshot */
+        CardSnapshot: {
+            /** Count */
+            count: number;
+            /**
+             * Fruit
+             * @enum {string}
+             */
+            fruit: "banana" | "strawberry" | "lemon" | "grape";
+        };
         /** EntryRequest */
         EntryRequest: {
             /** Credentialverifier */
@@ -71,6 +81,13 @@ export interface components {
             /** Roomcode */
             roomCode: string;
             snapshot: components["schemas"]["RoomSnapshot"];
+        };
+        /** MatchResult */
+        MatchResult: {
+            /** Score */
+            score: number;
+            /** Winnerseatindex */
+            winnerSeatIndex: number;
         };
         /** ParticipantSnapshot */
         ParticipantSnapshot: {
@@ -97,19 +114,33 @@ export interface components {
         };
         /** RoomSnapshot */
         RoomSnapshot: {
+            /**
+             * Bellavailable
+             * @default false
+             */
+            bellAvailable: boolean;
+            /** Bellfruit */
+            bellFruit?: ("banana" | "strawberry" | "lemon" | "grape") | null;
+            /** Currentturn */
+            currentTurn?: number | null;
             /** Maxparticipants */
             maxParticipants: number;
             /** Participants */
             participants: components["schemas"]["ParticipantSnapshot"][];
             /**
              * Phase
-             * @constant
+             * @enum {string}
              */
-            phase: "lobby";
+            phase: "lobby" | "playing" | "post_match";
+            result?: components["schemas"]["MatchResult"] | null;
             /** Revision */
             revision: number;
             /** Roomcode */
             roomCode: string;
+            /** Topcards */
+            topCards?: (components["schemas"]["CardSnapshot"] | null)[];
+            /** Turndeadlineat */
+            turnDeadlineAt?: number | null;
             /** Viewerseatindex */
             viewerSeatIndex: number;
         };

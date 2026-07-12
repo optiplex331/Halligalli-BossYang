@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { components } from "./rest.generated.js";
 
@@ -61,7 +61,7 @@ async function readEntry(
   return response.json() as Promise<EntryResult>;
 }
 
-function watchRoom(session: RoomSession, onSnapshot: (snapshot: RoomSnapshot) => void): () => void {
+function watchRoom(session: RoomSession, onSnapshot: (snapshot: RoomSnapshot) => void): WebSocket {
   const socket = new WebSocket(
     `${websocketOrigin()}/ws/v1/rooms/${encodeURIComponent(session.roomCode)}`,
   );
@@ -74,23 +74,47 @@ function watchRoom(session: RoomSession, onSnapshot: (snapshot: RoomSnapshot) =>
       onSnapshot(payload.snapshot);
     }
   });
-  return () => socket.close();
+  return socket;
 }
 
 export function useRoomEntry() {
   const [session, setSession] = useState<RoomSession | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const socketRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    if (!session) return;
-    return watchRoom(session, (snapshot) => {
+    if (!session) {
+      socketRef.current = null;
+      setConnected(false);
+      return;
+    }
+    const socket = watchRoom(session, (snapshot) => {
       setSession((current) => current && {
         ...current,
         snapshot,
       });
     });
+    socketRef.current = socket;
+    socket.addEventListener("open", () => setConnected(true));
+    socket.addEventListener("close", () => setConnected(false));
+    return () => {
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
+      socket.close();
+    };
   }, [session?.credential, session?.roomCode]);
+
+  function sendCommand(type: "ready" | "start" | "bell"): void {
+    const socket = socketRef.current;
+    if (socket?.readyState !== WebSocket.OPEN) {
+      setError("Room connection is unavailable");
+      return;
+    }
+    socket.send(JSON.stringify({ type }));
+  }
 
   async function enter(path: string, name: string): Promise<void> {
     setPending(true);
@@ -121,8 +145,12 @@ export function useRoomEntry() {
     session,
     error,
     pending,
+    connected,
     createRoom: (name: string) => enter("/api/v1/rooms", name),
     joinRoom: (roomCode: string, name: string) =>
       enter(`/api/v1/rooms/${encodeURIComponent(roomCode.trim().toUpperCase())}/participants`, name),
+    ready: () => sendCommand("ready"),
+    start: () => sendCommand("start"),
+    ringBell: () => sendCommand("bell"),
   };
 }

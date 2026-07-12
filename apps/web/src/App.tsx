@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { useAudioEngine } from "./audio/useAudioEngine.js";
+import { projectRoomSnapshot } from "./multiplayer/projection.js";
 import { useRoomEntry } from "./multiplayer/room-entry.js";
 import { FRUITS, MODES } from "./game/catalog.js";
 import { DEFAULT_SETTINGS, INITIAL_BREAKDOWN } from "./game/constants.js";
@@ -126,6 +127,13 @@ const COPY = {
     joinRoom: "加入房间",
     roomStatus: "大厅：{current}/{max} 位玩家",
     entryHint: "凭证只保留在当前页面内；刷新后需要重新加入。",
+    roomConnecting: "正在连接房间…",
+    readyForMatch: "准备对局",
+    startMatch: "开始对局",
+    ringMultiplayerBell: "抢铃",
+    waitingForReady: "等待两位玩家准备",
+    turnOwner: "当前翻牌：{name}",
+    matchResult: "座位 {seat} 获胜，获得 {score} 分",
   },
   en: {
     heroRule: "Flip cards clockwise, count only the top visible cards, ring when one fruit totals exactly 5",
@@ -191,6 +199,13 @@ const COPY = {
     joinRoom: "Join room",
     roomStatus: "Lobby: {current}/{max} players",
     entryHint: "The participant credential stays only in this page; rejoin after refresh.",
+    roomConnecting: "Connecting to room…",
+    readyForMatch: "Ready for match",
+    startMatch: "Start match",
+    ringMultiplayerBell: "Ring bell",
+    waitingForReady: "Waiting for both players to be ready",
+    turnOwner: "Current turn: {name}",
+    matchResult: "Seat {seat} wins {score} points",
   },
 } as const;
 
@@ -344,6 +359,12 @@ export default function App() {
   const compactCards = settings.playerCount >= 5;
   const { ensureUnlocked, playFeedback } = useAudioEngine(settings.soundEnabled);
   const roomEntry = useRoomEntry();
+  const roomProjection = roomEntry.session
+    ? projectRoomSnapshot(roomEntry.session.snapshot)
+    : null;
+  const activeRoomParticipant = roomProjection?.snapshot.participants.find(
+    (participant) => participant.seatIndex === roomProjection.snapshot.currentTurn,
+  );
 
   function t(key: CopyKey, values: Record<string, number | string> = {}): string {
     let message: string = copy[key];
@@ -715,18 +736,70 @@ export default function App() {
                 </button>
               </div>
               {roomEntry.error && <p className="room-entry-error" role="alert">{roomEntry.error}</p>}
-              {roomEntry.session && (
+              {roomProjection && (
                 <div className="room-entry-snapshot" role="status" aria-live="polite">
-                  <strong>{t("roomCode")}: {roomEntry.session.roomCode}</strong>
+                  <strong>{t("roomCode")}: {roomProjection.snapshot.roomCode}</strong>
                   <p>{t("roomStatus", {
-                    current: roomEntry.session.snapshot.participants.length,
-                    max: roomEntry.session.snapshot.maxParticipants,
+                    current: roomProjection.snapshot.participants.length,
+                    max: roomProjection.snapshot.maxParticipants,
                   })}</p>
                   <ul>
-                    {roomEntry.session.snapshot.participants.map((participant) => (
-                      <li key={participant.seatIndex}>{participant.name}</li>
+                    {roomProjection.snapshot.participants.map((participant) => (
+                      <li key={participant.seatIndex}>
+                        {participant.name}{participant.ready ? " ✓" : ""}
+                      </li>
                     ))}
                   </ul>
+                  {!roomEntry.connected && <p>{t("roomConnecting")}</p>}
+                  {roomProjection.snapshot.phase === "lobby" && (
+                    <div className="button-row">
+                      <button
+                        className="primary-button"
+                        disabled={!roomEntry.connected || !roomProjection.canReady}
+                        onClick={roomEntry.ready}
+                      >
+                        {t("readyForMatch")}
+                      </button>
+                      <button
+                        className="ghost-button"
+                        disabled={!roomEntry.connected || !roomProjection.canStart}
+                        onClick={roomEntry.start}
+                      >
+                        {t("startMatch")}
+                      </button>
+                    </div>
+                  )}
+                  {roomProjection.snapshot.phase === "lobby" && !roomProjection.canStart && (
+                    <p>{t("waitingForReady")}</p>
+                  )}
+                  {roomProjection.snapshot.phase === "playing" && (
+                    <div className="multiplayer-match-state">
+                      {activeRoomParticipant && <p>{t("turnOwner", { name: activeRoomParticipant.name })}</p>}
+                      <div className="multiplayer-cards" aria-label={t("multiplayer")}>
+                        {roomProjection.cards.map((card, index) => {
+                          const fruit = card && FRUITS.find((item) => item.key === card.fruit);
+                          return (
+                            <span key={index} className={card ? "multiplayer-card" : "multiplayer-card empty"}>
+                              {card ? `${fruit?.icon ?? ""} ×${card.count}` : "—"}
+                            </span>
+                          );
+                        })}
+                      </div>
+                      <button
+                        className="primary-button"
+                        disabled={!roomEntry.connected || !roomProjection.canRing}
+                        onClick={roomEntry.ringBell}
+                      >
+                        {t("ringMultiplayerBell")}
+                      </button>
+                    </div>
+                  )}
+                  {roomProjection.snapshot.phase === "post_match" && roomProjection.snapshot.result && (
+                    <p>{t("matchResult", {
+                      seat: roomProjection.snapshot.result.winnerSeatIndex + 1,
+                      score: roomProjection.snapshot.result.score,
+                    })}</p>
+                  )}
                 </div>
               )}
             </section>
