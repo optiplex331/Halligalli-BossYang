@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+import sys
 from collections import Counter
 from time import perf_counter
 from typing import Literal
@@ -16,6 +17,13 @@ class Telemetry:
 
     def __init__(self) -> None:
         self._logger = logging.getLogger("halligalli.telemetry")
+        if not any(getattr(handler, "_halligalli_json", False) for handler in self._logger.handlers):
+            handler = logging.StreamHandler(sys.stdout)
+            handler.setFormatter(logging.Formatter("%(message)s"))
+            handler._halligalli_json = True  # type: ignore[attr-defined]
+            self._logger.addHandler(handler)
+        self._logger.setLevel(logging.INFO)
+        self._logger.propagate = False
         self._counts: Counter[tuple[str, ...]] = Counter()
         self._durations: Counter[tuple[str, ...]] = Counter()
 
