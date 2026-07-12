@@ -1,0 +1,380 @@
+{
+  "components": {
+    "schemas": {
+      "EntryRequest": {
+        "properties": {
+          "credentialVerifier": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Credentialverifier",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 24,
+            "minLength": 1,
+            "pattern": "^[^\\r\\n]+$",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "credentialVerifier"
+        ],
+        "title": "EntryRequest",
+        "type": "object"
+      },
+      "EntryResult": {
+        "properties": {
+          "roomCode": {
+            "title": "Roomcode",
+            "type": "string"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/RoomSnapshot"
+          }
+        },
+        "required": [
+          "roomCode",
+          "snapshot"
+        ],
+        "title": "EntryResult",
+        "type": "object"
+      },
+      "ParticipantSnapshot": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ready": {
+            "default": false,
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "seatIndex": {
+            "title": "Seatindex",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "seatIndex"
+        ],
+        "title": "ParticipantSnapshot",
+        "type": "object"
+      },
+      "ProblemDetails": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "title": "ProblemDetails",
+        "type": "object"
+      },
+      "RoomSnapshot": {
+        "properties": {
+          "maxParticipants": {
+            "title": "Maxparticipants",
+            "type": "integer"
+          },
+          "participants": {
+            "items": {
+              "$ref": "#/components/schemas/ParticipantSnapshot"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
+          "phase": {
+            "const": "lobby",
+            "title": "Phase",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "roomCode": {
+            "title": "Roomcode",
+            "type": "string"
+          },
+          "viewerSeatIndex": {
+            "title": "Viewerseatindex",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "roomCode",
+          "revision",
+          "phase",
+          "maxParticipants",
+          "viewerSeatIndex",
+          "participants"
+        ],
+        "title": "RoomSnapshot",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Ephemeral multiplayer room entry and viewer snapshots.",
+    "title": "Halligalli API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/rooms": {
+      "post": {
+        "operationId": "create_room_api_v1_rooms_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EntryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntryResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Create Room"
+      }
+    },
+    "/api/v1/rooms/{room_code}": {
+      "get": {
+        "operationId": "get_room_snapshot_api_v1_rooms__room_code__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "room_code",
+            "required": true,
+            "schema": {
+              "title": "Room Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Get Room Snapshot"
+      }
+    },
+    "/api/v1/rooms/{room_code}/participants": {
+      "post": {
+        "operationId": "join_room_api_v1_rooms__room_code__participants_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "room_code",
+            "required": true,
+            "schema": {
+              "title": "Room Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EntryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntryResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Join Room"
+      }
+    }
+  }
+}

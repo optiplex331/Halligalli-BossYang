@@ -1,7 +1,7 @@
 # Contributing
 
 Halligalli is a small Product Monorepo with two application owners: React/Vite
-Web and future FastAPI/Redis API. Keep changes within their owner and use the
+Web and FastAPI/Redis API. Keep changes within their owner and use the
 root commands as the thin human-facing facade.
 
 ## Local setup
@@ -13,9 +13,9 @@ pnpm install
 pnpm run dev         # focused Web development on :5173
 ```
 
-The API package is intentionally not runnable before the authenticated-room
-entry slice. Do not add a placeholder HTTP or Socket.IO runtime to bridge that
-gap.
+Run the authenticated-room API against ephemeral Redis with `pnpm run dev:api`
+and `HALLIGALLI_REDIS_URL` set. Do not add a placeholder HTTP or Socket.IO
+runtime as a fallback.
 
 ## Checks
 

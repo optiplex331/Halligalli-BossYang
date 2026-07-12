@@ -5,13 +5,13 @@
 # Halligalli Arena
 
 Halligalli Arena is a bilingual exact-five card-reaction game. The current
-product slice delivers the complete browser-local Single-Player Path while the
-FastAPI/Redis multiplayer path is being built in later slices.
+product slice delivers the complete browser-local Single-Player Path plus
+authenticated two-seat FastAPI/Redis lobby entry and viewer snapshots.
 
 It is a Product Monorepo with two application owners. The Web application keeps
 all active round state in memory and preserves only normalized presentation
-preferences in browser storage. The API package is an ownership seam today; it
-does not yet expose room or gameplay transport.
+preferences in browser storage. The API owns ephemeral Redis room state; full
+authoritative gameplay arrives in the following slices.
 
 ## Start the Web application
 
@@ -20,11 +20,12 @@ node --version       # v24.x
 pnpm --version       # 11.x
 pnpm install
 pnpm run dev         # Web on http://localhost:5173
+HALLIGALLI_REDIS_URL=redis://localhost:6379/0 pnpm run dev:api
 ```
 
 The root `dev` command deliberately starts focused Web development in this
-slice. `compose.yaml` records the future Web/API/Redis ownership shape only;
-the clean three-service local path arrives after the API authority exists.
+slice. `compose.yaml` records the future Web/API/Redis ownership shape; the
+clean three-service local path arrives in ticket 25.
 
 ## Checks
 
@@ -60,24 +61,25 @@ player-count preferences. Historical best/recent results, history, trends,
 daily goals, and achievements are removed on load and are never written again.
 
 There are no accounts, payments, durable match records, player profiles, or
-room recovery. The future Multiplayer Authority will be ephemeral Redis state.
+room recovery. The Multiplayer Authority uses ephemeral Redis state.
 
 ## Project shape
 
 ```text
 apps/
 ├── web/                    # React/Vite Single-Player Path
-└── api/                    # Future FastAPI/Redis ownership seam
+└── api/                    # FastAPI REST/WebSocket + Redis authority
 contracts/
-└── fixtures/               # Versioned language-neutral behavior data
+├── fixtures/               # Versioned language-neutral behavior data
+└── openapi.json            # Pydantic-generated REST contract snapshot
 tests/
 └── e2e/                    # Future cross-Web/API browser journeys
 compose.yaml                # Future Web + API + Redis local ownership shape
 ```
 
-`contracts/` is data only. The TypeScript browser rules and the later Python
-authority consume the same JSON fixtures independently; they never share an
-executable rules package.
+`contracts/` is data only. The TypeScript browser rules and Python authority
+consume the same JSON fixtures independently; they never share an executable
+rules package.
 
 ## Boundaries
 

@@ -1,9 +1,20 @@
 # Halligalli API
 
-This package owns the future FastAPI transport and Multiplayer Authority. It is
-intentionally not a runnable server in the single-player migration slice.
+This package owns FastAPI transport and the Redis-backed Multiplayer Authority.
+It currently delivers authenticated two-seat room entry and complete
+viewer-specific lobby snapshots; authoritative gameplay follows in later slices.
 
-The next implementation slice adds the REST entry surface, native WebSocket
-transport, Participant Credentials, and Redis-backed authority state. This
-package must not import Web source or browser APIs; it consumes only data from
-`../../contracts/fixtures` in its own tests.
+Run the API against an ephemeral Redis instance with:
+
+```bash
+HALLIGALLI_REDIS_URL=redis://localhost:6379/0 pnpm run dev:api
+```
+
+The runtime selects `RedisMultiplayerAuthority`; `InMemoryMultiplayerAuthority`
+exists only for interface tests. REST contract truth is generated from Pydantic
+into `../../contracts/openapi.json`, and the Web consumes its generated REST
+types. Participant Credentials are browser-memory secrets: callers submit only
+their verifier on entry and use the raw credential later in an Authorization
+header or the first native WebSocket frame.
+
+This package must not import Web source or browser APIs.

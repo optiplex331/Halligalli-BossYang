@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { useAudioEngine } from "./audio/useAudioEngine.js";
+import { useRoomEntry } from "./multiplayer/room-entry.js";
 import { FRUITS, MODES } from "./game/catalog.js";
 import { DEFAULT_SETTINGS, INITIAL_BREAKDOWN } from "./game/constants.js";
 import {
@@ -118,6 +119,13 @@ const COPY = {
     resultLine: "{players} 人局，正确率 {accuracy}%，平均反应 {avg} ms",
     bellReady: "抢铃 — {fruit}已凑齐5个",
     bellWait: "抢铃（等待时机）",
+    multiplayer: "多人房间",
+    playerName: "玩家名",
+    roomCode: "房间码",
+    createRoom: "创建两人房间",
+    joinRoom: "加入房间",
+    roomStatus: "大厅：{current}/{max} 位玩家",
+    entryHint: "凭证只保留在当前页面内；刷新后需要重新加入。",
   },
   en: {
     heroRule: "Flip cards clockwise, count only the top visible cards, ring when one fruit totals exactly 5",
@@ -176,6 +184,13 @@ const COPY = {
     resultLine: "{players}-player round, {accuracy}% accuracy, avg reaction {avg} ms",
     bellReady: "Ring — {fruit} ×5",
     bellWait: "Ring bell (waiting for condition)",
+    multiplayer: "Multiplayer room",
+    playerName: "Player name",
+    roomCode: "Room code",
+    createRoom: "Create two-seat room",
+    joinRoom: "Join room",
+    roomStatus: "Lobby: {current}/{max} players",
+    entryHint: "The participant credential stays only in this page; rejoin after refresh.",
   },
 } as const;
 
@@ -306,6 +321,8 @@ export default function App() {
   const [bellPressed, setBellPressed] = useState(false);
   const [justFlippedSeat, setJustFlippedSeat] = useState(-1);
   const [resultSummary, setResultSummary] = useState<RoundSummary | null>(null);
+  const [roomName, setRoomName] = useState("");
+  const [joinCode, setJoinCode] = useState("");
 
   const gameStateRef = useRef<GameSnapshot>(INITIAL_GAME_SNAPSHOT);
   const gameRunningRef = useRef(false);
@@ -326,6 +343,7 @@ export default function App() {
   const copy = COPY[settings.language];
   const compactCards = settings.playerCount >= 5;
   const { ensureUnlocked, playFeedback } = useAudioEngine(settings.soundEnabled);
+  const roomEntry = useRoomEntry();
 
   function t(key: CopyKey, values: Record<string, number | string> = {}): string {
     let message: string = copy[key];
@@ -656,6 +674,62 @@ export default function App() {
                 </div>
               </section>
             </div>
+
+            <section className="card multiplayer-entry" aria-labelledby="multiplayer-entry-title">
+              <div>
+                <h2 id="multiplayer-entry-title">{t("multiplayer")}</h2>
+                <p className="deck-note">{t("entryHint")}</p>
+              </div>
+              <div className="room-entry-controls">
+                <label>
+                  <span>{t("playerName")}</span>
+                  <input
+                    value={roomName}
+                    maxLength={24}
+                    onChange={(event) => setRoomName(event.target.value)}
+                    placeholder={settings.language === "en" ? "Player" : "玩家"}
+                  />
+                </label>
+                <button
+                  className="primary-button"
+                  disabled={roomEntry.pending}
+                  onClick={() => void roomEntry.createRoom(roomName)}
+                >
+                  {t("createRoom")}
+                </button>
+                <label>
+                  <span>{t("roomCode")}</span>
+                  <input
+                    value={joinCode}
+                    maxLength={4}
+                    onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                    placeholder="ABCD"
+                  />
+                </label>
+                <button
+                  className="ghost-button"
+                  disabled={roomEntry.pending || !joinCode.trim()}
+                  onClick={() => void roomEntry.joinRoom(joinCode, roomName)}
+                >
+                  {t("joinRoom")}
+                </button>
+              </div>
+              {roomEntry.error && <p className="room-entry-error" role="alert">{roomEntry.error}</p>}
+              {roomEntry.session && (
+                <div className="room-entry-snapshot" role="status" aria-live="polite">
+                  <strong>{t("roomCode")}: {roomEntry.session.roomCode}</strong>
+                  <p>{t("roomStatus", {
+                    current: roomEntry.session.snapshot.participants.length,
+                    max: roomEntry.session.snapshot.maxParticipants,
+                  })}</p>
+                  <ul>
+                    {roomEntry.session.snapshot.participants.map((participant) => (
+                      <li key={participant.seatIndex}>{participant.name}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </section>
           </section>
         )}
 
