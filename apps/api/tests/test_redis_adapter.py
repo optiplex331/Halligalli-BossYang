@@ -95,3 +95,14 @@ class RedisAdapterTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(sorted((first.snapshot.revision, second.snapshot.revision)), [3, 4])
         self.assertEqual(replay.snapshot.revision, 4)
+
+    async def test_redis_publishes_room_revision_hints(self) -> None:
+        host, guest = "host-credential", "guest-credential"
+        created = await self.authority.execute(None, CreateRoom("create-pubsub", "Host", verifier(host)))
+        subscription = await self.authority.subscribe_revisions()
+        try:
+            revision = asyncio.create_task(anext(subscription.events()))
+            await self.authority.execute(created.room_code, JoinRoom("join-pubsub", "Guest", verifier(guest)))
+            self.assertEqual(await asyncio.wait_for(revision, timeout=1), created.room_code)
+        finally:
+            await subscription.aclose()

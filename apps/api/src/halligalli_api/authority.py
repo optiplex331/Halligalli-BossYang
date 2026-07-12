@@ -5,6 +5,7 @@ import json
 import secrets
 import time
 from dataclasses import asdict, dataclass, field
+from collections.abc import AsyncIterator
 from typing import Literal, Protocol, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -252,6 +253,35 @@ class MultiplayerAuthority(Protocol):
     ) -> AuthorityResult: ...
 
     async def snapshot(self, room_code: str, viewer: Viewer) -> RoomSnapshot: ...
+
+
+class RedisRevisionSubscription:
+    """A ready Redis pattern subscription for room snapshot invalidations."""
+
+    _pattern = "halligalli:room:*:snapshots"
+    _prefix = "halligalli:room:{"
+    _suffix = "}:snapshots"
+
+    def __init__(self, pubsub: object) -> None:
+        self._pubsub = pubsub
+
+    async def events(self) -> AsyncIterator[str]:
+        async for message in self._pubsub.listen():
+            if message.get("type") != "pmessage":
+                continue
+            channel = message.get("channel")
+            if isinstance(channel, bytes):
+                channel = channel.decode()
+            if not isinstance(channel, str):
+                continue
+            if channel.startswith(self._prefix) and channel.endswith(self._suffix):
+                yield channel.removeprefix(self._prefix).removesuffix(self._suffix)
+
+    async def aclose(self) -> None:
+        await self._pubsub.punsubscribe(self._pattern)
+        close = getattr(self._pubsub, "aclose", None)
+        if close is not None:
+            await close()
 
 
 @dataclass
@@ -866,6 +896,11 @@ class RedisMultiplayerAuthority:
     @staticmethod
     def _channel(room_code: str) -> str:
         return f"halligalli:room:{{{room_code}}}:snapshots"
+
+    async def subscribe_revisions(self) -> RedisRevisionSubscription:
+        pubsub = self._redis.pubsub()
+        await pubsub.psubscribe(RedisRevisionSubscription._pattern)
+        return RedisRevisionSubscription(pubsub)
 
     @staticmethod
     def _ttl_seconds(room: _Room) -> int:

@@ -4,6 +4,8 @@ import os
 import asyncio
 import time
 from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from inspect import isawaitable
 from typing import Annotated, Literal
 from uuid import UUID
@@ -58,12 +60,18 @@ class WebSocketRoomCommand(ApiModel):
     command_id: str | None = Field(default=None, min_length=1, max_length=64)
 
 
+@dataclass
+class _SocketMember:
+    credential: str
+    revision: int
+
+
 class RoomSocketHub:
     def __init__(self) -> None:
-        self._members: dict[str, dict[WebSocket, str]] = {}
+        self._members: dict[str, dict[WebSocket, _SocketMember]] = {}
 
-    def attach(self, room_code: str, websocket: WebSocket, credential: str) -> None:
-        self._members.setdefault(room_code, {})[websocket] = credential
+    def attach(self, room_code: str, websocket: WebSocket, credential: str, revision: int) -> None:
+        self._members.setdefault(room_code, {})[websocket] = _SocketMember(credential, revision)
 
     def detach(self, room_code: str, websocket: WebSocket) -> None:
         members = self._members.get(room_code)
@@ -75,14 +83,26 @@ class RoomSocketHub:
 
     async def publish(self, room_code: str, authority: MultiplayerAuthority) -> None:
         members = list(self._members.get(room_code, {}).items())
-        for websocket, credential in members:
+        for websocket, member in members:
             try:
-                snapshot = await authority.snapshot(room_code, Viewer(credential=credential))
+                snapshot = await authority.snapshot(room_code, Viewer(credential=member.credential))
+                if snapshot.revision <= member.revision:
+                    continue
                 await websocket.send_json(
                     {"type": "snapshot", "snapshot": snapshot.model_dump(by_alias=True)},
                 )
+                member.revision = snapshot.revision
             except (AuthorityError, RuntimeError):
                 self.detach(room_code, websocket)
+
+
+async def forward_room_revisions(
+    room_codes: AsyncIterator[str],
+    hub: RoomSocketHub,
+    authority: MultiplayerAuthority,
+) -> None:
+    async for room_code in room_codes:
+        await hub.publish(room_code, authority)
 
 
 def _runtime_authority(telemetry: Telemetry) -> RedisMultiplayerAuthority:
@@ -167,15 +187,29 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        yield
-        pending_tasks = tuple(deadline_tasks)
-        for task in pending_tasks:
-            task.cancel()
-        if pending_tasks:
-            await asyncio.gather(*pending_tasks, return_exceptions=True)
-        close = getattr(selected_authority, "aclose", None)
-        if close is not None:
-            await close()
+        subscription = None
+        revision_task: asyncio.Task[None] | None = None
+        if isinstance(selected_authority, RedisMultiplayerAuthority):
+            subscription = await selected_authority.subscribe_revisions()
+            revision_task = asyncio.create_task(
+                forward_room_revisions(subscription.events(), hub, selected_authority),
+            )
+        try:
+            yield
+        finally:
+            pending_tasks = tuple(deadline_tasks)
+            if revision_task is not None:
+                revision_task.cancel()
+                pending_tasks += (revision_task,)
+            for task in pending_tasks:
+                task.cancel()
+            if pending_tasks:
+                await asyncio.gather(*pending_tasks, return_exceptions=True)
+            if subscription is not None:
+                await subscription.aclose()
+            close = getattr(selected_authority, "aclose", None)
+            if close is not None:
+                await close()
 
     app = FastAPI(
         title="Halligalli API",
@@ -362,7 +396,7 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
         await websocket.send_json(
             {"type": "snapshot", "snapshot": snapshot.model_dump(by_alias=True)},
         )
-        hub.attach(canonical_room_code, websocket, payload.credential)
+        hub.attach(canonical_room_code, websocket, payload.credential, snapshot.revision)
         try:
             while True:
                 started_at = time.perf_counter()
