@@ -97,11 +97,14 @@ rules package.
 - Cloud desired state, Helm charts, Terraform, credentials, and operations stay
   in the infrastructure repository.
 
-## Known release follow-up
+## Paired releases
 
-The checked-in `container.yml` still describes the historical single-image
-publication path. It is intentionally not made to pass with a standalone Docker
-compatibility layer; the paired Web/API release rewrite is owned by ticket 27.
+A Release Tag builds `halligalli-web` and `halligalli-api` from the same commit.
+The release workflow scans both non-root images, checks their shared runtime
+identity through a local paired smoke, then publishes one schema-V2
+`release-attestation.json` containing both immutable digests. The product
+repository never selects Infrastructure GitOps state or carries an
+Infrastructure write credential.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for local contribution guidance and
 [SECURITY.md](SECURITY.md) for security reporting.

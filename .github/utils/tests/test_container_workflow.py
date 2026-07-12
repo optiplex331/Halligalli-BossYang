@@ -21,6 +21,18 @@ class ContainerWorkflowTest(unittest.TestCase):
         self.assertIn("github.ref_type == 'tag'", publish_job)
         self.assertIn("contents: write", publish_job)
 
+    def test_paired_images_are_scanned_and_smoked_before_attestation(self) -> None:
+        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("apps/web/Dockerfile", workflow)
+        self.assertIn("apps/api/Dockerfile", workflow)
+        self.assertIn("Scan Web image", workflow)
+        self.assertIn("Scan API image", workflow)
+        self.assertIn("Paired runtime smoke", workflow)
+        self.assertIn("paired_smoke.py", workflow)
+        self.assertIn("--web-digest", workflow)
+        self.assertIn("--api-digest", workflow)
+
     def test_release_asset_publication_never_clobbers_existing_evidence(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 

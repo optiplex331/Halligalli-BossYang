@@ -27,6 +27,7 @@ pnpm run typecheck
 pnpm run build
 pnpm run check
 pnpm run test:e2e    # after pnpm run dev
+pnpm run images:build
 ```
 
 ## Contribution rules

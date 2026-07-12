@@ -30,6 +30,7 @@ from release_attestation import (  # noqa: E402
     build_release_attestation,
 )
 from release_asset import ReleaseAssetError, assess_release_asset  # noqa: E402
+from paired_smoke import PairedSmokeError, validate_paired_runtime  # noqa: E402
 
 
 class ReleaseUtilsTest(unittest.TestCase):
@@ -54,22 +55,31 @@ class ReleaseUtilsTest(unittest.TestCase):
             ["version=0.2.0", "commit_sha=abc123"],
         )
 
-    def test_builds_a_formal_release_attestation(self):
+    def test_builds_a_schema_v2_paired_release_attestation(self):
         self.assertEqual(
             build_release_attestation(
                 tag="v1.2.3",
                 commit="a" * 40,
-                image="ghcr.io/example/halligalli:1.2.3",
-                digest="sha256:" + "b" * 64,
+                web_image="ghcr.io/example/halligalli-web:1.2.3",
+                web_digest="sha256:" + "b" * 64,
+                api_image="ghcr.io/example/halligalli-api:1.2.3",
+                api_digest="sha256:" + "c" * 64,
             ),
             {
-                "schemaVersion": 1,
+                "schemaVersion": 2,
                 "releaseTag": "v1.2.3",
                 "commit": "a" * 40,
-                "image": {
-                    "repository": "ghcr.io/example/halligalli",
-                    "tag": "1.2.3",
-                    "digest": "sha256:" + "b" * 64,
+                "images": {
+                    "web": {
+                        "repository": "ghcr.io/example/halligalli-web",
+                        "tag": "1.2.3",
+                        "digest": "sha256:" + "b" * 64,
+                    },
+                    "api": {
+                        "repository": "ghcr.io/example/halligalli-api",
+                        "tag": "1.2.3",
+                        "digest": "sha256:" + "c" * 64,
+                    },
                 },
                 "runtimeIdentity": {"version": "1.2.3", "commit": "a" * 40},
             },
@@ -80,8 +90,47 @@ class ReleaseUtilsTest(unittest.TestCase):
             build_release_attestation(
                 tag="pr-abcdef0",
                 commit="a" * 40,
-                image="ghcr.io/example/halligalli:pr-abcdef0",
-                digest="sha256:" + "b" * 64,
+                web_image="ghcr.io/example/halligalli-web:pr-abcdef0",
+                web_digest="sha256:" + "b" * 64,
+                api_image="ghcr.io/example/halligalli-api:pr-abcdef0",
+                api_digest="sha256:" + "c" * 64,
+            )
+
+    def test_rejects_partial_or_mixed_pair_attestation(self):
+        with self.assertRaisesRegex(ReleaseAttestationError, "both Web and API"):
+            build_release_attestation(
+                tag="v1.2.3",
+                commit="a" * 40,
+                web_image="ghcr.io/example/halligalli-web:1.2.3",
+                web_digest="sha256:" + "b" * 64,
+                api_image="",
+                api_digest="",
+            )
+
+    def test_rejects_mixed_image_versions(self):
+        with self.assertRaisesRegex(ReleaseAttestationError, "Image tags"):
+            build_release_attestation(
+                tag="v1.2.3",
+                commit="a" * 40,
+                web_image="ghcr.io/example/halligalli-web:1.2.3",
+                web_digest="sha256:" + "b" * 64,
+                api_image="ghcr.io/example/halligalli-api:1.2.4",
+                api_digest="sha256:" + "c" * 64,
+            )
+
+    def test_validates_a_paired_runtime_identity(self):
+        validate_paired_runtime(
+            web_identity={"version": "1.2.3", "commit": "a" * 40},
+            api_identity={"version": "1.2.3", "commit": "a" * 40},
+            version="1.2.3",
+            commit="a" * 40,
+        )
+        with self.assertRaises(PairedSmokeError):
+            validate_paired_runtime(
+                web_identity={"version": "1.2.3", "commit": "a" * 40},
+                api_identity={"version": "1.2.4", "commit": "a" * 40},
+                version="1.2.3",
+                commit="a" * 40,
             )
 
     def test_uploads_a_new_release_asset(self):

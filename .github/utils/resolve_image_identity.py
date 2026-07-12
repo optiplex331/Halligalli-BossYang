@@ -8,7 +8,7 @@ Inputs:
   GITHUB_EVENT_NAME, GITHUB_SHA.
 - Local git history and release tags.
 Outputs:
-- GitHub step outputs: image, version, image_tag, commit_sha,
+- GitHub step outputs: web_image_tag, api_image_tag, version, commit_sha,
   should_push_image.
 Boundaries:
 - Does not build, scan, push, or deploy images.
@@ -128,7 +128,7 @@ def resolve_identity(
     should_push_image = False
 
     if is_release_tag(ref_type, ref_name):
-        # Release-tag builds are canonical standalone GHCR artifacts. The
+        # Release-tag builds are canonical paired GHCR artifacts. The
         # infrastructure repo deploys reviewed image digests through GitOps.
         version = ref_name.removeprefix("v")
         should_push_image = True
@@ -174,9 +174,11 @@ def resolve_identity(
         version = f"pr-{short_sha(env.get('GITHUB_SHA', commit_sha))}"
 
     return {
-        "image": image,
         "version": version,
-        "image_tag": f"{image}:{version}",
+        "web_image": f"{image}-web",
+        "api_image": f"{image}-api",
+        "web_image_tag": f"{image}-web:{version}",
+        "api_image_tag": f"{image}-api:{version}",
         "commit_sha": commit_sha,
         "should_push_image": str(should_push_image).lower(),
     }

@@ -38,6 +38,7 @@
 		"test": "pnpm --dir apps/web run test && pnpm run test:api",
 		"test:api": "uv run --project apps/api python -m unittest discover -s apps/api/tests -p 'test_*.py'",
 		"test:e2e": "docker compose exec -T web node tests/e2e/compose-journeys.mjs",
+		"images:build": "docker build --file apps/web/Dockerfile --tag halligalli-web:local --build-arg HALLIGALLI_RELEASE_VERSION=local --build-arg HALLIGALLI_RELEASE_COMMIT=development . && docker build --file apps/api/Dockerfile --tag halligalli-api:local --build-arg HALLIGALLI_RELEASE_VERSION=local --build-arg HALLIGALLI_RELEASE_COMMIT=development .",
 		"typecheck": "pnpm --dir apps/web run typecheck",
 		"build": "pnpm --dir apps/web run build",
 		"check": "pnpm run test && pnpm run typecheck",
