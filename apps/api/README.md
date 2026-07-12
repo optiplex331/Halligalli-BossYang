@@ -28,3 +28,12 @@ authority generates cards, deadlines, availability, score, and results, then
 sends complete viewer-specific snapshots for the Web projection to render.
 
 This package must not import Web source or browser APIs.
+
+## Operational surfaces
+
+The API writes JSON telemetry to stdout without request payloads, credentials, or
+credential verifiers. `GET /internal/identity` exposes release version/commit,
+`GET /internal/ready` checks traffic readiness, and `GET /internal/metrics`
+exposes Prometheus text metrics for HTTP, WebSocket, Redis adapter operations,
+and active rooms. These endpoints are internal operational surfaces, not Web
+application routes.

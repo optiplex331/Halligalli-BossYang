@@ -9,6 +9,8 @@ from typing import Literal, Protocol, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .observability import elapsed_since
+
 
 ROOM_TTL_SECONDS = 60 * 60
 POST_MATCH_DURATION_MS = 30_000
@@ -832,18 +834,30 @@ class InMemoryMultiplayerAuthority:
         room = _require_room(self._rooms.get(room_code))
         return _snapshot_for_verifier(room, credential_verifier(viewer.credential))
 
+    def active_room_count(self) -> int:
+        return len(self._rooms)
+
+    async def readiness(self) -> bool:
+        return True
+
 
 class RedisMultiplayerAuthority:
     """Redis-backed runtime authority. In-memory authority is never selected here."""
 
-    def __init__(self, redis_client: object) -> None:
+    def __init__(self, redis_client: object, telemetry: object | None = None) -> None:
         self._redis = redis_client
+        self._telemetry = telemetry
 
     @classmethod
-    def from_url(cls, url: str) -> RedisMultiplayerAuthority:
+    def from_url(cls, url: str, telemetry: object | None = None) -> RedisMultiplayerAuthority:
         from redis.asyncio import Redis
 
-        return cls(Redis.from_url(url, decode_responses=True))
+        return cls(Redis.from_url(url, decode_responses=True), telemetry=telemetry)
+
+    def _record_redis(self, operation: str, outcome: str, started_at: float) -> None:
+        record = getattr(self._telemetry, "record_redis", None)
+        if record is not None:
+            record(operation=operation, outcome=outcome, elapsed_seconds=elapsed_since(started_at))
 
     @staticmethod
     def _room_key(room_code: str) -> str:
@@ -875,13 +889,24 @@ class RedisMultiplayerAuthority:
         room_code: str | None,
         command: AuthorityCommand,
     ) -> AuthorityResult:
-        if isinstance(command, CreateRoom):
-            return await self._create(command)
-        if room_code is None:
-            raise AuthorityError("room_not_found", 404, "Room was not found")
-        if isinstance(command, JoinRoom):
-            return await self._join(room_code, command)
-        return await self._execute_room_command(room_code, command)
+        started_at = time.perf_counter()
+        try:
+            if isinstance(command, CreateRoom):
+                result = await self._create(command)
+            elif room_code is None:
+                raise AuthorityError("room_not_found", 404, "Room was not found")
+            elif isinstance(command, JoinRoom):
+                result = await self._join(room_code, command)
+            else:
+                result = await self._execute_room_command(room_code, command)
+        except AuthorityError:
+            self._record_redis("execute", "client_error", started_at)
+            raise
+        except Exception:
+            self._record_redis("execute", "server_error", started_at)
+            raise
+        self._record_redis("execute", "success", started_at)
+        return result
 
     async def _create(self, command: CreateRoom) -> EntryResult:
         from redis.exceptions import WatchError
@@ -985,8 +1010,27 @@ class RedisMultiplayerAuthority:
         return _require_room(_Room.from_json(state) if state else None)
 
     async def snapshot(self, room_code: str, viewer: Viewer) -> RoomSnapshot:
-        room = await self._load_room(room_code)
-        return _snapshot_for_verifier(room, credential_verifier(viewer.credential))
+        started_at = time.perf_counter()
+        try:
+            room = await self._load_room(room_code)
+            result = _snapshot_for_verifier(room, credential_verifier(viewer.credential))
+        except AuthorityError:
+            self._record_redis("snapshot", "client_error", started_at)
+            raise
+        except Exception:
+            self._record_redis("snapshot", "server_error", started_at)
+            raise
+        self._record_redis("snapshot", "success", started_at)
+        return result
+
+    async def active_room_count(self) -> int:
+        return sum(1 async for _ in self._redis.scan_iter(match="halligalli:room:*"))
+
+    async def readiness(self) -> bool:
+        try:
+            return bool(await self._redis.ping())
+        except Exception:
+            return False
 
     async def aclose(self) -> None:
         close = getattr(self._redis, "aclose", None)
