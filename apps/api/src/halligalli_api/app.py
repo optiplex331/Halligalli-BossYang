@@ -210,6 +210,7 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
             close = getattr(selected_authority, "aclose", None)
             if close is not None:
                 await close()
+            telemetry.shutdown()
 
     app = FastAPI(
         title="Halligalli API",
@@ -223,31 +224,32 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def record_http(request: Request, call_next):
-        trace_id = telemetry.new_trace_id()
-        started_at = time.perf_counter()
-        try:
-            response = await call_next(request)
-        except Exception:
+        with telemetry.span("http.request") as span:
+            trace_id = telemetry.trace_id(span)
+            started_at = time.perf_counter()
+            try:
+                response = await call_next(request)
+            except Exception:
+                telemetry.record_http(
+                    trace_id=trace_id,
+                    method=request.method,
+                    route=request.url.path,
+                    status_code=500,
+                    elapsed_seconds=elapsed_since(started_at),
+                    span=span,
+                )
+                raise
+            route = request.scope.get("route")
             telemetry.record_http(
                 trace_id=trace_id,
                 method=request.method,
-                route=request.url.path,
-                status_code=500,
+                route=getattr(route, "path", request.url.path),
+                status_code=response.status_code,
                 elapsed_seconds=elapsed_since(started_at),
-                room_code=request.path_params.get("room_code"),
+                span=span,
             )
-            raise
-        route = request.scope.get("route")
-        telemetry.record_http(
-            trace_id=trace_id,
-            method=request.method,
-            route=getattr(route, "path", request.url.path),
-            status_code=response.status_code,
-            elapsed_seconds=elapsed_since(started_at),
-            room_code=request.path_params.get("room_code"),
-        )
-        response.headers["X-Trace-Id"] = trace_id
-        return response
+            response.headers["X-Trace-Id"] = trace_id
+            return response
 
     async def active_room_count() -> int:
         count = getattr(selected_authority, "active_room_count", None)
@@ -371,23 +373,25 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
     async def room_websocket(websocket: WebSocket, room_code: str) -> None:
         await websocket.accept()
         canonical_room_code = _canonical_room_code(room_code)
-        trace_id = telemetry.new_trace_id()
         try:
-            started_at = time.perf_counter()
-            payload = WebSocketAuthentication.model_validate(await websocket.receive_json())
-            snapshot = await app.state.authority.snapshot(
-                canonical_room_code,
-                Viewer(credential=payload.credential),
-            )
-            telemetry.record_websocket(
-                trace_id=trace_id,
-                room_code=canonical_room_code,
-                command="authenticate",
-                outcome="success",
-                elapsed_seconds=elapsed_since(started_at),
-            )
+            with telemetry.span("websocket.command") as span:
+                trace_id = telemetry.trace_id(span)
+                started_at = time.perf_counter()
+                payload = WebSocketAuthentication.model_validate(await websocket.receive_json())
+                snapshot = await app.state.authority.snapshot(
+                    canonical_room_code,
+                    Viewer(credential=payload.credential),
+                )
+                telemetry.record_websocket(
+                    trace_id=trace_id,
+                    room_code=canonical_room_code,
+                    command="authenticate",
+                    outcome="success",
+                    elapsed_seconds=elapsed_since(started_at),
+                    span=span,
+                )
         except (AuthorityError, ValueError):
-            telemetry.record_websocket(trace_id=trace_id, room_code=canonical_room_code, command="authenticate", outcome="client_error", elapsed_seconds=0)
+            telemetry.record_websocket(trace_id="", room_code=canonical_room_code, command="authenticate", outcome="client_error", elapsed_seconds=0)
             await websocket.close(code=1008)
             return
         except WebSocketDisconnect:
@@ -399,26 +403,29 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
         hub.attach(canonical_room_code, websocket, payload.credential, snapshot.revision)
         try:
             while True:
-                started_at = time.perf_counter()
-                command_payload = WebSocketRoomCommand.model_validate(await websocket.receive_json())
-                result = await app.state.authority.execute(
-                    canonical_room_code,
-                    _room_command(command_payload, payload.credential),
-                )
-                await hub.publish(canonical_room_code, app.state.authority)
-                if command_payload.type == "start" and result.snapshot.turn_deadline_at is not None:
-                    schedule_turn(canonical_room_code, result.snapshot.turn_deadline_at)
-                if result.snapshot.phase == "post_match" and result.snapshot.post_match_deadline_at is not None:
-                    schedule_post_match(canonical_room_code, result.snapshot.post_match_deadline_at)
-                telemetry.record_websocket(
-                    trace_id=trace_id,
-                    room_code=canonical_room_code,
-                    command=command_payload.type,
-                    outcome="success",
-                    elapsed_seconds=elapsed_since(started_at),
-                )
+                with telemetry.span("websocket.command") as span:
+                    trace_id = telemetry.trace_id(span)
+                    started_at = time.perf_counter()
+                    command_payload = WebSocketRoomCommand.model_validate(await websocket.receive_json())
+                    result = await app.state.authority.execute(
+                        canonical_room_code,
+                        _room_command(command_payload, payload.credential),
+                    )
+                    await hub.publish(canonical_room_code, app.state.authority)
+                    if command_payload.type == "start" and result.snapshot.turn_deadline_at is not None:
+                        schedule_turn(canonical_room_code, result.snapshot.turn_deadline_at)
+                    if result.snapshot.phase == "post_match" and result.snapshot.post_match_deadline_at is not None:
+                        schedule_post_match(canonical_room_code, result.snapshot.post_match_deadline_at)
+                    telemetry.record_websocket(
+                        trace_id=trace_id,
+                        room_code=canonical_room_code,
+                        command=command_payload.type,
+                        outcome="success",
+                        elapsed_seconds=elapsed_since(started_at),
+                        span=span,
+                    )
         except (AuthorityError, ValueError):
-            telemetry.record_websocket(trace_id=trace_id, room_code=canonical_room_code, command="command", outcome="client_error", elapsed_seconds=0)
+            telemetry.record_websocket(trace_id="", room_code=canonical_room_code, command="command", outcome="client_error", elapsed_seconds=0)
             await websocket.close(code=1008)
         except WebSocketDisconnect:
             pass

@@ -5,6 +5,9 @@ description = "FastAPI transport and Redis multiplayer authority for Halligalli.
 requires-python = ">=3.14,<3.15"
 dependencies = [
   "fastapi>=0.139.0,<0.140.0",
+  "opentelemetry-api==1.43.0",
+  "opentelemetry-exporter-otlp-proto-http==1.43.0",
+  "opentelemetry-sdk==1.43.0",
   "redis>=8.0.1,<9",
   "uvicorn[standard]>=0.51.0,<0.52.0",
 ]

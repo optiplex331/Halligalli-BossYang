@@ -32,6 +32,7 @@ services:
     command: uv run --project apps/api uvicorn halligalli_api.app:app --host 0.0.0.0 --port 8000
     environment:
       HALLIGALLI_REDIS_URL: redis://redis:6379/0
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
     volumes:
       - .:/workspace
       - /workspace/apps/api/.venv
@@ -52,3 +53,47 @@ services:
       interval: 2s
       timeout: 2s
       retries: 20
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.156.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    configs:
+      - source: otel-collector-config
+        target: /etc/otelcol/config.yaml
+
+  tempo:
+    image: grafana/tempo:3.0.2
+    command: ["-config.file=/etc/tempo/config.yaml"]
+    configs:
+      - source: tempo-config
+        target: /etc/tempo/config.yaml
+
+configs:
+  otel-collector-config:
+    content: |
+      receivers:
+        otlp:
+          protocols:
+            http:
+      exporters:
+        otlphttp/tempo:
+          endpoint: http://tempo:4318
+      service:
+        pipelines:
+          traces:
+            receivers: [otlp]
+            exporters: [otlphttp/tempo]
+  tempo-config:
+    content: |
+      server:
+        http_listen_port: 3200
+      distributor:
+        receivers:
+          otlp:
+            protocols:
+              http:
+      storage:
+        trace:
+          backend: local
+          local:
+            path: /tmp/tempo
