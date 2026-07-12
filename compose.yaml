@@ -1,0 +1,14 @@
+name: halligalli
+
+# Ownership scaffold only. Ticket 25 replaces these profile-gated image
+# references with the tested local Web/API/Redis development path.
+services:
+  web:
+    image: halligalli-web:local
+    profiles: ["runtime"]
+  api:
+    image: halligalli-api:local
+    profiles: ["runtime"]
+  redis:
+    image: redis:8.8.0
+    profiles: ["runtime"]

@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "catalog-inventory",
+      "kind": "catalog",
+      "expected": {
+        "cardCount": 72,
+        "fruitOrder": ["banana", "strawberry", "lemon", "grape"],
+        "distribution": [[1, 3], [2, 5], [3, 5], [4, 3], [5, 2]]
+      }
+    },
+    {
+      "id": "visible-totals-first-match",
+      "kind": "bell-evaluation",
+      "topCards": [
+        { "fruit": "banana", "count": 2 },
+        { "fruit": "banana", "count": 3 },
+        { "fruit": "grape", "count": 5 }
+      ],
+      "expected": { "available": true, "fruitKey": "banana" }
+    },
+    {
+      "id": "correct-bell-easy-250ms",
+      "kind": "correct-bell",
+      "mode": "easy",
+      "reactionMs": 250,
+      "expected": {
+        "score": 209,
+        "correctHits": 1,
+        "breakdown": {
+          "correctBase": 120,
+          "collectionBonus": 6,
+          "speedBonus": 83,
+          "streakBonus": 0
+        }
+      }
+    },
+    {
+      "id": "partial-wrong-penalty",
+      "kind": "wrong-penalty",
+      "startingScore": 54,
+      "assessed": { "wrongPenalty": 50, "cardPenalty": 8 },
+      "expected": { "score": 0, "wrongPenalty": 50, "cardPenalty": 4 }
+    },
+    {
+      "id": "zero-floor-followed-by-award",
+      "kind": "score-floor",
+      "startingScore": 0,
+      "assessed": { "wrongPenalty": 50, "cardPenalty": 8 },
+      "award": 120,
+      "expected": { "scoreAfterPenalty": 0, "wrongPenalty": 0, "cardPenalty": 0, "scoreAfterAward": 120 }
+    },
+    {
+      "id": "pending-window-finalization",
+      "kind": "pending-miss",
+      "startingScore": 120,
+      "expected": { "score": 90, "missedPenalty": 30, "missedHits": 1 }
+    }
+  ]
+}

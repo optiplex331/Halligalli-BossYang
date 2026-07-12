@@ -1,54 +1,48 @@
 # Contributing
 
-Thanks for taking a look at Halligalli Arena. This project is intentionally small: React, Vite, TypeScript, plain CSS, Node.js, socket.io, and Vitest.
+Halligalli is a small Product Monorepo with two application owners: React/Vite
+Web and future FastAPI/Redis API. Keep changes within their owner and use the
+root commands as the thin human-facing facade.
 
-## Local Setup
+## Local setup
 
 ```bash
 node --version       # >=24.0.0 <25
-pnpm --version       # >=11.0.9
+pnpm --version       # 11.x
 pnpm install
-pnpm run dev         # Vite on :5173
-pnpm run dev:server  # socket.io server on :3001, in a second terminal
+pnpm run dev         # focused Web development on :5173
 ```
 
-Open http://localhost:5173. Local multiplayer should still use the Vite origin; `vite.config.ts` proxies `/socket.io` to the server on `:3001`.
+The API package is intentionally not runnable before the authenticated-room
+entry slice. Do not add a placeholder HTTP or Socket.IO runtime to bridge that
+gap.
 
 ## Checks
-
-Run these before opening a pull request:
 
 ```bash
 pnpm run test
 pnpm run typecheck
 pnpm run build
+pnpm run check
 ```
 
-## Contribution Guidelines
+## Contribution rules
 
-- Keep gameplay rule changes covered by tests.
+- Keep browser-local single-player rules in `apps/web/src/game/` and browser
+  storage normalization in `apps/web/src/game/persistence.ts`.
 - Keep stable visible copy bilingual in `COPY.zh` and `COPY.en`.
-- Do not add a router, state library, CSS framework, Express, or a database for normal gameplay changes.
-- Multiplayer clients should emit intent only; scoring and match authority stay on the server.
-- Multiplayer room settings and docs should stay aligned with the supported 3-6 player layouts; the server rejects 2-player starts even if a lobby exists.
-- New `localStorage` keys need normalization and persistence tests.
-- Preserve keyboard, screen-reader, mobile touch-target, and `prefers-reduced-motion` behavior.
-- Keep `docs/operations/kubernetes.md` aligned when changing the standalone container or production-facing runtime contract.
-- Do not put production-used Helm chart templates, real Azure Kubernetes Desired State, Terraform roots, cloud credentials, kubeconfigs, rendered live manifests, or generated infrastructure files in this repo; those belong in the infrastructure repo.
+- Preserve keyboard, screen-reader, mobile 44 px target, document-language,
+  and `prefers-reduced-motion` behavior.
+- `contracts/` contains JSON data, schemas, and snapshots only—never imported
+  executable TypeScript or Python source.
+- The only retained Halligalli local-storage record is normalized
+  `halligalli_settings`; do not add progress or identity storage.
+- API transport and Multiplayer Authority code belongs to `apps/api`; it must
+  never import Web source or browser APIs.
+- Do not add a router, state library, CSS framework, Node compatibility server,
+  database, or speculative monorepo runner.
+- Production Helm, GitOps desired state, Terraform, secrets, kubeconfigs, and
+  cloud operations remain outside this repository.
 
-## Good First Areas
-
-- Accessibility review and keyboard-flow fixes.
-- Mobile layout refinements.
-- Additional pure tests for gameplay edge cases.
-- Documentation improvements.
-- Small visual polish that keeps the midnight table identity.
-
-## Pull Request Shape
-
-Keep pull requests focused. Include:
-
-- What changed.
-- Why it changed.
-- Screenshots for visual changes.
-- Checks run locally.
+Keep pull requests focused and include the user-visible change plus commands
+run locally.

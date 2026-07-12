@@ -1,6 +1,6 @@
 # Security Policy
 
-Halligalli Arena is a browser game and same-origin socket.io server. It does not require accounts, payments, or server-side persistence.
+Halligalli Arena is a browser game moving to a paired Web/FastAPI runtime. It does not require accounts, payments, or durable player records.
 
 ## Reporting
 
@@ -9,11 +9,9 @@ Please report security issues privately by emailing the repository owner or open
 ## Supported Surface
 
 - Client-side React app.
-- Node.js socket.io server.
-- Local browser progress stored in `localStorage`.
-- Azure Kubernetes Production package and runtime surfaces.
-- Product release automation, GHCR image publication, `/readyz`, and `/health`.
-- Product-facing Kubernetes documentation for the standalone runtime contract.
+- Future FastAPI/Redis API package and its dependency lock.
+- Normalized browser `halligalli_settings` Local Preferences.
+- Product release automation and paired-runtime work as those slices land.
 
 ## Current Safety Boundaries
 
@@ -21,8 +19,8 @@ Please report security issues privately by emailing the repository owner or open
 - No database.
 - No server-side player profile storage.
 - No payment or personal-data workflow.
-- Multiplayer scoring is server-authoritative.
-- Browser progress stays local to the device.
+- The future Multiplayer Authority is server-authoritative and ephemeral.
+- Only presentation preferences stay local to the device.
 - Deployment secrets, generated config, and real cloud credentials are intentionally excluded from Git.
 - Production-used Helm chart templates, real Azure Kubernetes Desired State, cluster credentials, and production values are intentionally kept out of this product repo.
 

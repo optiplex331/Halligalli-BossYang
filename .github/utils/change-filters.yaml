@@ -6,18 +6,14 @@
 
 product_runtime:
   - ".dockerignore"
-  - "Dockerfile"
-  - "index.html"
+  - "apps/**"
+  - "compose.yaml"
+  - "contracts/**"
   - "package.json"
   - "pnpm-lock.yaml"
   - "pnpm-workspace.yaml"
-  - "public/**"
-  - "scripts/**"
-  - "server/**"
-  - "src/**"
-  - "tsconfig.json"
-  - "tsconfig.server.json"
-  - "vite.config.ts"
+  - "tests/e2e/**"
+  - "uv.lock"
 
 delivery_control:
   - ".github/actions/**"

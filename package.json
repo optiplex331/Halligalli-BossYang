@@ -1,7 +1,7 @@
 {
 	"name": "halligalli-arena",
 	"private": true,
-	"description": "A real-time multiplayer Halligalli table for exact-five card races, solo practice, and server-authoritative rooms.",
+	"description": "Halligalli product monorepo command facade.",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
@@ -16,7 +16,8 @@
 		"multiplayer",
 		"browser-game",
 		"reaction-trainer",
-		"socket.io",
+		"fastapi",
+		"redis",
 		"react",
 		"vite",
 		"typescript"
@@ -30,33 +31,16 @@
 		}
 	},
 	"scripts": {
-		"dev": "vite",
-		"dev:server": "tsx server/index.ts",
-		"build": "vite build && tsc -p tsconfig.server.json",
-		"start": "node dist/server/index.js",
-		"preview": "vite preview",
-		"test": "vitest run",
-		"typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
-		"simulate:bell": "tsx scripts/simulate-bell.ts"
+		"dev": "pnpm run dev:web",
+		"dev:web": "pnpm --dir apps/web run dev",
+		"test": "pnpm --dir apps/web run test",
+		"typecheck": "pnpm --dir apps/web run typecheck",
+		"build": "pnpm --dir apps/web run build",
+		"check": "pnpm run test && pnpm run typecheck"
 	},
 	"engines": {
 		"node": ">=24.0.0 <25",
 		"pnpm": ">=11.0.9"
 	},
-	"dependencies": {
-		"socket.io": "^4.8.0"
-	},
-	"devDependencies": {
-		"@types/node": "^24.13.2",
-		"@types/react": "^19.2.17",
-		"@types/react-dom": "^19.2.3",
-		"@vitejs/plugin-react": "^6.0.2",
-		"react": "^19.2.7",
-		"react-dom": "^19.2.7",
-		"socket.io-client": "^4.8.3",
-		"tsx": "^4.22.4",
-		"typescript": "^6.0.3",
-		"vite": "^8.0.16",
-		"vitest": "^4.1.8"
-	}
+	"devDependencies": {}
 }
