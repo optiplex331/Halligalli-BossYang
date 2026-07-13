@@ -18,7 +18,7 @@ shared scoring ledger and stable Seat Indexes.
 
 ```bash
 node --version       # v24.x
-pnpm --version       # 11.12.0
+pnpm --version       # 11.0.9
 pnpm install
 pnpm run dev         # Web, API, Redis; open http://localhost:5173
 ```

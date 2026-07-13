@@ -8,7 +8,7 @@ root commands as the thin human-facing facade.
 
 ```bash
 node --version       # >=24.0.0 <25
-pnpm --version       # 11.12.0
+pnpm --version       # 11.0.9
 pnpm install
 pnpm run dev         # Web, API, and Redis; Web is exposed on :5173
 ```
