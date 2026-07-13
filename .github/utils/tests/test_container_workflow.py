@@ -31,6 +31,11 @@ class ContainerWorkflowTest(unittest.TestCase):
         self.assertIn("Paired runtime smoke", workflow)
         self.assertIn("paired_smoke.py", workflow)
         self.assertIn("http://localhost:18080/api/v1/rooms", workflow)
+        self.assertIn(
+            "redis@sha256:62b5498c91778f738f0efbf0a6fd5b434011235a3e7b5f2ed4a2c0c63bb1c786",
+            workflow,
+        )
+        self.assertNotIn("redis:8.0.1-alpine", workflow)
         self.assertIn("--web-digest", workflow)
         self.assertIn("--api-digest", workflow)
 
