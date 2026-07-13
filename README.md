@@ -18,7 +18,7 @@ shared scoring ledger and stable Seat Indexes.
 
 ```bash
 node --version       # v24.x
-pnpm --version       # 11.x
+pnpm --version       # 11.0.9
 pnpm install
 pnpm run dev         # Web, API, Redis; open http://localhost:5173
 ```
@@ -88,6 +88,11 @@ compose.yaml                # Web + API + Redis local development stack
 `contracts/` is data only. The TypeScript browser rules and Python authority
 consume the same JSON fixtures independently; they never share an executable
 rules package.
+
+The Web image installs its build dependencies, including React and ReactDOM,
+before Vite produces `dist/`. Its nginx runtime contains only that generated
+static output, so these browser-bundle packages are development dependencies
+rather than Node.js runtime dependencies.
 
 ## Boundaries
 
