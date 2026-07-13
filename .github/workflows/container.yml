@@ -10,7 +10,7 @@ on:
 
 jobs:
   build-scan-publish:
-    name: Paired container build and scan
+    name: Container build and scan
     runs-on: ubuntu-24.04
     permissions:
       contents: read
