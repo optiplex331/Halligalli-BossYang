@@ -1,7 +1,7 @@
 {
 	"name": "halligalli-arena",
 	"private": true,
-	"description": "A real-time multiplayer Halligalli table for exact-five card races, solo practice, and server-authoritative rooms.",
+	"description": "Halligalli product monorepo command facade.",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
@@ -16,7 +16,8 @@
 		"multiplayer",
 		"browser-game",
 		"reaction-trainer",
-		"socket.io",
+		"fastapi",
+		"redis",
 		"react",
 		"vite",
 		"typescript"
@@ -30,33 +31,26 @@
 		}
 	},
 	"scripts": {
-		"dev": "vite",
-		"dev:server": "tsx server/index.ts",
-		"build": "vite build && tsc -p tsconfig.server.json",
-		"start": "node dist/server/index.js",
-		"preview": "vite preview",
-		"test": "vitest run",
-		"typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
-		"simulate:bell": "tsx scripts/simulate-bell.ts"
+		"dev": "docker compose up --detach --wait",
+		"dev:down": "docker compose down --volumes",
+		"dev:web": "pnpm --dir apps/web run dev",
+		"dev:api": "uv run --project apps/api uvicorn halligalli_api.app:app --reload --port 8000",
+		"test": "pnpm --dir apps/web run test && pnpm run test:api",
+		"test:api": "uv run --project apps/api python -m unittest discover -s apps/api/tests -p 'test_*.py'",
+		"test:e2e": "docker compose exec -T web node tests/e2e/compose-journeys.mjs",
+		"images:build": "docker build --file apps/web/Dockerfile --tag halligalli-web:local --build-arg HALLIGALLI_RELEASE_VERSION=local --build-arg HALLIGALLI_RELEASE_COMMIT=development . && docker build --file apps/api/Dockerfile --tag halligalli-api:local --build-arg HALLIGALLI_RELEASE_VERSION=local --build-arg HALLIGALLI_RELEASE_COMMIT=development .",
+		"typecheck": "pnpm --dir apps/web run typecheck",
+		"build": "pnpm --dir apps/web run build",
+		"check": "pnpm run test && pnpm run typecheck",
+		"contracts:openapi": "uv run --project apps/api python -m halligalli_api.export_openapi contracts/openapi.json",
+		"contracts:types": "pnpm exec openapi-typescript contracts/openapi.json -o apps/web/src/multiplayer/rest.generated.ts",
+		"contracts:check": "pnpm run contracts:openapi && pnpm run contracts:types && git diff --exit-code -- contracts/openapi.json apps/web/src/multiplayer/rest.generated.ts"
 	},
 	"engines": {
 		"node": ">=24.0.0 <25",
 		"pnpm": ">=11.0.9"
 	},
-	"dependencies": {
-		"socket.io": "^4.8.0"
-	},
 	"devDependencies": {
-		"@types/node": "^24.13.2",
-		"@types/react": "^19.2.17",
-		"@types/react-dom": "^19.2.3",
-		"@vitejs/plugin-react": "^6.0.2",
-		"react": "^19.2.7",
-		"react-dom": "^19.2.7",
-		"socket.io-client": "^4.8.3",
-		"tsx": "^4.22.4",
-		"typescript": "^6.0.3",
-		"vite": "^8.0.16",
-		"vitest": "^4.1.8"
+		"openapi-typescript": "^7.13.0"
 	}
 }

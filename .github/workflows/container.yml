@@ -2,13 +2,10 @@ name: Container
 
 on:
   pull_request:
-    branches:
-      - master
+    branches: [master]
   push:
-    branches:
-      - master
-    tags:
-      - "v*.*.*"
+    branches: [master]
+    tags: ["v*.*.*"]
   workflow_dispatch:
 
 jobs:
@@ -18,6 +15,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      attestations: write
+      id-token: write
     outputs:
       should_publish_attestation: ${{ steps.release.outputs.should_push_image }}
 
@@ -35,8 +34,7 @@ jobs:
 
       - name: Skip container build and scan
         if: steps.changes.outputs.container_build_required != 'true'
-        run: |
-          echo "Container build and scan are not required for ${{ steps.changes.outputs.classification }} changes."
+        run: echo "Container work is not required for ${{ steps.changes.outputs.classification }} changes."
 
       - name: Set up Docker Buildx
         if: steps.changes.outputs.container_build_required == 'true'
@@ -47,32 +45,73 @@ jobs:
         id: release
         run: python3 .github/utils/resolve_image_identity.py
 
-      - name: Build image
+      - name: Build Web image
         if: steps.changes.outputs.container_build_required == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
+        run: >-
+          docker build --file apps/web/Dockerfile
+          --build-arg HALLIGALLI_RELEASE_VERSION="${{ steps.release.outputs.version }}"
+          --build-arg HALLIGALLI_RELEASE_COMMIT="${{ steps.release.outputs.commit_sha }}"
+          --label "org.opencontainers.image.version=${{ steps.release.outputs.version }}"
+          --label "org.opencontainers.image.revision=${{ steps.release.outputs.commit_sha }}"
+          --tag "${{ steps.release.outputs.web_image_tag }}" .
 
-          docker build \
-            --target standalone \
-            --build-arg APP_VERSION="${{ steps.release.outputs.version }}" \
-            --build-arg COMMIT_SHA="${{ steps.release.outputs.commit_sha }}" \
-            --label "org.opencontainers.image.version=${{ steps.release.outputs.version }}" \
-            --label "org.opencontainers.image.revision=${{ steps.release.outputs.commit_sha }}" \
-            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
-            --tag "${{ steps.release.outputs.image_tag }}" \
-            .
+      - name: Build API image
+        if: steps.changes.outputs.container_build_required == 'true'
+        run: >-
+          docker build --file apps/api/Dockerfile
+          --build-arg HALLIGALLI_RELEASE_VERSION="${{ steps.release.outputs.version }}"
+          --build-arg HALLIGALLI_RELEASE_COMMIT="${{ steps.release.outputs.commit_sha }}"
+          --label "org.opencontainers.image.version=${{ steps.release.outputs.version }}"
+          --label "org.opencontainers.image.revision=${{ steps.release.outputs.commit_sha }}"
+          --tag "${{ steps.release.outputs.api_image_tag }}" .
 
-      - name: Scan image
+      - name: Scan Web image
         if: steps.changes.outputs.container_build_required == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ steps.release.outputs.image_tag }}
+          image-ref: ${{ steps.release.outputs.web_image_tag }}
           format: table
           exit-code: "1"
           ignore-unfixed: true
           vuln-type: os,library
           severity: HIGH,CRITICAL
+
+      - name: Scan API image
+        if: steps.changes.outputs.container_build_required == 'true'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.release.outputs.api_image_tag }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+
+      - name: Paired runtime smoke
+        if: steps.changes.outputs.container_build_required == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          network=halligalli-paired-smoke
+          cleanup() { docker rm --force paired-web paired-api paired-redis >/dev/null 2>&1 || true; docker network rm "$network" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker network create "$network"
+          docker run --detach --name paired-redis --network "$network" redis:8.0.1-alpine redis-server --save '' --appendonly no
+          docker run --detach --name paired-api --network "$network" --publish 18000:8000 -e HALLIGALLI_REDIS_URL=redis://paired-redis:6379/0 "${{ steps.release.outputs.api_image_tag }}"
+          docker run --detach --name paired-web --network "$network" --publish 18080:8080 -e HALLIGALLI_API_ORIGIN=http://paired-api:8000 "${{ steps.release.outputs.web_image_tag }}"
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            if curl --fail --silent http://localhost:18000/internal/ready >/dev/null && curl --fail --silent http://localhost:18080/internal/identity >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://localhost:18000/internal/ready >/dev/null
+          curl --fail --silent http://localhost:18000/internal/identity > api-identity.json
+          curl --fail --silent http://localhost:18080/internal/identity > web-identity.json
+          proxy_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST --header 'Content-Type: application/json' --data '{}' http://localhost:18080/api/v1/rooms)"
+          if [[ "$proxy_status" != "401" && "$proxy_status" != "422" ]]; then
+            echo "Web API proxy returned unexpected status: $proxy_status" >&2
+            exit 1
+          fi
+          python3 .github/utils/paired_smoke.py --web-identity web-identity.json --api-identity api-identity.json --version "${{ steps.release.outputs.version }}" --commit "${{ steps.release.outputs.commit_sha }}"
 
       - name: Log in to GHCR
         if: steps.release.outputs.should_push_image == 'true'
@@ -82,39 +121,52 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push image
+      - name: Push paired images
         if: steps.release.outputs.should_push_image == 'true'
         id: push
         shell: bash
         run: |
           set -euo pipefail
+          digest_for() {
+            local image=$1 output digest
+            output="$(docker push "$image")"
+            echo "$output" >&2
+            digest="$(printf '%s\n' "$output" | awk '/digest: sha256:/ {print $3; exit}')"
+            if [[ -z "$digest" ]]; then
+              digest="$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}')"
+            fi
+            [[ -n "$digest" ]] || { echo "Could not resolve pushed image digest for $image." >&2; exit 1; }
+            printf '%s' "$digest"
+          }
+          web_digest="$(digest_for "${{ steps.release.outputs.web_image_tag }}")"
+          api_digest="$(digest_for "${{ steps.release.outputs.api_image_tag }}")"
+          echo "web_digest=$web_digest" >> "$GITHUB_OUTPUT"
+          echo "api_digest=$api_digest" >> "$GITHUB_OUTPUT"
 
-          push_output="$(docker push "${{ steps.release.outputs.image_tag }}")"
-          echo "${push_output}"
+      - name: Attest Web release image
+        if: github.ref_type == 'tag' && steps.release.outputs.should_push_image == 'true'
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-name: ${{ steps.release.outputs.web_image }}
+          subject-digest: ${{ steps.push.outputs.web_digest }}
+          push-to-registry: true
 
-          image_digest="$(printf '%s\n' "${push_output}" | awk '/digest: sha256:/ {print $3; exit}')"
-
-          if [[ -z "${image_digest}" ]]; then
-            image_digest="$(docker buildx imagetools inspect "${{ steps.release.outputs.image_tag }}" --format '{{.Manifest.Digest}}')"
-          fi
-
-          if [[ -z "${image_digest}" ]]; then
-            echo "Could not resolve pushed image digest." >&2
-            exit 1
-          fi
-
-          echo "image_digest=${image_digest}" >> "${GITHUB_OUTPUT}"
-          echo "Published ${{ steps.release.outputs.image_tag }} @ ${image_digest}"
+      - name: Attest API release image
+        if: github.ref_type == 'tag' && steps.release.outputs.should_push_image == 'true'
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-name: ${{ steps.release.outputs.api_image }}
+          subject-digest: ${{ steps.push.outputs.api_digest }}
+          push-to-registry: true
 
       - name: Write release attestation
         if: github.ref_type == 'tag' && steps.release.outputs.should_push_image == 'true'
-        run: |
-          python3 .github/utils/release_attestation.py \
-            --tag "${{ github.ref_name }}" \
-            --commit "${{ steps.release.outputs.commit_sha }}" \
-            --image "${{ steps.release.outputs.image_tag }}" \
-            --digest "${{ steps.push.outputs.image_digest }}" \
-            --output release-attestation.json
+        run: >-
+          python3 .github/utils/release_attestation.py
+          --tag "${{ github.ref_name }}" --commit "${{ steps.release.outputs.commit_sha }}"
+          --web-image "${{ steps.release.outputs.web_image_tag }}" --web-digest "${{ steps.push.outputs.web_digest }}"
+          --api-image "${{ steps.release.outputs.api_image_tag }}" --api-digest "${{ steps.push.outputs.api_digest }}"
+          --output release-attestation.json
 
       - name: Publish release attestation
         if: github.ref_type == 'tag' && steps.release.outputs.should_push_image == 'true'
@@ -145,59 +197,27 @@ jobs:
       - name: Wait for GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: bash
         run: |
           set -euo pipefail
-
           for attempt in 1 2 3 4 5 6; do
-            if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-              exit 0
-            fi
-            if [[ "${attempt}" == "6" ]]; then
-              echo "GitHub Release ${GITHUB_REF_NAME} was not available after 30 seconds." >&2
-              exit 1
-            fi
+            if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then exit 0; fi
+            [[ "$attempt" == "6" ]] && { echo "GitHub Release ${GITHUB_REF_NAME} was not available after 30 seconds." >&2; exit 1; }
             sleep 5
           done
 
       - name: Download existing Release asset
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: bash
         run: |
-          set -euo pipefail
-
           mkdir -p .existing-release-asset
-          if gh release download "${GITHUB_REF_NAME}" \
-            --repo "${GITHUB_REPOSITORY}" \
-            --pattern release-attestation.json \
-            --dir .existing-release-asset; then
-            echo "Found existing release-attestation.json for comparison."
-          else
-            echo "No existing release-attestation.json; publication will create it."
-          fi
+          gh release download "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --pattern release-attestation.json --dir .existing-release-asset || true
 
       - name: Assess Release asset publication
         id: asset
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          python3 .github/utils/release_asset.py \
-            --candidate .release-attestation/release-attestation.json \
-            --existing .existing-release-asset/release-attestation.json
+        run: python3 .github/utils/release_asset.py --candidate .release-attestation/release-attestation.json --existing .existing-release-asset/release-attestation.json
 
       - name: Upload Release asset
         if: steps.asset.outputs.action == 'upload'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release upload "${GITHUB_REF_NAME}"
-          .release-attestation/release-attestation.json
-          --repo "${GITHUB_REPOSITORY}"
-
-      - name: Record Release asset evidence
-        run: >-
-          echo "release-attestation.json publication action:
-          ${{ steps.asset.outputs.action }}; sha256:${{ steps.asset.outputs.sha256 }}"
-          >> "${GITHUB_STEP_SUMMARY}"
+        run: gh release upload "${GITHUB_REF_NAME}" .release-attestation/release-attestation.json --repo "${GITHUB_REPOSITORY}"

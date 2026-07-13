@@ -21,6 +21,34 @@ class ContainerWorkflowTest(unittest.TestCase):
         self.assertIn("github.ref_type == 'tag'", publish_job)
         self.assertIn("contents: write", publish_job)
 
+    def test_paired_images_are_scanned_and_smoked_before_attestation(self) -> None:
+        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("apps/web/Dockerfile", workflow)
+        self.assertIn("apps/api/Dockerfile", workflow)
+        self.assertIn("Scan Web image", workflow)
+        self.assertIn("Scan API image", workflow)
+        self.assertIn("Paired runtime smoke", workflow)
+        self.assertIn("paired_smoke.py", workflow)
+        self.assertIn("http://localhost:18080/api/v1/rooms", workflow)
+        self.assertIn("--web-digest", workflow)
+        self.assertIn("--api-digest", workflow)
+
+    def test_both_release_images_receive_provenance_before_pair_attestation(self) -> None:
+        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("attestations: write", workflow)
+        self.assertIn("id-token: write", workflow)
+        self.assertIn("Attest Web release image", workflow)
+        self.assertIn("Attest API release image", workflow)
+        self.assertIn("actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a", workflow)
+        self.assertIn("subject-digest: ${{ steps.push.outputs.web_digest }}", workflow)
+        self.assertIn("subject-digest: ${{ steps.push.outputs.api_digest }}", workflow)
+        self.assertLess(
+            workflow.index("Attest API release image"),
+            workflow.index("Write release attestation"),
+        )
+
     def test_release_asset_publication_never_clobbers_existing_evidence(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 

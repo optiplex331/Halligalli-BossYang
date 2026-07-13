@@ -1,165 +1,110 @@
 <p align="center">
-  <img src="public/icon.svg" width="96" height="96" alt="Halligalli Arena icon" />
+  <img src="apps/web/public/icon.svg" width="96" height="96" alt="Halligalli Arena icon" />
 </p>
 
 # Halligalli Arena
 
-Real-time multiplayer Halligalli for midnight card-table races.
+Halligalli Arena is a bilingual exact-five card-reaction game. The current
+product slice delivers the complete browser-local Single-Player Path plus a
+two-through-six-seat FastAPI/Redis authoritative match.
 
-Create a room, ready up with friends, flip around a server-authoritative table, and race to spot the exact-five fruit total first. Solo practice is included, but the product story is a fast multiplayer Halligalli arena.
+It is a Product Monorepo with two application owners. The Web application keeps
+all active round state in memory and preserves only normalized presentation
+preferences in browser storage. The API owns ephemeral Redis room state and
+the two-through-six-seat ready/start/turn/bell/result path, including the
+shared scoring ledger and stable Seat Indexes.
 
-[![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square)](https://react.dev/)
-[![Vite](https://img.shields.io/badge/Vite-8-646cff?style=flat-square)](https://vite.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178c6?style=flat-square)](https://www.typescriptlang.org/)
-[![socket.io](https://img.shields.io/badge/socket.io-4-111?style=flat-square)](https://socket.io/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-f0c44a?style=flat-square)](LICENSE)
-
-**Live demo**: `https://play.halligalli.games` on Azure Kubernetes Production.
-
-![Halligalli Arena showcase](docs/assets/readme-showcase.svg)
-
-## What It Does
-
-- **Real-time rooms**: create a 3-6 player room with a 4-character code, ready up, and race friends on one shared table.
-- **Halligalli race loop**: flip cards, read the visible fruit count, and compete for the exact-five hit.
-- **Table-true rules**: clockwise flips, top-card-only counting, exact-five bell windows.
-- **Server authority**: multiplayer clients emit intent; the server owns flips, scoring, and match finish.
-- **Solo practice**: train reaction speed, accuracy, streaks, and missed-window discipline.
-- **Training memory**: local history, trend charts, daily goals, and achievements without accounts.
-- **Midnight table polish**: 3D card flips, bell particles, Boss Yang pressure, sound, and reduced-motion fallbacks.
-
-Independent browser project; not affiliated with any commercial card-game publisher.
-
-## Quick Start
+## Local development
 
 ```bash
 node --version       # v24.x
 pnpm --version       # 11.x
 pnpm install
-pnpm run dev         # Vite dev server on :5173
-pnpm run dev:server  # socket.io server on :3001, in a second terminal
+pnpm run dev         # Web, API, Redis; open http://localhost:5173
 ```
 
-Open http://localhost:5173.
+Compose exposes only the Web on `http://localhost:5173`. Vite proxies `/api/v1`
+and `/ws/v1` to the internal API, so browser traffic remains same-origin. Room
+state belongs only to the disposable Redis container; Compose commits neither
+credentials nor a data volume.
 
-Single-player works with only `pnpm run dev`. Multiplayer needs `pnpm run dev:server`; Vite proxies `/socket.io` to `http://localhost:3001`, so local browsers should still open the Vite origin at `http://localhost:5173`.
+For focused host-process work, run `pnpm run dev:web` or set
+`HALLIGALLI_REDIS_URL=redis://localhost:6379/0` and run `pnpm run dev:api`.
+Stop the local stack with `pnpm run dev:down`.
 
-## Commands
+## Checks
 
 ```bash
 pnpm run test
 pnpm run typecheck
 pnpm run build
-pnpm start          # after pnpm run build
-pnpm run simulate:bell
+pnpm run check
+pnpm run test:e2e    # after pnpm run dev; includes two-seat, six-seat, reconnect, and sequential-room journeys
 ```
 
-Standalone container check:
+## Current game behavior
 
-```bash
-docker build --target standalone -t halligalli-arena:standalone .
-docker run --rm -p 3001:3001 halligalli-arena:standalone
-curl --fail http://localhost:3001/readyz
-curl --fail http://localhost:3001/health
-```
+- 72-card Halligalli inventory: banana, strawberry, lemon, and grape.
+- Two through six browser-local seats with clockwise flips and top-card-only
+  totals.
+- Multiplayer rooms have six stable slots and use one authority-owned,
+  deterministic 72-card sequence for two through six occupied Seats.
+- Ring only when one fruit totals exactly five; a correct ring collects the
+  table, while a wrong ring pays ceiling-half of the table cards.
+- Easy, Normal, and Boss difficulties; 45/60/90-second rounds; button and
+  Space-bar bell input.
+- Chinese and English copy, document language updates, live announcements,
+  keyboard focus, 44 px mobile controls, and reduced-motion coverage.
+- Per-transition score floor and score-breakdown ledger, so absorbed penalties
+  never become hidden debt.
 
-The standalone image serves the built frontend and socket.io from one Node process. The historical backend-only Docker target has been removed because Container Apps-backed Azure Production is not an active fallback path.
+The release characterization and exact fixture handoff are in
+[docs/baselines/v0.6.0-behavior-contract.md](docs/baselines/v0.6.0-behavior-contract.md).
 
-## Rules Model
+## Storage and privacy
 
-Cards flip clockwise around the table. Each player has a face-up pile, but only the top card counts. Older cards underneath are invisible to the rule engine.
+`halligalli_settings` is the only Halligalli browser key retained by this
+product slice. It stores normalized language, sound, difficulty, duration, and
+player-count preferences. Historical best/recent results, history, trends,
+daily goals, and achievements are removed on load and are never written again.
 
-Ring when one fruit totals exactly five across visible top cards.
+There are no accounts, payments, durable match records, player profiles, or
+room recovery. The Multiplayer Authority uses ephemeral Redis state.
 
-Solo and multiplayer both use the supported 3-6 player layouts. The default is 4 players; multiplayer rooms can be created for 3, 4, 5, or 6 players, and the server rejects starting a match while only 2 players are present.
-
-| Event | Points |
-|---|---:|
-| Correct ring base | +120 |
-| Collected cards | +6 per card |
-| Speed bonus | difficulty window, up to ~95 / ~75 / ~50 |
-| Consecutive streak | +10 per hit in current streak |
-| Wrong ring | -50 |
-| Penalty cards paid | -4 per card |
-| Missed bell window | -30 |
-
-| Mode | Flip speed | Speed-bonus window |
-|---|---:|---|
-| Easy | ~1.85 s | ~1.9 s |
-| Normal | ~1.4 s | ~1.5 s |
-| Boss Mode | ~900 ms | ~1.0 s |
-
-## Project Shape
+## Project shape
 
 ```text
-src/
-├── App.tsx                 # UI shell and single-player game loop
-├── audio/useAudioEngine.ts # Web Audio hook
-├── game/                   # shared browser + server game logic
-└── multiplayer/            # socket protocol and client projection
-
-server/
-├── GameEngine.ts           # multiplayer authority
-├── Room.ts                 # lobby and player model
-├── health.ts
-└── index.ts                # HTTP server + socket.io router
-
-docs/operations/            # release, Azure, and rollback docs
+apps/
+├── web/                    # React/Vite Single-Player Path
+└── api/                    # FastAPI REST/WebSocket + Redis authority
+contracts/
+├── fixtures/               # Versioned language-neutral behavior data
+└── openapi.json            # Pydantic-generated REST contract snapshot
+tests/
+└── e2e/                    # Cross-Web/API Compose journeys
+compose.yaml                # Web + API + Redis local development stack
 ```
 
-## Design Boundaries
+`contracts/` is data only. The TypeScript browser rules and Python authority
+consume the same JSON fixtures independently; they never share an executable
+rules package.
 
-- React 19 + Vite 8 + TypeScript + plain CSS.
-- Node.js 24 + socket.io 4.
-- Browser progress stays in `localStorage`.
-- Local multiplayer development uses same-origin socket.io through the Vite `/socket.io` proxy; `VITE_HALLIGALLI_BACKEND_URL` is only for deliberate split-origin runs.
-- No account system, database, router, state library, or CSS framework.
-- Stable visible copy stays bilingual in Chinese and English.
-- New animations must respect `prefers-reduced-motion`.
+## Boundaries
 
-## Privacy And Safety
+- React, Vite, TypeScript, and plain CSS belong to `apps/web`.
+- FastAPI, Redis, REST, and native WebSocket work belong to `apps/api`.
+- The old Node.js/socket.io standalone runtime is not retained as a fallback.
+- Cloud desired state, Helm charts, Terraform, credentials, and operations stay
+  in the infrastructure repository.
 
-Halligalli Arena stores training progress locally in the browser. It does not require accounts, payment data, or a server-side player profile.
+## Paired releases
 
-Multiplayer rooms are transient in-memory socket.io rooms. The server owns scoring and match results so clients cannot submit authoritative wins.
+A Release Tag builds `halligalli-web` and `halligalli-api` from the same commit.
+The release workflow scans both non-root images, checks their shared runtime
+identity through a local paired smoke, then publishes one schema-V2
+`release-attestation.json` containing both immutable digests. The product
+repository never selects Infrastructure GitOps state or carries an
+Infrastructure write credential.
 
-See [SECURITY.md](SECURITY.md) for reporting and safety boundaries.
-
-## Deployment
-
-Azure Kubernetes Production is the active production story after the June 19, 2026 AKS cutover. It uses the standalone Halligalli runtime, infrastructure-owned Helm Chart and Azure Kubernetes Desired State, Argo CD, and same-origin traffic at `play.halligalli.games`.
-
-Container Apps-backed Azure Production is historical after cutover; its Terraform-managed resources were destroyed and it is not an active fallback. Production Kubernetes chart templates, real Azure Kubernetes Desired State, and cloud operations live in the infrastructure repo.
-
-- Release branch: `master`
-- Versioning: Release Please creates human-merged release PRs and `vX.Y.Z` tags
-- Release image: release tags build, scan, and publish immutable GHCR standalone images
-- Azure infrastructure: AKS and GitOps desired state are operated from the infrastructure repo
-- Historical Azure Production: docs-only Static Web Apps plus Container Apps record
-- Kubernetes production render surface: infrastructure-owned chart, values, and Argo CD Application
-- Health check: `/health` returns `status`, active `rooms`, `version`, and `commit`
-- Readiness check: `/readyz` returns `status: "ready"`
-
-The first Container Apps-backed Azure Production activation has been verified historically. Current production language should use Azure Kubernetes Production; Container Apps reactivation or further infrastructure cleanup requires an explicit future decision and the infrastructure repo runbooks.
-
-Operations docs:
-
-- [Operations](docs/operations/README.md)
-- [CI/CD](docs/operations/ci-cd.md)
-- [Azure Production History](docs/operations/azure-production.md)
-- [Kubernetes](docs/operations/kubernetes.md)
-- [Rollback](docs/operations/rollback.md)
-
-## Contributing
-
-Small, focused pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), then run:
-
-```bash
-pnpm run test
-pnpm run typecheck
-pnpm run build
-```
-
-## License
-
-MIT. See [LICENSE](LICENSE).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for local contribution guidance and
+[SECURITY.md](SECURITY.md) for security reporting.

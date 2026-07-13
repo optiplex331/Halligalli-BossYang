@@ -72,9 +72,9 @@ class ResolveImageIdentityTest(unittest.TestCase):
             fake_git({("rev-parse", "HEAD"): "abc1234def5678"}),
         )
 
-        self.assertEqual(outputs["image"], "ghcr.io/optiplex331/halligalli-bossyang")
         self.assertEqual(outputs["version"], "0.3.0")
-        self.assertEqual(outputs["image_tag"], "ghcr.io/optiplex331/halligalli-bossyang:0.3.0")
+        self.assertEqual(outputs["web_image_tag"], "ghcr.io/optiplex331/halligalli-bossyang-web:0.3.0")
+        self.assertEqual(outputs["api_image_tag"], "ghcr.io/optiplex331/halligalli-bossyang-api:0.3.0")
         self.assertEqual(outputs["should_push_image"], "true")
 
     def test_master_push_publishes_development_image(self):
@@ -104,7 +104,8 @@ class ResolveImageIdentityTest(unittest.TestCase):
         )
 
         self.assertEqual(outputs["version"], "0.2.0-0048-gc08fdca")
-        self.assertEqual(outputs["image_tag"], "ghcr.io/owner/repo:0.2.0-0048-gc08fdca")
+        self.assertEqual(outputs["web_image_tag"], "ghcr.io/owner/repo-web:0.2.0-0048-gc08fdca")
+        self.assertEqual(outputs["api_image_tag"], "ghcr.io/owner/repo-api:0.2.0-0048-gc08fdca")
         self.assertEqual(outputs["should_push_image"], "true")
 
     def test_master_push_on_exact_release_tag_does_not_publish_development_image(self):
@@ -152,7 +153,7 @@ class ResolveImageIdentityTest(unittest.TestCase):
         )
 
         self.assertEqual(outputs["version"], "0.6.0")
-        self.assertEqual(outputs["image_tag"], "ghcr.io/owner/repo:0.6.0")
+        self.assertEqual(outputs["web_image_tag"], "ghcr.io/owner/repo-web:0.6.0")
         self.assertEqual(outputs["should_push_image"], "false")
 
     def test_release_please_commit_without_pr_suffix_does_not_publish(self):

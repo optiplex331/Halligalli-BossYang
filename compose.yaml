@@ -1,0 +1,99 @@
+name: halligalli
+
+# Daily development only: source is bind-mounted and room state is ephemeral.
+services:
+  web:
+    image: node:24-bookworm-slim
+    working_dir: /workspace
+    command: >-
+      sh -c "corepack enable && pnpm install --frozen-lockfile && pnpm --dir apps/web run dev --host 0.0.0.0"
+    environment:
+      CI: "true"
+      HALLIGALLI_API_ORIGIN: http://api:8000
+      TMPDIR: /tmp
+    volumes:
+      - .:/workspace
+      - /workspace/node_modules
+      - /workspace/apps/web/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:5173').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  api:
+    image: ghcr.io/astral-sh/uv:python3.14-bookworm-slim
+    working_dir: /workspace
+    command: uv run --project apps/api uvicorn halligalli_api.app:app --host 0.0.0.0 --port 8000
+    environment:
+      HALLIGALLI_REDIS_URL: redis://redis:6379/0
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+    volumes:
+      - .:/workspace
+      - /workspace/apps/api/.venv
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "uv", "run", "--project", "apps/api", "python", "-c", "from urllib.request import urlopen; urlopen('http://localhost:8000/docs')"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:8.0.1-alpine
+    command: redis-server --save '' --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.156.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    configs:
+      - source: otel-collector-config
+        target: /etc/otelcol/config.yaml
+
+  tempo:
+    image: grafana/tempo:3.0.2
+    command: ["-config.file=/etc/tempo/config.yaml"]
+    configs:
+      - source: tempo-config
+        target: /etc/tempo/config.yaml
+
+configs:
+  otel-collector-config:
+    content: |
+      receivers:
+        otlp:
+          protocols:
+            http:
+      exporters:
+        otlphttp/tempo:
+          endpoint: http://tempo:4318
+      service:
+        pipelines:
+          traces:
+            receivers: [otlp]
+            exporters: [otlphttp/tempo]
+  tempo-config:
+    content: |
+      server:
+        http_listen_port: 3200
+      distributor:
+        receivers:
+          otlp:
+            protocols:
+              http:
+      storage:
+        trace:
+          backend: local
+          local:
+            path: /tmp/tempo
