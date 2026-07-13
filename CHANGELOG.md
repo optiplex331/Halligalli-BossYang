@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.3](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.7.2...v0.7.3) (2026-07-13)
+
+
+### Bug Fixes
+
+* **release:** align manifest with latest release ([29d706a](https://github.com/optiplex331/Halligalli-BossYang/commit/29d706af3b24b5f030242b1410cc3daac98199a0))
+* **release:** align manifest with latest release ([f0150ff](https://github.com/optiplex331/Halligalli-BossYang/commit/f0150ff40d0184d916ad678aba7b29039bd7ae23))
+
 ## [0.7.0](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.6.0...v0.7.0) (2026-07-13)
 
 
