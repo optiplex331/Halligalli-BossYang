@@ -57,6 +57,7 @@ class RedisAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshot.viewer_seat_index, 5)
         self.assertEqual(snapshot.max_participants, 6)
         self.assertEqual([participant.seat_index for participant in snapshot.participants], list(range(6)))
+        self.assertEqual(await self.authority.active_room_count(), 1)
 
     async def test_redis_runtime_commits_a_six_seat_authoritative_match(self) -> None:
         credentials = [f"player-{seat_index}-credential" for seat_index in range(6)]

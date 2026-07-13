@@ -1059,7 +1059,10 @@ class RedisMultiplayerAuthority:
         return result
 
     async def active_room_count(self) -> int:
-        return sum(1 async for _ in self._redis.scan_iter(match="halligalli:room:*"))
+        count = 0
+        async for _ in self._redis.scan_iter(match="halligalli:room:*"):
+            count += 1
+        return count
 
     async def readiness(self) -> bool:
         try:
