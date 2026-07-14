@@ -9,11 +9,11 @@ async function verifier(credential) {
   return Buffer.from(digest).toString("hex");
 }
 
-async function enter(path, name, credential) {
+async function enter(path, name, credential, configuration, idempotencyKey = randomUUID()) {
   const response = await fetch(`${origin}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
-    body: JSON.stringify({ name, credentialVerifier: await verifier(credential) }),
+    headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify({ name, credentialVerifier: await verifier(credential), ...configuration }),
   });
   assert.equal(response.status, 201, `entry for ${name} succeeds through Web proxy`);
   return response.json();
@@ -73,9 +73,14 @@ async function connect(roomCode, credential) {
   return client;
 }
 
-async function roomWith(count, prefix) {
+async function roomWith(tableSeatCount, count, prefix) {
   const credentials = Array.from({ length: count }, (_, index) => `${prefix}-${index}-${randomUUID()}`);
-  const created = await enter("/api/v1/rooms", `${prefix} 1`, credentials[0]);
+  const created = await enter("/api/v1/rooms", `${prefix} 1`, credentials[0], {
+    tableSeatCount,
+    targetHumanParticipantCount: count,
+    difficulty: "normal",
+    durationSec: 60,
+  });
   for (let index = 1; index < count; index += 1) {
     await enter(`/api/v1/rooms/${created.roomCode}/participants`, `${prefix} ${index + 1}`, credentials[index]);
   }
@@ -100,24 +105,43 @@ async function readyAndStart(clients) {
 }
 
 async function run() {
-  console.log("two-seat journey");
-  const twoSeat = await roomWith(2, "Two");
-  await readyAndStart(twoSeat.clients);
-  assert.equal(twoSeat.clients[0].snapshot.maxParticipants, 6);
-  twoSeat.clients.forEach((client) => client.close());
+  console.log("duplicate create entry journey");
+  const duplicateCredential = `Duplicate-${randomUUID()}`;
+  const duplicateKey = randomUUID();
+  const duplicateConfiguration = { tableSeatCount: 4, targetHumanParticipantCount: 2, difficulty: "normal", durationSec: 60 };
+  const firstCreate = await enter("/api/v1/rooms", "Duplicate", duplicateCredential, duplicateConfiguration, duplicateKey);
+  const replayedCreate = await enter("/api/v1/rooms", "Duplicate", duplicateCredential, duplicateConfiguration, duplicateKey);
+  assert.equal(replayedCreate.roomCode, firstCreate.roomCode);
 
-  console.log("six-seat and reconnect journey");
-  const sixSeat = await roomWith(6, "Six");
-  const sixStarted = await readyAndStart(sixSeat.clients);
-  assert.equal(sixStarted.participants.length, 6);
-  sixSeat.clients[0].close();
-  const reconnected = await connect(sixSeat.roomCode, sixSeat.credentials[0]);
+  console.log("four Table Seats / two humans journey");
+  const fourTwo = await roomWith(4, 2, "FourTwo");
+  const fourTwoStarted = await readyAndStart(fourTwo.clients);
+  assert.equal(fourTwoStarted.configuration.tableSeatCount, 4);
+  assert.equal(fourTwoStarted.seats.length, 4);
+  assert.equal(fourTwoStarted.scoreboard.length, 2);
+  fourTwo.clients.forEach((client) => client.close());
+
+  console.log("eight Table Seats / two humans and reconnect journey");
+  const eightTwo = await roomWith(8, 2, "EightTwo");
+  const eightTwoStarted = await readyAndStart(eightTwo.clients);
+  assert.equal(eightTwoStarted.seats.length, 8);
+  assert.equal(eightTwoStarted.participants.length, 2);
+  eightTwo.clients[0].close();
+  const reconnected = await connect(eightTwo.roomCode, eightTwo.credentials[0]);
   assert.equal(reconnected.snapshot.phase, "playing");
+  assert.equal(reconnected.snapshot.viewerSeatIndex, 0);
   reconnected.close();
-  sixSeat.clients.slice(1).forEach((client) => client.close());
+  eightTwo.clients.slice(1).forEach((client) => client.close());
+
+  console.log("eight Table Seats / eight humans journey");
+  const eightEight = await roomWith(8, 8, "EightEight");
+  const eightEightStarted = await readyAndStart(eightEight.clients);
+  assert.equal(eightEightStarted.participants.length, 8);
+  assert.equal(eightEightStarted.scoreboard.length, 8);
+  eightEight.clients.forEach((client) => client.close());
 
   console.log("sequential-match journey");
-  const sequential = await roomWith(3, "Next");
+  const sequential = await roomWith(4, 3, "Next");
   await readyAndStart(sequential.clients);
   const requestedForfeit = await sequential.clients[2].command("forfeit");
   const postMatch = requestedForfeit.phase === "post_match"
@@ -130,8 +154,12 @@ async function run() {
   await new Promise((resolve) => setTimeout(resolve, 31_000));
   const lobby = await sequential.clients[0].waitFor((snapshot) => snapshot.phase === "lobby");
   assert.equal(lobby.phase, "lobby");
-  const secondMatch = await readyAndStart(sequential.clients.slice(0, 2));
+  const replacementCredential = `Next replacement-${randomUUID()}`;
+  await enter(`/api/v1/rooms/${sequential.roomCode}/participants`, "Next replacement", replacementCredential);
+  const replacement = await connect(sequential.roomCode, replacementCredential);
+  const secondMatch = await readyAndStart([...sequential.clients.slice(0, 2), replacement]);
   assert.equal(secondMatch.matchNumber, 2);
+  replacement.close();
   sequential.clients.forEach((client) => client.close());
 }
 

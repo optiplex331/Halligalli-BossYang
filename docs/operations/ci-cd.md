@@ -2,7 +2,7 @@
 
 Halligalli uses GitHub Actions as the product delivery control plane. Pull requests and normal pushes validate code, release metadata, delivery control files, and container images, but they do not create Azure resources or deploy application artifacts.
 
-Active production rollout is reviewed through the infrastructure repo's Azure Kubernetes Desired State: Release Tag -> standalone GHCR image -> digest-pinned GitOps values -> Argo CD -> AKS.
+The selected AKS proof rollout is reviewed through the Infrastructure Repo's Azure Kubernetes Desired State: Release Tag -> paired Web/API GHCR images -> schema-V2 Release Attestation -> digest-pinned GitOps values -> Argo CD -> AKS.
 
 The historical Azure Production application deployment path was Static Web Apps plus Container Apps. Its executable workflow and local backend rollout script have been removed from this product repo after AKS cutover, so the old path remains docs-only history.
 
@@ -19,11 +19,11 @@ PR checks do not publish images and do not mutate Azure. CI uses `package.json` 
 
 The check names intentionally stay stable because branch protection depends on them. The work inside each check is routed by `dorny/paths-filter` and `.github/utils/change-filters.yaml`, not by workflow-level path filters. This avoids skipped workflows leaving required checks pending.
 
-Short shell-native workflow orchestration stays in Bash, such as `git`, `docker`, `gh`, `curl`, Azure CLI calls, and environment checks. Structured release validation, GitHub output formatting, `/health` JSON validation, and non-trivial inline heredocs belong in dependency-free `.github/utils/*.py` scripts covered by Python's built-in `unittest`.
+Short shell-native workflow orchestration stays in Bash, such as `git`, `docker`, `gh`, `curl`, Azure CLI calls, and environment checks. Structured release validation, GitHub output formatting, and non-trivial inline heredocs belong in dependency-free `.github/utils/*.py` scripts covered by Python's built-in `unittest`.
 
 | Change type | Product checks | Container build and scan |
 |---|---|---|
-| Product/runtime PR | Validate release config and Python utility tests, install dependencies, run tests, typecheck, and build on Node.js 24. | Build the Node.js 24 standalone image and run Trivy. |
+| Product/runtime PR | Validate release config and Python utility tests, install dependencies, run tests, typecheck, and build on Node.js 24. | Build the Web and API images and run Trivy. |
 | Delivery control PR | Validate release config and utility tests, then run actionlint for GitHub Actions workflows. Skip heavy product work. | Skip image build work. |
 | Release PR | Validate release config and utility tests. Skip heavy product work. | Skip image build work. |
 | Docs or other metadata PR | Validate release config and utility tests. Skip heavy product work. | Skip image build work. |
@@ -50,13 +50,19 @@ The Release PR does not make `package.json` the version source. Merging the Rele
 
 Release Please uses `HALLIGALLI_RELEASE_BOT_TOKEN` so the generated PR can trigger follow-on checks and workflows.
 
-## Release Image
+## Paired Release Images
 
-The `Container` workflow builds and scans the Dockerfile `standalone` target for product/runtime PRs, `master` integration pushes, and release tags. The standalone target packages the built Vite frontend, the Node.js 24 server, shared runtime modules, production dependencies, `/readyz`, `/health`, and socket.io in one image for Azure Kubernetes Production.
+The `Container` workflow builds and scans `apps/web/Dockerfile` and `apps/api/Dockerfile` from the same source commit for product/runtime PRs, `master` integration pushes, and release tags. The Web image serves the Vite build through nginx; the API image runs FastAPI with native WebSocket support and Redis-backed authority.
 
-Container Apps backend-only images are historical after the AKS cutover. The canonical `ghcr.io/<owner>/<repo>:X.Y.Z` Release Image now means the standalone AKS image.
+One Release Tag produces two immutable release images, for example:
 
-This is the completed standalone release-image migration. Before cutover, the same canonical tag identified a backend-only Container Apps image because the Dockerfile's final target was `azure-backend`. After cutover, the workflow explicitly builds `--target standalone`, and the historical backend-only target has been removed; any future legacy backend artifact must use a separately named identity instead of overloading the canonical release tag.
+```text
+ghcr.io/<owner>/<repo>-web:X.Y.Z
+ghcr.io/<owner>/<repo>-api:X.Y.Z
+```
+
+The pair shares the release version and source commit. It is the only deployable
+production-shaped identity; a one-sided or mixed-version release is invalid.
 
 Pull request runs do not publish images.
 
@@ -70,25 +76,26 @@ Development GHCR Images are for traceability and rollback testing only. They do 
 
 If the `master` push is exactly the same commit as a `vX.Y.Z` Release Tag, the workflow does not publish a duplicate `X.Y.Z-0000-gSHA` Development GHCR Image. The release-tagged `X.Y.Z` image is the canonical artifact for that commit.
 
-When the trigger is a `vX.Y.Z` tag, the workflow publishes the release image identity without the `v` prefix:
+When the trigger is a `vX.Y.Z` tag, the workflow publishes both release image identities without the `v` prefix:
 
 ```text
-ghcr.io/<owner>/<repo>:X.Y.Z
+ghcr.io/<owner>/<repo>-web:X.Y.Z
+ghcr.io/<owner>/<repo>-api:X.Y.Z
 ```
 
-It does not publish `latest`. After the image push resolves an immutable digest, the workflow writes `release-attestation.json` with the Release Tag, release commit, standalone image repository and tag, digest, and runtime identity. A tag-only job uploads that file to the existing GitHub Release as a public Release asset. Workflow reruns reuse an identical asset and fail if the same asset name already contains different evidence; they never overwrite it.
+It does not publish `latest`. After both image pushes resolve immutable digests, the workflow writes schema-V2 `release-attestation.json` with the Release Tag, release commit, both image repositories and tags, both digests, and the shared runtime identity. A tag-only job uploads that file to the existing GitHub Release as a public Release asset. Workflow reruns reuse an identical asset and fail if the same asset name already contains different evidence; they never overwrite it.
 
-Azure Kubernetes Desired State should consume the Release Attestation and independently verify the selected GHCR standalone Release Image before Argo CD sync. Historical Container Apps backend deployment is not a maintained path after AKS cutover.
+Azure Kubernetes Desired State should consume the Release Attestation and independently verify both selected GHCR release images before Argo CD sync. Historical Container Apps deployment is not a maintained path.
 
 The active digest handoff is:
 
 1. Merge a Release PR.
 2. Release Please creates `vX.Y.Z`.
-3. The `Container` workflow builds, scans, and pushes `ghcr.io/<owner>/<repo>:X.Y.Z` from the `standalone` target.
-4. The workflow records the pushed `sha256:<digest>` and publishes `release-attestation.json` on the GitHub Release.
-5. The Infrastructure Repo pulls the public asset, verifies tag, commit, digest, `/readyz`, and `/health`, then creates or updates one Draft promotion PR.
+3. The `Container` workflow builds, scans, and pushes the Web/API image pair from the same commit.
+4. The workflow records both `sha256:<digest>` values and publishes schema-V2 `release-attestation.json` on the GitHub Release.
+5. The Infrastructure Repo pulls the public asset, verifies exact provenance for both digests, runs a digest-pinned registry candidate smoke, validates the rendered chart, then creates or updates one Draft promotion PR.
 6. A human reviews and merges the Infrastructure Repo promotion PR.
-7. Argo CD reconciles the reviewed desired state into AKS.
+7. Argo CD reconciles the reviewed desired state into AKS; approved operations then prove every current Web/API Pod `imageID` matches the selected digest and run functional journeys.
 
 The Child Repo has no Infrastructure write credential. The tag remains human-readable release context, the digest is the deployment selector, and the Infrastructure Repo remains the owner of production intent.
 
@@ -99,7 +106,10 @@ The protected `master` ruleset should require:
 - `Product checks`
 - `Container build and scan`
 
-Do not add separate required checks for release metadata or Azure deployment. Active production rollout is reviewed through the infrastructure repo desired-state change, not this product repo PR gate; the historical Azure Production workflow should not become a branch-protection requirement.
+Do not add separate required checks for release metadata or Azure deployment. The
+AKS proof rollout is reviewed through the Infrastructure Repo desired-state
+change, not this product repo PR gate; the historical Azure Production workflow
+should not become a branch-protection requirement.
 
 ## Dependency Updates
 

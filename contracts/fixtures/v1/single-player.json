@@ -71,6 +71,187 @@
       "expected": { "score": 0, "missedPenalty": 0, "missedHits": 1 }
     },
     {
+      "id": "single-player-four-seat-table",
+      "kind": "single-player-table",
+      "tableSeatCount": 4,
+      "humanSeatIndexes": [2]
+    },
+    {
+      "id": "single-player-five-seat-table",
+      "kind": "single-player-table",
+      "tableSeatCount": 5,
+      "humanSeatIndexes": [3]
+    },
+    {
+      "id": "single-player-six-seat-table",
+      "kind": "single-player-table",
+      "tableSeatCount": 6,
+      "humanSeatIndexes": [4]
+    },
+    {
+      "id": "single-player-seven-seat-table",
+      "kind": "single-player-table",
+      "tableSeatCount": 7,
+      "humanSeatIndexes": [0]
+    },
+    {
+      "id": "single-player-eight-seat-table",
+      "kind": "single-player-table",
+      "tableSeatCount": 8,
+      "humanSeatIndexes": [0]
+    },
+    {
+      "id": "multiplayer-4-seats-2-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 4,
+      "humanSeatIndexes": [0, 1]
+    },
+    {
+      "id": "multiplayer-4-seats-3-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 4,
+      "humanSeatIndexes": [0, 1, 2]
+    },
+    {
+      "id": "multiplayer-4-seats-4-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 4,
+      "humanSeatIndexes": [0, 1, 2, 3]
+    },
+    {
+      "id": "multiplayer-5-seats-2-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 5,
+      "humanSeatIndexes": [0, 1]
+    },
+    {
+      "id": "multiplayer-5-seats-3-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 5,
+      "humanSeatIndexes": [0, 1, 2]
+    },
+    {
+      "id": "multiplayer-5-seats-4-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 5,
+      "humanSeatIndexes": [0, 1, 2, 3]
+    },
+    {
+      "id": "multiplayer-5-seats-5-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 5,
+      "humanSeatIndexes": [0, 1, 2, 3, 4]
+    },
+    {
+      "id": "multiplayer-6-seats-2-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 6,
+      "humanSeatIndexes": [0, 1]
+    },
+    {
+      "id": "multiplayer-6-seats-3-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 6,
+      "humanSeatIndexes": [0, 1, 2]
+    },
+    {
+      "id": "multiplayer-6-seats-4-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 6,
+      "humanSeatIndexes": [0, 1, 2, 3]
+    },
+    {
+      "id": "multiplayer-6-seats-5-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 6,
+      "humanSeatIndexes": [0, 1, 2, 3, 4]
+    },
+    {
+      "id": "multiplayer-6-seats-6-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 6,
+      "humanSeatIndexes": [0, 1, 2, 3, 4, 5]
+    },
+    {
+      "id": "multiplayer-7-seats-2-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 7,
+      "humanSeatIndexes": [0, 1]
+    },
+    {
+      "id": "multiplayer-7-seats-3-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 7,
+      "humanSeatIndexes": [0, 1, 2]
+    },
+    {
+      "id": "multiplayer-7-seats-4-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 7,
+      "humanSeatIndexes": [0, 1, 2, 3]
+    },
+    {
+      "id": "multiplayer-7-seats-5-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 7,
+      "humanSeatIndexes": [0, 1, 2, 3, 4]
+    },
+    {
+      "id": "multiplayer-7-seats-6-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 7,
+      "humanSeatIndexes": [0, 1, 2, 3, 4, 5]
+    },
+    {
+      "id": "multiplayer-7-seats-7-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 7,
+      "humanSeatIndexes": [0, 1, 2, 3, 4, 5, 6]
+    },
+    {
+      "id": "multiplayer-8-seats-2-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 8,
+      "humanSeatIndexes": [0, 1]
+    },
+    {
+      "id": "multiplayer-8-seats-3-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 8,
+      "humanSeatIndexes": [0, 1, 2]
+    },
+    {
+      "id": "multiplayer-8-seats-4-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 8,
+      "humanSeatIndexes": [0, 1, 2, 3]
+    },
+    {
+      "id": "multiplayer-8-seats-5-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 8,
+      "humanSeatIndexes": [0, 1, 2, 3, 4]
+    },
+    {
+      "id": "multiplayer-8-seats-6-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 8,
+      "humanSeatIndexes": [0, 1, 2, 3, 4, 5]
+    },
+    {
+      "id": "multiplayer-8-seats-7-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 8,
+      "humanSeatIndexes": [0, 1, 2, 3, 4, 5, 6]
+    },
+    {
+      "id": "multiplayer-8-seats-8-humans",
+      "kind": "multiplayer-table",
+      "tableSeatCount": 8,
+      "humanSeatIndexes": [0, 1, 2, 3, 4, 5, 6, 7]
+    },
+
+    {
       "id": "multiplayer-two-seat-capacity",
       "kind": "multiplayer-capacity",
       "participants": 2,

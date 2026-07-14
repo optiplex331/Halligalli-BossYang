@@ -2,7 +2,9 @@
 
 Azure Production was the historical Container Apps-backed deployment stage for Halligalli portfolio/demo operation. After the AKS cutover and historical destroy operation, its Terraform-managed resources are gone and it is not an active fallback.
 
-The active production path is Azure Kubernetes Production. This document preserves the old Static Web Apps plus Container Apps architecture as teaching material only; it is not an operation checklist.
+The selected production-shaped path is the AKS Portfolio Proof Environment.
+This document preserves the old Static Web Apps plus Container Apps architecture
+as teaching material only; it is not an operation checklist.
 
 ## Historical Shape
 
@@ -19,13 +21,13 @@ The old backend image intentionally did not copy Vite `dist/index.html` or `dist
 
 ## Why It Was Superseded
 
-Azure Kubernetes Production replaced this split-origin shape with one same-origin standalone runtime:
+The AKS proof replaced this split-origin shape with a same-origin paired runtime:
 
 ```text
-https://play.halligalli.games -> AKS ingress -> standalone Halligalli container
+https://play.halligalli.games -> AKS ingress -> Web + FastAPI API Services
 ```
 
-The AKS path removes the separate Backend Entry, avoids `VITE_HALLIGALLI_BACKEND_URL`, and keeps active rollout review in the infrastructure repo's digest-pinned GitOps desired state.
+The AKS path removes the separate Backend Entry, avoids `VITE_HALLIGALLI_BACKEND_URL`, and keeps proof rollout review in the Infrastructure Repo's digest-pinned GitOps desired state.
 
 ## Historical Proof Context
 
@@ -52,4 +54,6 @@ Historical DNS records retained for audit were:
 
 Do not use the old Static Web Apps or Container Apps path for new production deployment, smoke checks, or rollback. The executable workflow and local backend rollout script have been removed from this product repo.
 
-Use the infrastructure repo's Azure Kubernetes Production runbook for active production operations. Application rollback is a GitOps desired-state change to a reviewed standalone GHCR image digest, not a Container Apps redeploy.
+Use the Infrastructure Repo's AKS Portfolio Proof Procedure for an explicitly
+approved proof window. Application rollback is a GitOps desired-state change to
+a reviewed paired Web/API GHCR digest set, not a Container Apps redeploy.

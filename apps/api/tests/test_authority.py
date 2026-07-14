@@ -27,6 +27,10 @@ class EntryAuthorityTest(unittest.IsolatedAsyncioTestCase):
                 idempotency_key="create-1",
                 name="Host",
                 credential_verifier=verifier(host_credential),
+                table_seat_count=4,
+                target_human_participant_count=2,
+                difficulty="normal",
+                duration_sec=60,
             ),
         )
         repeated = await authority.execute(
@@ -35,6 +39,10 @@ class EntryAuthorityTest(unittest.IsolatedAsyncioTestCase):
                 idempotency_key="create-1",
                 name="Host",
                 credential_verifier=verifier(host_credential),
+                table_seat_count=4,
+                target_human_participant_count=2,
+                difficulty="normal",
+                duration_sec=60,
             ),
         )
         joined = await authority.execute(

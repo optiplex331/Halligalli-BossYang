@@ -5,7 +5,7 @@ type JsonRecord = Record<string, unknown>;
 
 const VALID_DIFFICULTIES = new Set<Difficulty>(["easy", "normal", "hard"]);
 const VALID_DURATIONS = new Set([45, 60, 90]);
-const VALID_PLAYER_COUNTS = new Set([2, 3, 4, 5, 6]);
+const VALID_TABLE_SEAT_COUNTS = new Set([4, 5, 6, 7, 8]);
 const VALID_LANGUAGES = new Set<Language>(["zh", "en"]);
 
 function asRecord(value: unknown): JsonRecord {
@@ -24,8 +24,8 @@ function isDuration(value: unknown): value is number {
   return typeof value === "number" && VALID_DURATIONS.has(value);
 }
 
-function isPlayerCount(value: unknown): value is number {
-  return typeof value === "number" && VALID_PLAYER_COUNTS.has(value);
+function isTableSeatCount(value: unknown): value is number {
+  return typeof value === "number" && VALID_TABLE_SEAT_COUNTS.has(value);
 }
 
 function loadJson<T>(key: string, fallback: T): T {
@@ -64,9 +64,9 @@ export function normalizeSettings(value: unknown): GameSettings {
     duration: isDuration(next.duration)
       ? next.duration
       : DEFAULT_SETTINGS.duration,
-    playerCount: isPlayerCount(next.playerCount)
-      ? next.playerCount
-      : DEFAULT_SETTINGS.playerCount,
+    tableSeatCount: isTableSeatCount(next.tableSeatCount)
+      ? next.tableSeatCount
+      : DEFAULT_SETTINGS.tableSeatCount,
     language: isLanguage(next.language)
       ? next.language
       : DEFAULT_SETTINGS.language,

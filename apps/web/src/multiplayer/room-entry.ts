@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { components } from "./rest.generated.js";
 
 type EntryRequest = components["schemas"]["EntryRequest"];
+type CreateRoomRequest = components["schemas"]["CreateRoomRequest"];
 type EntryResult = components["schemas"]["EntryResult"];
 type ProblemDetails = components["schemas"]["ProblemDetails"];
 
@@ -13,6 +14,8 @@ interface RoomSession {
   roomCode: string;
   snapshot: RoomSnapshot;
 }
+
+export type RoomSessionState = "no_room" | "entering" | "connecting" | "lobby" | "playing" | "post_match" | "leaving";
 
 function createCredential(): string {
   const bytes = globalThis.crypto.getRandomValues(new Uint8Array(32));
@@ -43,7 +46,7 @@ function websocketOrigin(): string {
 
 async function readEntry(
   path: string,
-  payload: EntryRequest,
+  payload: EntryRequest | CreateRoomRequest,
   idempotencyKey: string,
 ): Promise<EntryResult> {
   const response = await fetch(`${backendOrigin()}${path}`, {
@@ -93,6 +96,10 @@ export function useRoomEntry() {
   const [retryNonce, setRetryNonce] = useState(0);
   const socketRef = useRef<WebSocket | null>(null);
   const sessionRef = useRef<RoomSession | null>(null);
+  const generationRef = useRef(0);
+  const enteringRef = useRef(false);
+  const intentionalCloseRef = useRef(new WeakSet<WebSocket>());
+  const [state, setState] = useState<RoomSessionState>("no_room");
 
   useEffect(() => {
     sessionRef.current = session;
@@ -104,34 +111,52 @@ export function useRoomEntry() {
       setConnected(false);
       return;
     }
+    const generation = generationRef.current;
+    setState("connecting");
     let retryTimer: number | null = null;
     const socket = watchRoom(session, (snapshot) => {
       void (async () => {
-        const current = socketRef.current === socket ? sessionRef.current : null;
+        const current = generationRef.current === generation && socketRef.current === socket ? sessionRef.current : null;
         if (!current || snapshot.revision <= current.snapshot.revision) return;
         const replacement = snapshot.revision > current.snapshot.revision + 1
           ? await readSnapshot(current)
           : snapshot;
-        setSession((previous) => previous && previous.roomCode === current.roomCode ? {
+        setSession((previous) => generationRef.current === generation && previous && previous.roomCode === current.roomCode ? {
           ...previous,
           snapshot: replacement,
         } : previous);
+        setState(replacement.phase);
       })().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Room snapshot is unavailable"));
     });
     socketRef.current = socket;
-    socket.addEventListener("open", () => setConnected(true));
+    socket.addEventListener("open", () => {
+      if (generationRef.current !== generation) return;
+      setConnected(true);
+      setState(session.snapshot.phase);
+    });
     socket.addEventListener("close", () => {
+      if (generationRef.current !== generation) return;
       setConnected(false);
-      retryTimer = window.setTimeout(() => setRetryNonce((value) => value + 1), 400);
+      if (!intentionalCloseRef.current.has(socket)) {
+        retryTimer = window.setTimeout(() => {
+          if (generationRef.current === generation) setRetryNonce((value) => value + 1);
+        }, 400);
+      }
     });
     return () => {
       if (socketRef.current === socket) {
         socketRef.current = null;
       }
+      intentionalCloseRef.current.add(socket);
       socket.close();
       if (retryTimer !== null) window.clearTimeout(retryTimer);
     };
   }, [session?.credential, session?.roomCode, retryNonce]);
+
+  useEffect(() => {
+    if (!session || state === "leaving" || state === "connecting") return;
+    setState(session.snapshot.phase);
+  }, [session?.snapshot.phase, state]);
 
   function sendCommand(type: "ready" | "start" | "bell" | "leave" | "forfeit" | "continue" | "post_match_leave"): void {
     const socket = socketRef.current;
@@ -142,29 +167,51 @@ export function useRoomEntry() {
     socket.send(JSON.stringify({ type, commandId: globalThis.crypto.randomUUID() }));
   }
 
-  async function enter(path: string, name: string): Promise<void> {
+  async function enter(path: string, payload: EntryRequest | CreateRoomRequest): Promise<void> {
+    if (enteringRef.current || sessionRef.current) return;
+    enteringRef.current = true;
+    generationRef.current += 1;
+    const generation = generationRef.current;
+    setState("entering");
     setPending(true);
     setError("");
     try {
       const credential = createCredential();
       const result = await readEntry(
         path,
-        {
-          name: name.trim() || "Player",
-          credentialVerifier: await credentialVerifier(credential),
-        },
+        { ...payload, name: payload.name.trim() || "Player", credentialVerifier: await credentialVerifier(credential) },
         globalThis.crypto.randomUUID(),
       );
-      setSession({
+      if (generationRef.current !== generation) return;
+      const nextSession = {
         credential,
         roomCode: result.roomCode,
         snapshot: result.snapshot,
-      });
+      };
+      sessionRef.current = nextSession;
+      setSession(nextSession);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Room entry failed");
+      if (generationRef.current === generation) {
+        setError(reason instanceof Error ? reason.message : "Room entry failed");
+        setState("no_room");
+      }
     } finally {
-      setPending(false);
+      if (generationRef.current === generation) setPending(false);
+      enteringRef.current = false;
     }
+  }
+
+  function leaveRoom(): void {
+    if (!sessionRef.current || state === "leaving") return;
+    setState("leaving");
+    sendCommand("leave");
+    const socket = socketRef.current;
+    if (socket) intentionalCloseRef.current.add(socket);
+    generationRef.current += 1;
+    sessionRef.current = null;
+    setSession(null);
+    setConnected(false);
+    setState("no_room");
   }
 
   return {
@@ -172,13 +219,15 @@ export function useRoomEntry() {
     error,
     pending,
     connected,
-    createRoom: (name: string) => enter("/api/v1/rooms", name),
+    state,
+    createRoom: (name: string, configuration: Omit<CreateRoomRequest, "name" | "credentialVerifier">) =>
+      enter("/api/v1/rooms", { name, credentialVerifier: "", ...configuration }),
     joinRoom: (roomCode: string, name: string) =>
-      enter(`/api/v1/rooms/${encodeURIComponent(roomCode.trim().toUpperCase())}/participants`, name),
+      enter(`/api/v1/rooms/${encodeURIComponent(roomCode.trim().toUpperCase())}/participants`, { name, credentialVerifier: "" }),
     ready: () => sendCommand("ready"),
     start: () => sendCommand("start"),
     ringBell: () => sendCommand("bell"),
-    leaveRoom: () => sendCommand("leave"),
+    leaveRoom,
     forfeit: () => sendCommand("forfeit"),
     continueMatch: () => sendCommand("continue"),
     leaveAfterMatch: () => sendCommand("post_match_leave"),

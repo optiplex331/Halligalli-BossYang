@@ -68,7 +68,7 @@ const COPY = {
     startIntro: "单人训练：调好设置直接开打，边练手速边磨判断力。",
     start: "开始练习",
     settings: "开局设置",
-    players: "参加人数",
+    players: "桌面座位",
     difficulty: "难度",
     duration: "局时",
     sound: "音效",
@@ -117,7 +117,7 @@ const COPY = {
     scoreMissedPenalty: "漏拍惩罚",
     scoreCardPenalty: "罚牌附加扣分",
     finalScore: "最终得分",
-    resultLine: "{players} 人局，正确率 {accuracy}%，平均反应 {avg} ms",
+    resultLine: "{players} 个桌面座位，1 位真人，正确率 {accuracy}%，平均反应 {avg} ms",
     bellReady: "抢铃 — {fruit}已凑齐5个",
     bellWait: "抢铃（等待时机）",
     multiplayer: "多人房间",
@@ -148,7 +148,7 @@ const COPY = {
     startIntro: "Solo training: tune the table, then sharpen your reflexes and judgment.",
     start: "Start Practice",
     settings: "Setup",
-    players: "Players",
+    players: "Table Seats",
     difficulty: "Difficulty",
     duration: "Duration",
     sound: "Sound",
@@ -197,7 +197,7 @@ const COPY = {
     scoreMissedPenalty: "Missed bell penalty",
     scoreCardPenalty: "Penalty card deduction",
     finalScore: "Final score",
-    resultLine: "{players}-player round, {accuracy}% accuracy, avg reaction {avg} ms",
+    resultLine: "{players} Table Seats, 1 human, {accuracy}% accuracy, avg reaction {avg} ms",
     bellReady: "Ring — {fruit} ×5",
     bellWait: "Ring bell (waiting for condition)",
     multiplayer: "Multiplayer room",
@@ -246,7 +246,7 @@ const INITIAL_GAME_SNAPSHOT: GameSnapshot = {
   scoreBreakdown: INITIAL_BREAKDOWN,
   difficulty: DEFAULT_SETTINGS.difficulty,
   durationSec: DEFAULT_SETTINGS.duration,
-  playerCount: DEFAULT_SETTINGS.playerCount,
+  tableSeatCount: DEFAULT_SETTINGS.tableSeatCount,
   userSeatId: 0,
   maxStreak: 0,
   streak: 0,
@@ -288,7 +288,8 @@ function TableSeat({
   currentTurn,
   language,
   compact,
-  justFlipped,
+  revealSequence,
+  position,
 }: {
   player: PlayerState;
   seat: SeatLayout;
@@ -296,35 +297,29 @@ function TableSeat({
   currentTurn: boolean;
   language: GameSettings["language"];
   compact: boolean;
-  justFlipped: boolean;
+  revealSequence: number | null;
+  position: number;
 }) {
   const topCard = getTopCard(player);
   const hasCard = Boolean(topCard);
-  const previousFaceUp = useRef(false);
-  const wasFaceUp = previousFaceUp.current;
-
-  useEffect(() => {
-    previousFaceUp.current = hasCard;
-  }, [hasCard]);
 
   const innerClass = [
     "card-3d-inner",
     hasCard && "face-up",
-    justFlipped && "just-flipped",
-    justFlipped && wasFaceUp && "card-swap",
+    revealSequence !== null && "just-flipped",
   ].filter(Boolean).join(" ");
 
   return (
     <article
       className={currentTurn ? "table-seat current-turn" : "table-seat"}
-      style={{ gridArea: seat.gridArea } as CSSProperties}
+      style={{ "--seat-angle": `${position}deg` } as CSSProperties}
     >
       <div className="seat-header">
         <span className="seat-label">{language === "en" ? player.labelEn : player.labelZh}</span>
       </div>
       <div className={["table-card-shell", active && "active", currentTurn && "current"].filter(Boolean).join(" ")}>
         <div className="card-3d-container">
-          <div className={innerClass}>
+          <div key={revealSequence ?? "settled"} className={innerClass} data-reveal-sequence={revealSequence ?? undefined}>
             <div className="card-3d-back"><div className="card-back" /></div>
             <div className="card-3d-front"><FruitCardFace card={topCard} compact={compact} /></div>
           </div>
@@ -344,18 +339,21 @@ export default function App() {
   const [missedHits, setMissedHits] = useState(0);
   const [scoreBreakdown, setScoreBreakdown] = useState<ScoreBreakdown>(INITIAL_BREAKDOWN);
   const [secondsLeft, setSecondsLeft] = useState(DEFAULT_SETTINGS.duration);
-  const [countdown, setCountdown] = useState(0);
+  const [countdown, setCountdown] = useState<{ runId: number; value: 3 | 2 | 1 } | null>(null);
   const [activeBellFruit, setActiveBellFruit] = useState<FruitKey | null>(null);
   const [feedback, setFeedback] = useState({ type: "idle" as FeedbackType, message: "" });
   const [penaltyNotice, setPenaltyNotice] = useState("");
   const [bossTaunt, setBossTaunt] = useState("");
   const [bellPressed, setBellPressed] = useState(false);
-  const [justFlippedSeat, setJustFlippedSeat] = useState(-1);
+  const [latestReveal, setLatestReveal] = useState<{ sequence: number; seatIndex: number } | null>(null);
   const [resultSummary, setResultSummary] = useState<RoundSummary | null>(null);
   const [roomName, setRoomName] = useState("");
   const [joinCode, setJoinCode] = useState("");
+  const [roomHumanTarget, setRoomHumanTarget] = useState(2);
 
   const gameStateRef = useRef<GameSnapshot>(INITIAL_GAME_SNAPSHOT);
+  const countdownRunRef = useRef(0);
+  const revealSequenceRef = useRef(0);
   const gameRunningRef = useRef(false);
   const bellStateRef = useRef<BellState>(INITIAL_BELL_STATE);
   const revealIntervalRef = useRef<number | null>(null);
@@ -369,17 +367,17 @@ export default function App() {
   const screenRegionRef = useRef<HTMLElement | null>(null);
 
   const mode = MODES[settings.difficulty];
-  const seatLayouts = getSeatLayouts(settings.playerCount) ?? [];
+  const seatLayouts = getSeatLayouts(settings.tableSeatCount) ?? [];
   const userSeatId = seatLayouts.findIndex((seat) => seat.isUser);
   const copy = COPY[settings.language];
-  const compactCards = settings.playerCount >= 5;
+  const compactCards = settings.tableSeatCount >= 5;
   const { ensureUnlocked, playFeedback } = useAudioEngine(settings.soundEnabled);
   const roomEntry = useRoomEntry();
   const roomProjection = roomEntry.session
     ? projectRoomSnapshot(roomEntry.session.snapshot)
     : null;
   const activeRoomParticipant = roomProjection?.snapshot.participants.find(
-    (participant) => participant.seatIndex === roomProjection.snapshot.currentTurn,
+    (participant) => participant.seatIndex === roomProjection.snapshot.currentTurnSeatIndex,
   );
 
   function t(key: CopyKey, values: Record<string, number | string> = {}): string {
@@ -476,9 +474,10 @@ export default function App() {
       actingPlayer: actorIndex,
       currentTurn: (actorIndex + 1) % playersForTurn.length,
     });
-    setJustFlippedSeat(actorIndex);
+    revealSequenceRef.current += 1;
+    setLatestReveal({ sequence: revealSequenceRef.current, seatIndex: actorIndex });
     clearTimer(flipTimeoutRef, window.clearTimeout);
-    flipTimeoutRef.current = window.setTimeout(() => setJustFlippedSeat(-1), 500);
+    flipTimeoutRef.current = window.setTimeout(() => setLatestReveal(null), 500);
   }
 
   function beginGameLoop(snapshot: GameSnapshot): void {
@@ -501,13 +500,13 @@ export default function App() {
   function startGame(): void {
     ensureUnlocked();
     stopGameLoops();
-    const freshPlayers = createPlayers(settings.playerCount, FRUITS);
+    const freshPlayers = createPlayers(settings.tableSeatCount, FRUITS);
     const freshSnapshot: GameSnapshot = {
       ...INITIAL_GAME_SNAPSHOT,
       players: freshPlayers,
       difficulty: settings.difficulty,
       durationSec: settings.duration,
-      playerCount: settings.playerCount,
+      tableSeatCount: settings.tableSeatCount,
       userSeatId,
       scoreBreakdown: { ...INITIAL_BREAKDOWN },
       reactionTimes: [],
@@ -523,17 +522,19 @@ export default function App() {
     setBossTaunt("");
     setFeedback({ type: "idle", message: "" });
     setScreen("play");
-    setCountdown(3);
+    countdownRunRef.current += 1;
+    const runId = countdownRunRef.current;
+    setCountdown({ runId, value: 3 });
 
     let tick = 3;
     startupTimeoutRef.current = window.setInterval(() => {
       tick -= 1;
       if (tick > 0) {
-        setCountdown(tick);
+        setCountdown({ runId, value: tick as 2 | 1 });
         return;
       }
       clearTimer(startupTimeoutRef, window.clearInterval);
-      setCountdown(0);
+      setCountdown(null);
       beginGameLoop(freshSnapshot);
     }, 1_000);
   }
@@ -617,7 +618,7 @@ export default function App() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [screen, settings.difficulty, settings.playerCount]);
+  }, [screen, settings.difficulty, settings.tableSeatCount]);
 
   useEffect(() => () => stopGameLoops(), []);
 
@@ -673,8 +674,8 @@ export default function App() {
                 <div className="control-group">
                   <span>{t("players")}</span>
                   <div className="chip-row">
-                    {[2, 3, 4, 5, 6].map((count) => (
-                      <button key={count} className={settings.playerCount === count ? "chip active" : "chip"} aria-pressed={settings.playerCount === count} onClick={() => updateSetting("playerCount", count)}>{settings.language === "en" ? `${count}P` : `${count} 人`}</button>
+                  {[4, 5, 6, 7, 8].map((count) => (
+                      <button key={count} className={settings.tableSeatCount === count ? "chip active" : "chip"} aria-pressed={settings.tableSeatCount === count} onClick={() => updateSetting("tableSeatCount", count)}>{settings.language === "en" ? `${count} seats` : `${count} 个座位`}</button>
                     ))}
                   </div>
                 </div>
@@ -717,7 +718,7 @@ export default function App() {
                 <h2 id="multiplayer-entry-title">{t("multiplayer")}</h2>
                 <p className="deck-note">{t("entryHint")}</p>
               </div>
-              <div className="room-entry-controls">
+              {!roomProjection && <div className="room-entry-controls">
                 <label>
                   <span>{t("playerName")}</span>
                   <input
@@ -727,12 +728,33 @@ export default function App() {
                     placeholder={settings.language === "en" ? "Player" : "玩家"}
                   />
                 </label>
+                <label>
+                  <span>{settings.language === "en" ? "Table Seats" : "桌面座位"}</span>
+                  <select value={settings.tableSeatCount} onChange={(event) => {
+                    const count = Number(event.target.value);
+                    updateSetting("tableSeatCount", count);
+                    setRoomHumanTarget((current) => Math.min(current, count));
+                  }}>
+                    {[4, 5, 6, 7, 8].map((count) => <option key={count} value={count}>{count}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>{settings.language === "en" ? "Human players" : "真人玩家"}</span>
+                  <select value={roomHumanTarget} onChange={(event) => setRoomHumanTarget(Number(event.target.value))}>
+                    {Array.from({ length: settings.tableSeatCount - 1 }, (_, index) => index + 2).map((count) => <option key={count} value={count}>{count}</option>)}
+                  </select>
+                </label>
                 <button
                   className="primary-button"
                   disabled={roomEntry.pending}
-                  onClick={() => void roomEntry.createRoom(roomName)}
+                  onClick={() => void roomEntry.createRoom(roomName, {
+                    tableSeatCount: settings.tableSeatCount,
+                    targetHumanParticipantCount: roomHumanTarget,
+                    difficulty: settings.difficulty,
+                    durationSec: settings.duration,
+                  })}
                 >
-                  {t("createRoom")}
+                  {settings.language === "en" ? `Create ${settings.tableSeatCount}-seat room for ${roomHumanTarget}` : `创建 ${settings.tableSeatCount} 座位 / ${roomHumanTarget} 真人房间`}
                 </button>
                 <label>
                   <span>{t("roomCode")}</span>
@@ -750,19 +772,19 @@ export default function App() {
                 >
                   {t("joinRoom")}
                 </button>
-              </div>
+              </div>}
               {roomEntry.error && <p className="room-entry-error" role="alert">{roomEntry.error}</p>}
               {roomProjection && (
                 <div className="room-entry-snapshot" role="status" aria-live="polite">
                   <strong>{t("roomCode")}: {roomProjection.snapshot.roomCode}</strong>
                   <p>{t("roomStatus", {
                     current: roomProjection.snapshot.participants.length,
-                    max: roomProjection.snapshot.maxParticipants,
+                    max: roomProjection.snapshot.configuration.targetHumanParticipantCount,
                   })}</p>
                   <ul className="room-participants">
                     {roomProjection.seats.map((seat) => (
                       <li key={seat.seatIndex}>
-                        {t("seatLabel", { seat: seat.seatNumber })} · {seat.name}{seat.ready ? " ✓" : ""}
+                        {t("seatLabel", { seat: seat.seatNumber })} · {seat.occupied ? seat.name : (settings.language === "en" ? "Neutral Seat" : "中立座位")}{seat.ready ? " ✓" : ""}
                       </li>
                     ))}
                   </ul>
@@ -775,6 +797,9 @@ export default function App() {
                         onClick={roomEntry.ready}
                       >
                         {t("readyForMatch")}
+                      </button>
+                      <button className="ghost-button" disabled={!roomEntry.connected} onClick={roomEntry.leaveRoom}>
+                        {t("leaveRoom")}
                       </button>
                       <button
                         className="ghost-button"
@@ -811,9 +836,11 @@ export default function App() {
                                 card ? "" : "empty",
                                 seat.currentTurn ? "current-turn" : "",
                               ].filter(Boolean).join(" ")}
+                              aria-current={seat.currentTurn ? "true" : undefined}
+                              style={{ "--seat-angle": `${90 + ((seat.seatIndex - roomProjection.snapshot.viewerSeatIndex) * 360) / roomProjection.seats.length}deg` } as CSSProperties}
                             >
                               <span className="multiplayer-seat-heading">
-                                {t("seatLabel", { seat: seat.seatNumber })} · {seat.name}
+                                {t("seatLabel", { seat: seat.seatNumber })} · {seat.occupied ? seat.name : (settings.language === "en" ? "Neutral" : "中立")}
                               </span>
                               <strong>{card ? `${fruit?.icon ?? ""} ×${card.count}` : "—"}</strong>
                             </article>
@@ -893,14 +920,14 @@ export default function App() {
 
         {screen === "play" && (
           <section ref={screenRegionRef} tabIndex={-1} className="stack screen-enter">
-            {countdown > 0 && <div className="countdown-overlay" role="status" aria-live="assertive" aria-atomic="true"><span className="countdown-number">{countdown}</span></div>}
+            {countdown && <div className="countdown-overlay" role="status" aria-live="assertive" aria-atomic="true"><span key={`${countdown.runId}-${countdown.value}`} className="countdown-number" data-countdown-run={countdown.runId} data-countdown-value={countdown.value}>{countdown.value}</span></div>}
             <div className="play-topbar minimal">
               <span className="pill">{t("timeLeft", { seconds: secondsLeft })}</span>
               <button className="ghost-button" onClick={finishGame}>{t("endGame")}</button>
             </div>
             <div className={`feedback ${feedback.type}`} aria-live="polite" aria-atomic="true">{feedback.message}</div>
             {penaltyNotice && <div className="penalty-banner" aria-live="assertive" aria-atomic="true">{penaltyNotice}</div>}
-            <div className={`table-scene players-${settings.playerCount}`}>
+            <div className={`table-scene players-${settings.tableSeatCount}`}>
               <div className="table-felt">
                 <div className="boss-presence"><img className="boss-presence-avatar" src="/yang-boss.png" alt="" /><span>{t("bossWatching")}</span></div>
                 {bossTaunt && <div className="boss-taunt" aria-live="polite" aria-atomic="true">{bossTaunt}</div>}
@@ -909,7 +936,8 @@ export default function App() {
                   if (!player) return null;
                   const topCard = getTopCard(player);
                   const active = Boolean(activeBellFruit && topCard?.fruit === activeBellFruit && totals[activeBellFruit] === 5);
-                  return <TableSeat key={player.id} player={player} seat={seat} active={active} currentTurn={gameStateRef.current.actingPlayer === index} language={settings.language} compact={compactCards} justFlipped={justFlippedSeat === index} />;
+                  const position = 90 + ((index - userSeatId) * 360) / seatLayouts.length;
+                  return <TableSeat key={player.id} player={player} seat={seat} active={active} currentTurn={gameStateRef.current.actingPlayer === index} language={settings.language} compact={compactCards} revealSequence={latestReveal?.seatIndex === index ? latestReveal.sequence : null} position={position} />;
                 })}
                 <div className={activeBellFruit ? "center-bell is-ready" : "center-bell"}>
                   <button className={bellPressed ? "bell-button pressed" : "bell-button"} onClick={handleBell} aria-label={activeBellFruit ? t("bellReady", { fruit: fruitLabel(activeBellFruit, settings.language) }) : t("bellWait")} aria-pressed={bellPressed}>铃</button>
@@ -927,7 +955,7 @@ export default function App() {
             <div className="card result-hero">
               <p className="eyebrow">{t("finish")}</p>
               <h2>{resultSummary.score} {t("scoreUnit")}</h2>
-              <p>{t("resultLine", { players: resultSummary.playerCount, accuracy: Math.round(resultSummary.accuracy * 100), avg: resultSummary.avgReactionMs || "-" })}</p>
+              <p>{t("resultLine", { players: resultSummary.tableSeatCount, accuracy: Math.round(resultSummary.accuracy * 100), avg: resultSummary.avgReactionMs || "-" })}</p>
             </div>
             <div className="grid two-up">
               <section className="card">

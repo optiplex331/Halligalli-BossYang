@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from halligalli_api.app import RoomSocketHub, forward_room_revisions
-from halligalli_api.authority import ParticipantSnapshot, RoomSnapshot, Viewer
+from halligalli_api.authority import ParticipantSnapshot, RoomConfiguration, RoomSnapshot, Viewer
 
 
 class _Socket:
@@ -20,8 +20,7 @@ class _ViewerAuthority:
             room_code=room_code,
             revision=4,
             phase="lobby",
-            min_participants=2,
-            max_participants=6,
+            configuration=RoomConfiguration(table_seat_count=4, target_human_participant_count=2, difficulty="normal", duration_sec=60),
             viewer_seat_index=0 if viewer.credential == "host" else 1,
             participants=[
                 ParticipantSnapshot(name="Host", seat_index=0),

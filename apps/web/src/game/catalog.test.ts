@@ -4,7 +4,7 @@ import { createPlayers } from "./rules.js";
 
 describe("shared game catalog", () => {
   it("supplies the fruit definitions used to create a supported table", () => {
-    const players = createPlayers(3, FRUITS);
+    const players = createPlayers(4, FRUITS);
 
     expect(FRUITS.map((fruit) => fruit.key)).toEqual([
       "banana",
@@ -12,11 +12,11 @@ describe("shared game catalog", () => {
       "lemon",
       "grape",
     ]);
-    expect(players).toHaveLength(3);
+    expect(players).toHaveLength(4);
   });
 
   it("keeps the V1 two-seat layout on the same local rules path", () => {
-    expect(createPlayers(2, FRUITS)).toHaveLength(2);
+    expect(createPlayers(8, FRUITS)).toHaveLength(8);
   });
 
   it("keeps every selectable difficulty's timing and bilingual label together", () => {

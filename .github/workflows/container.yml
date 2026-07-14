@@ -97,7 +97,7 @@ jobs:
           trap cleanup EXIT
           docker network create "$network"
           docker run --detach --name paired-redis --network "$network" redis@sha256:62b5498c91778f738f0efbf0a6fd5b434011235a3e7b5f2ed4a2c0c63bb1c786 redis-server --save '' --appendonly no
-          docker run --detach --name paired-api --network "$network" --publish 18000:8000 -e HALLIGALLI_REDIS_URL=redis://paired-redis:6379/0 "${{ steps.release.outputs.api_image_tag }}"
+          docker run --detach --name paired-api --network "$network" --publish 18000:8000 -e HALLIGALLI_REDIS_URL=redis://paired-redis:6379/0 -e HALLIGALLI_RELEASE_VERSION=runtime-override -e HALLIGALLI_RELEASE_COMMIT=runtime-override "${{ steps.release.outputs.api_image_tag }}"
           docker run --detach --name paired-web --network "$network" --publish 18080:8080 -e HALLIGALLI_API_ORIGIN=http://paired-api:8000 "${{ steps.release.outputs.web_image_tag }}"
           for _ in 1 2 3 4 5 6 7 8 9 10; do
             if curl --fail --silent http://localhost:18000/internal/ready >/dev/null && curl --fail --silent http://localhost:18080/internal/identity >/dev/null; then break; fi

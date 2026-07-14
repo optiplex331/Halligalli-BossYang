@@ -115,8 +115,8 @@
   <g transform="translate(918 578)">
     <rect width="430" height="96" rx="18" fill="#05080f" stroke="#ffffff" stroke-opacity=".11"/>
     <text x="30" y="38" fill="#6fcf97" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17">$ pnpm run dev</text>
-    <text x="30" y="68" fill="#f0c44a" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17">$ pnpm run dev:server</text>
+    <text x="30" y="68" fill="#f0c44a" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17">$ pnpm run dev:api</text>
   </g>
 
-  <text x="86" y="728" fill="#827c6e" font-family="Verdana, sans-serif" font-size="17">React 19 · Vite 8 · TypeScript · socket.io · Vitest · localStorage progress</text>
+  <text x="86" y="728" fill="#827c6e" font-family="Verdana, sans-serif" font-size="17">React 19 · Vite 8 · TypeScript · native WebSocket · Vitest · browser settings</text>
 </svg>

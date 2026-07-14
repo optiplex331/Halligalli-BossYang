@@ -26,30 +26,30 @@ describe("Local Preferences", () => {
     globalThis.window = originalWindow;
   });
 
-  it("normalizes the retained settings record, including the V1 two-seat choice", () => {
-    expect(normalizeSettings({ playerCount: 2, language: "zh", soundEnabled: false })).toEqual({
+  it("accepts Table Seat counts and ignores the retired player count", () => {
+    expect(normalizeSettings({ tableSeatCount: 8, playerCount: 6, language: "zh", soundEnabled: false })).toEqual({
       difficulty: "normal",
       duration: 60,
-      playerCount: 2,
+      tableSeatCount: 8,
       language: "zh",
       soundEnabled: false,
     });
   });
 
   it("persists only normalized settings", () => {
-    saveSettings({ difficulty: "hard", duration: 90, playerCount: 6, language: "en", soundEnabled: true });
+    saveSettings({ difficulty: "hard", duration: 90, tableSeatCount: 6, language: "en", soundEnabled: true });
 
     expect(loadSettings()).toEqual({
       difficulty: "hard",
       duration: 90,
-      playerCount: 6,
+      tableSeatCount: 6,
       language: "en",
       soundEnabled: true,
     });
   });
 
   it("removes every legacy progress record without touching settings", () => {
-    saveSettings({ difficulty: "easy", duration: 45, playerCount: 3, language: "zh", soundEnabled: false });
+    saveSettings({ difficulty: "easy", duration: 45, tableSeatCount: 4, language: "zh", soundEnabled: false });
     for (const key of LEGACY_PROGRESS_KEYS) {
       store.set(key, "legacy");
     }

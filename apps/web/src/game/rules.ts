@@ -68,17 +68,8 @@ export function createDeck(fruits: readonly FruitDefinition[], cardCount = 72): 
   return shuffle(cards.slice(0, cardCount));
 }
 
-export function getSeatLayouts(playerCount: number): SeatLayout[] | undefined {
+export function getSeatLayouts(tableSeatCount: number): SeatLayout[] | undefined {
   const layouts: Record<number, SeatLayout[]> = {
-    2: [
-      { labelZh: "上家", labelEn: "Top", gridArea: "top" },
-      { labelZh: "你", labelEn: "You", gridArea: "you", isUser: true },
-    ],
-    3: [
-      { labelZh: "上家", labelEn: "Top", gridArea: "top" },
-      { labelZh: "右侧玩家", labelEn: "Right", gridArea: "right" },
-      { labelZh: "你", labelEn: "You", gridArea: "you", isUser: true },
-    ],
     4: [
       { labelZh: "上家", labelEn: "Top", gridArea: "top" },
       { labelZh: "右侧玩家", labelEn: "Right", gridArea: "right" },
@@ -100,33 +91,46 @@ export function getSeatLayouts(playerCount: number): SeatLayout[] | undefined {
       { labelZh: "你", labelEn: "You", gridArea: "you", isUser: true },
       { labelZh: "左侧玩家", labelEn: "Left", gridArea: "left" },
     ],
+    7: Array.from({ length: 7 }, (_, index) => ({
+      labelZh: index === 0 ? "你" : `中立座位 ${index + 1}`,
+      labelEn: index === 0 ? "You" : `Neutral Seat ${index + 1}`,
+      gridArea: `seat-${index}`,
+      ...(index === 0 ? { isUser: true as const } : {}),
+    })),
+    8: Array.from({ length: 8 }, (_, index) => ({
+      labelZh: index === 0 ? "你" : `中立座位 ${index + 1}`,
+      labelEn: index === 0 ? "You" : `Neutral Seat ${index + 1}`,
+      gridArea: `seat-${index}`,
+      ...(index === 0 ? { isUser: true as const } : {}),
+    })),
   };
 
-  return layouts[playerCount];
+  return layouts[tableSeatCount];
 }
 
-export function isSupportedPlayerCount(playerCount: number): boolean {
-  const seats = getSeatLayouts(playerCount);
-  return Number.isInteger(playerCount) && Boolean(seats && seats.length >= playerCount);
+export function isSupportedTableSeatCount(tableSeatCount: number): boolean {
+  const seats = getSeatLayouts(tableSeatCount);
+  return Number.isInteger(tableSeatCount) && Boolean(seats && seats.length === tableSeatCount);
 }
 
-export function createPlayers(playerCount: number, fruits: readonly FruitDefinition[]): PlayerState[] {
-  if (playerCount <= 0) {
+export function createPlayers(tableSeatCount: number, fruits: readonly FruitDefinition[]): PlayerState[] {
+  if (tableSeatCount <= 0) {
     return [];
   }
 
   const deck = createDeck(fruits);
-  const seats = getSeatLayouts(playerCount);
-  if (!isSupportedPlayerCount(playerCount) || !seats) {
-    throw new Error(`Unsupported player count: ${playerCount}`);
+  const seats = getSeatLayouts(tableSeatCount);
+  if (!isSupportedTableSeatCount(tableSeatCount) || !seats) {
+    throw new Error(`Unsupported Table Seat count: ${tableSeatCount}`);
   }
 
-  const players: PlayerState[] = Array.from({ length: playerCount }, (_, index) => {
+  const players: PlayerState[] = Array.from({ length: tableSeatCount }, (_, index) => {
     const seat = seats[index]!;
     return {
       id: index,
-      labelZh: seat.labelZh,
-      labelEn: seat.labelEn,
+      isHuman: Boolean(seat.isUser),
+      labelZh: seat.isUser ? "你" : `中立座位 ${index + 1}`,
+      labelEn: seat.isUser ? "You" : `Neutral Seat ${index + 1}`,
       drawPile: [],
       wonPile: [],
       faceUpPile: [],
@@ -134,7 +138,7 @@ export function createPlayers(playerCount: number, fruits: readonly FruitDefinit
   });
 
   deck.forEach((card, index) => {
-    players[index % playerCount]?.drawPile.push(card);
+    players[index % tableSeatCount]?.drawPile.push(card);
   });
 
   return players;
@@ -364,6 +368,6 @@ export function createRoundSummary(snapshot: RoundSnapshot): RoundSummary {
     bestReactionMs,
     difficulty: snapshot.difficulty ?? DEFAULT_SETTINGS.difficulty,
     durationSec: snapshot.durationSec ?? DEFAULT_SETTINGS.duration,
-    playerCount: snapshot.playerCount ?? INITIAL_SUMMARY.playerCount,
+    tableSeatCount: snapshot.tableSeatCount ?? INITIAL_SUMMARY.tableSeatCount,
   };
 }

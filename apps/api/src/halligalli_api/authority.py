@@ -18,8 +18,9 @@ POST_MATCH_DURATION_MS = 30_000
 ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 TURN_DURATION_MS = 700
 SCORE_BONUS_WINDOW_MS = 1_500
-MIN_PARTICIPANTS = 2
-MAX_PARTICIPANTS = 6
+MIN_TABLE_SEATS = 4
+MAX_TABLE_SEATS = 8
+MIN_HUMAN_PARTICIPANTS = 2
 FRUIT_ORDER = ("banana", "strawberry", "lemon", "grape")
 CARD_DISTRIBUTION = ((1, 3), (2, 5), (3, 5), (4, 3), (5, 2))
 
@@ -112,6 +113,24 @@ class MatchResult(ApiModel):
     participants: list[ParticipantScore]
 
 
+class RoomConfiguration(ApiModel):
+    table_seat_count: int
+    target_human_participant_count: int
+    difficulty: Literal["easy", "normal", "hard"]
+    duration_sec: int
+
+
+class TableSeatSnapshot(ApiModel):
+    seat_index: int
+    top_card: CardSnapshot | None = None
+    face_up_card_count: int = 0
+
+
+class RevealSnapshot(ApiModel):
+    sequence: int
+    seat_index: int
+
+
 def apply_scoring_penalty(
     breakdown: ScoreBreakdown,
     *,
@@ -138,13 +157,14 @@ class RoomSnapshot(ApiModel):
     room_code: str
     revision: int
     phase: Literal["lobby", "playing", "post_match"]
-    min_participants: int
-    max_participants: int
+    configuration: RoomConfiguration
     viewer_seat_index: int
     participants: list[ParticipantSnapshot]
-    current_turn: int | None = None
+    current_turn_seat_index: int | None = None
     turn_deadline_at: int | None = None
-    top_cards: list[CardSnapshot | None] = Field(default_factory=list)
+    seats: list[TableSeatSnapshot] = Field(default_factory=list)
+    last_reveal: RevealSnapshot | None = None
+    allowed_commands: list[Literal["ready", "start", "bell", "leave", "forfeit", "continue", "post_match_leave"]] = Field(default_factory=list)
     bell_available: bool = False
     bell_fruit: Literal["banana", "strawberry", "lemon", "grape"] | None = None
     scoreboard: list[ParticipantScore] = Field(default_factory=list)
@@ -176,6 +196,10 @@ class CreateRoom:
     idempotency_key: str
     name: str
     credential_verifier: str
+    table_seat_count: int
+    target_human_participant_count: int
+    difficulty: Literal["easy", "normal", "hard"]
+    duration_sec: int
 
 
 @dataclass(frozen=True)
@@ -341,10 +365,13 @@ class _Match:
     current_turn: int
     turn_deadline_at: int | None
     top_cards: list[_Card | None]
+    face_up_card_counts: list[int]
+    frozen_human_seat_indexes: list[int]
+    reveal_sequence: int = 0
     next_card_index: int = 0
     bell_fruit: Literal["banana", "strawberry", "lemon", "grape"] | None = None
     bell_opened_at: int | None = None
-    scores: list[_ParticipantScore] = field(default_factory=list)
+    scores: dict[int, _ParticipantScore] = field(default_factory=dict)
     last_event: Literal["correct_bell", "wrong_bell", "missed_bell"] | None = None
     result: _MatchResult | None = None
     number: int = 0
@@ -354,7 +381,10 @@ class _Match:
 class _Room:
     code: str
     revision: int = 1
-    max_participants: int = MAX_PARTICIPANTS
+    table_seat_count: int = MIN_TABLE_SEATS
+    target_human_participant_count: int = MIN_HUMAN_PARTICIPANTS
+    difficulty: Literal["easy", "normal", "hard"] = "normal"
+    duration_sec: int = 60
     phase: Literal["lobby", "playing", "post_match"] = "lobby"
     participants: list[_Participant] = field(default_factory=list)
     idempotency: dict[str, _IdempotencyEntry] = field(default_factory=dict)
@@ -373,7 +403,10 @@ class _Room:
         return cls(
             code=raw["code"],
             revision=raw["revision"],
-            max_participants=raw["max_participants"],
+            table_seat_count=raw["table_seat_count"],
+            target_human_participant_count=raw["target_human_participant_count"],
+            difficulty=raw["difficulty"],
+            duration_sec=raw["duration_sec"],
             phase=raw["phase"],
             participants=[_Participant(**participant) for participant in raw["participants"]],
             idempotency={
@@ -392,10 +425,13 @@ class _Room:
                         _Card(**card) if card is not None else None
                         for card in raw["match"]["top_cards"]
                     ],
+                    face_up_card_counts=raw["match"]["face_up_card_counts"],
+                    frozen_human_seat_indexes=raw["match"]["frozen_human_seat_indexes"],
+                    reveal_sequence=raw["match"].get("reveal_sequence", 0),
                     next_card_index=raw["match"]["next_card_index"],
                     bell_fruit=raw["match"]["bell_fruit"],
                     bell_opened_at=raw["match"]["bell_opened_at"],
-                    scores=[_ParticipantScore(**score) for score in raw["match"]["scores"]],
+                    scores={int(seat): _ParticipantScore(**score) for seat, score in raw["match"]["scores"].items()},
                     last_event=raw["match"]["last_event"],
                     result=(
                         _MatchResult(**raw["match"]["result"])
@@ -446,8 +482,28 @@ def _scoreboard_for(match: _Match | None) -> list[ParticipantScore]:
             missed_hits=score.missed_hits,
             score_breakdown=_breakdown_for(score),
         )
-        for seat_index, score in enumerate(match.scores)
+        for seat_index, score in sorted(match.scores.items())
     ]
+
+
+def _allowed_commands(room: _Room, participant: _Participant) -> list[str]:
+    if not participant.active:
+        return []
+    if room.phase == "lobby":
+        commands = ["leave"]
+        if not participant.ready:
+            commands.append("ready")
+        active = _active_participants(room)
+        if (
+            participant.seat_index == room.host_seat_index
+            and len(active) == room.target_human_participant_count
+            and all(item.ready for item in active)
+        ):
+            commands.append("start")
+        return commands
+    if room.phase == "playing":
+        return ["bell", "forfeit"] if participant.active else []
+    return ["continue", "post_match_leave"] if participant.active else []
 
 
 def _snapshot_for_verifier(room: _Room, verifier: str) -> RoomSnapshot:
@@ -458,23 +514,33 @@ def _snapshot_for_verifier(room: _Room, verifier: str) -> RoomSnapshot:
                 room_code=room.code,
                 revision=room.revision,
                 phase=room.phase,
-                min_participants=MIN_PARTICIPANTS,
-                max_participants=room.max_participants,
+                configuration=RoomConfiguration(
+                    table_seat_count=room.table_seat_count,
+                    target_human_participant_count=room.target_human_participant_count,
+                    difficulty=room.difficulty,
+                    duration_sec=room.duration_sec,
+                ),
                 viewer_seat_index=participant.seat_index,
                 participants=[
                     ParticipantSnapshot(name=item.name, seat_index=item.seat_index, ready=item.ready, active=item.active)
                     for item in _active_participants(room)
                 ],
-                current_turn=match.current_turn if match and room.phase == "playing" else None,
+                current_turn_seat_index=match.current_turn if match and room.phase == "playing" else None,
                 turn_deadline_at=match.turn_deadline_at if match and room.phase == "playing" else None,
-                top_cards=(
-                    [
-                        CardSnapshot(fruit=card.fruit, count=card.count) if card is not None else None
-                        for card in match.top_cards
-                    ]
-                    if match
-                    else []
+                seats=[
+                    TableSeatSnapshot(
+                        seat_index=seat_index,
+                        top_card=(CardSnapshot(fruit=card.fruit, count=card.count) if card is not None else None),
+                        face_up_card_count=(match.face_up_card_counts[seat_index] if match else 0),
+                    )
+                    for seat_index, card in enumerate(match.top_cards if match else [None] * room.table_seat_count)
+                ],
+                last_reveal=(
+                    RevealSnapshot(sequence=match.reveal_sequence, seat_index=(match.current_turn - 1) % room.table_seat_count)
+                    if match and match.reveal_sequence
+                    else None
                 ),
+                allowed_commands=_allowed_commands(room, participant),
                 bell_available=bool(match and match.bell_fruit),
                 bell_fruit=match.bell_fruit if match else None,
                 scoreboard=_scoreboard_for(match),
@@ -518,10 +584,7 @@ def _active_participants(room: _Room) -> list[_Participant]:
 
 
 def _next_active_seat(room: _Room, current_seat: int) -> int:
-    seats = [participant.seat_index for participant in _active_participants(room)]
-    if not seats:
-        raise AuthorityError("room_empty", 409, "Room has no participants")
-    return next((seat for seat in seats if seat > current_seat), seats[0])
+    return (current_seat + 1) % room.table_seat_count
 
 
 def _cache_or_conflict(room: _Room, command: AuthorityCommand) -> AuthorityResult | None:
@@ -580,7 +643,7 @@ def _finish_match(room: _Room) -> None:
     if match is None:
         raise AuthorityError("match_not_running", 409, "Match is not running")
     winner_seat_index = min(
-        range(len(match.scores)),
+        match.frozen_human_seat_indexes,
         key=lambda seat_index: (-_score_for(match.scores[seat_index]), seat_index),
     )
     match.result = _MatchResult(
@@ -605,7 +668,9 @@ def _flip_next(room: _Room, now_ms: int) -> None:
 
     fruit, count = CARD_SEQUENCE[match.next_card_index]
     match.top_cards[match.current_turn] = _Card(fruit=fruit, count=count)
+    match.face_up_card_counts[match.current_turn] += 1
     match.next_card_index += 1
+    match.reveal_sequence += 1
     match.current_turn = _next_active_seat(room, match.current_turn)
     match.turn_deadline_at = now_ms + TURN_DURATION_MS
     match.bell_fruit = _bell_fruit(match.top_cards)
@@ -633,15 +698,17 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
         if participant.seat_index != room.host_seat_index:
             raise AuthorityError("host_required", 403, "Only the host can start the match")
         active = _active_participants(room)
-        if len(active) < MIN_PARTICIPANTS or not all(item.ready for item in active):
+        if len(active) != room.target_human_participant_count or not all(item.ready for item in active):
             raise AuthorityError("players_not_ready", 409, "All participants must be ready")
 
         room.phase = "playing"
         room.match = _Match(
             current_turn=0,
             turn_deadline_at=None,
-            top_cards=[None] * (max(item.seat_index for item in active) + 1),
-            scores=[_ParticipantScore() for _ in range(max(item.seat_index for item in active) + 1)],
+            top_cards=[None] * room.table_seat_count,
+            face_up_card_counts=[0] * room.table_seat_count,
+            frozen_human_seat_indexes=[item.seat_index for item in active],
+            scores={item.seat_index: _ParticipantScore() for item in active},
             number=room.match_number + 1,
         )
         room.match_number += 1
@@ -678,7 +745,7 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
             raise AuthorityError("match_not_running", 409, "Match is not running")
         score = room.match.scores[participant.seat_index]
         if room.match.bell_fruit is None:
-            penalty_target = (sum(card is not None for card in room.match.top_cards) + 1) // 2
+            penalty_target = (sum(room.match.face_up_card_counts) + 1) // 2
             _apply_penalty_to(
                 score,
                 wrong_penalty=50,
@@ -690,11 +757,12 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
             room.revision += 1
             return _result_for_verifier(room, command.credential_verifier)
 
-        collected_count = sum(card is not None for card in room.match.top_cards)
+        collected_count = sum(room.match.face_up_card_counts)
         reaction_ms = max(0, command.now_ms - (room.match.bell_opened_at or command.now_ms))
         _award_correct(score, collected_count=collected_count, reaction_ms=reaction_ms)
         room.match.last_event = "correct_bell"
         room.match.top_cards = [None] * len(room.match.top_cards)
+        room.match.face_up_card_counts = [0] * len(room.match.face_up_card_counts)
         room.match.current_turn = participant.seat_index
         room.match.bell_fruit = None
         room.match.bell_opened_at = None
@@ -769,7 +837,7 @@ def _join_room(room: _Room, command: JoinRoom) -> EntryResult:
 
     if room.phase != "lobby":
         raise AuthorityError("room_not_joinable", 409, "Room is not in the lobby")
-    if len(room.participants) >= room.max_participants:
+    if len(_active_participants(room)) >= room.target_human_participant_count:
         raise AuthorityError("room_full", 409, "Room is full")
     if any(
         secrets.compare_digest(participant.credential_verifier, command.credential_verifier)
@@ -778,7 +846,7 @@ def _join_room(room: _Room, command: JoinRoom) -> EntryResult:
         raise AuthorityError("credential_in_use", 409, "Participant credential is already in use")
 
     occupied = {participant.seat_index for participant in _active_participants(room)}
-    seat_index = next(index for index in range(room.max_participants) if index not in occupied)
+    seat_index = next(index for index in range(room.table_seat_count) if index not in occupied)
     room.participants.append(
         _Participant(
             name=command.name,
@@ -823,6 +891,10 @@ class InMemoryMultiplayerAuthority:
         return _apply_room_command(room, command)
 
     def _create(self, command: CreateRoom) -> EntryResult:
+        if not MIN_TABLE_SEATS <= command.table_seat_count <= MAX_TABLE_SEATS:
+            raise AuthorityError("invalid_room_configuration", 422, "Table Seat count must be between 4 and 8")
+        if not MIN_HUMAN_PARTICIPANTS <= command.target_human_participant_count <= command.table_seat_count:
+            raise AuthorityError("invalid_room_configuration", 422, "Human Participant target must fit the table")
         fingerprint = _command_fingerprint(command)
         cached = self._create_entries.get(command.idempotency_key)
         if cached:
@@ -842,7 +914,13 @@ class InMemoryMultiplayerAuthority:
         else:
             raise AuthorityError("room_code_unavailable", 503, "Room code is unavailable")
 
-        room = _Room(code=code)
+        room = _Room(
+            code=code,
+            table_seat_count=command.table_seat_count,
+            target_human_participant_count=command.target_human_participant_count,
+            difficulty=command.difficulty,
+            duration_sec=command.duration_sec,
+        )
         room.participants.append(
             _Participant(name=command.name, credential_verifier=command.credential_verifier, seat_index=0),
         )
@@ -946,6 +1024,11 @@ class RedisMultiplayerAuthority:
     async def _create(self, command: CreateRoom) -> EntryResult:
         from redis.exceptions import WatchError
 
+        if not MIN_TABLE_SEATS <= command.table_seat_count <= MAX_TABLE_SEATS:
+            raise AuthorityError("invalid_room_configuration", 422, "Table Seat count must be between 4 and 8")
+        if not MIN_HUMAN_PARTICIPANTS <= command.target_human_participant_count <= command.table_seat_count:
+            raise AuthorityError("invalid_room_configuration", 422, "Human Participant target must fit the table")
+
         fingerprint = _command_fingerprint(command)
         entry_key = self._entry_key(command.idempotency_key)
         for _ in range(8):
@@ -960,7 +1043,13 @@ class RedisMultiplayerAuthority:
                     snapshot=_snapshot_for_verifier(room, command.credential_verifier),
                 )
 
-            room = _Room(code=self._new_room_code())
+            room = _Room(
+                code=self._new_room_code(),
+                table_seat_count=command.table_seat_count,
+                target_human_participant_count=command.target_human_participant_count,
+                difficulty=command.difficulty,
+                duration_sec=command.duration_sec,
+            )
             room.participants.append(
                 _Participant(name=command.name, credential_verifier=command.credential_verifier, seat_index=0),
             )

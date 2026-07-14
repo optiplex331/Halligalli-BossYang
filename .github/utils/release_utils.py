@@ -12,9 +12,8 @@ Boundaries:
 - Does not call the network, Docker, GitHub, Azure, or git.
 """
 
-import json
 import os
-from typing import Any, Mapping, NoReturn, Optional
+from typing import Mapping, NoReturn, Optional
 
 
 class ReleaseUtilityError(RuntimeError):
@@ -25,40 +24,6 @@ class ReleaseUtilityError(RuntimeError):
 
 def fail(message: str) -> NoReturn:
     raise ReleaseUtilityError(message)
-
-
-def check_health_release_identity(
-    body: str,
-    expected: Mapping[str, Optional[str]],
-) -> dict[str, Any]:
-    """Assert that a /health response exposes the expected release identity."""
-
-    try:
-        health: dict[str, Any] = json.loads(body)
-    except json.JSONDecodeError:
-        fail(f"Health response is not valid JSON: {body}")
-
-    if health.get("status") != "ok":
-        fail(f"Unexpected health status: {json.dumps(health, separators=(',', ':'))}")
-
-    if (
-        health.get("version") != expected.get("appVersion")
-        or health.get("commit") != expected.get("commitSha")
-    ):
-        fail(
-            "Release identity mismatch: "
-            + json.dumps(
-                {
-                    "expectedVersion": expected.get("appVersion"),
-                    "actualVersion": health.get("version"),
-                    "expectedCommit": expected.get("commitSha"),
-                    "actualCommit": health.get("commit"),
-                },
-                separators=(",", ":"),
-            )
-        )
-
-    return health
 
 
 def append_github_outputs(
