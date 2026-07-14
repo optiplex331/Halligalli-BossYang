@@ -40,7 +40,7 @@ class RedisAdapterTest(unittest.IsolatedAsyncioTestCase):
         credentials = [f"player-{seat_index}-credential" for seat_index in range(6)]
         created = await self.authority.execute(
             None,
-            CreateRoom("create-1", "Player 1", verifier(credentials[0])),
+            CreateRoom("create-1", "Player 1", verifier(credentials[0]), 6, 6, "normal", 60),
         )
         for seat_index, credential in enumerate(credentials[1:], start=2):
             await self.authority.execute(
@@ -62,7 +62,7 @@ class RedisAdapterTest(unittest.IsolatedAsyncioTestCase):
     async def test_redis_runtime_commits_a_six_seat_authoritative_match(self) -> None:
         credentials = [f"player-{seat_index}-credential" for seat_index in range(6)]
         verifiers = [verifier(credential) for credential in credentials]
-        created = await self.authority.execute(None, CreateRoom("create-1", "Player 1", verifiers[0]))
+        created = await self.authority.execute(None, CreateRoom("create-1", "Player 1", verifiers[0], 6, 6, "normal", 60))
         for seat_index, participant_verifier in enumerate(verifiers[1:], start=2):
             await self.authority.execute(
                 created.room_code,
@@ -84,7 +84,7 @@ class RedisAdapterTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_redis_serializes_concurrent_commands_and_replays_a_command_id(self) -> None:
         host, guest = "host-credential", "guest-credential"
-        created = await self.authority.execute(None, CreateRoom("create-race", "Host", verifier(host)))
+        created = await self.authority.execute(None, CreateRoom("create-race", "Host", verifier(host), 4, 2, "normal", 60))
         await self.authority.execute(created.room_code, JoinRoom("join-race", "Guest", verifier(guest)))
         left = RedisMultiplayerAuthority(self.redis)
         right = RedisMultiplayerAuthority(self.redis)
@@ -99,7 +99,7 @@ class RedisAdapterTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_redis_publishes_room_revision_hints(self) -> None:
         host, guest = "host-credential", "guest-credential"
-        created = await self.authority.execute(None, CreateRoom("create-pubsub", "Host", verifier(host)))
+        created = await self.authority.execute(None, CreateRoom("create-pubsub", "Host", verifier(host), 4, 2, "normal", 60))
         subscription = await self.authority.subscribe_revisions()
         try:
             revision = asyncio.create_task(anext(subscription.events()))

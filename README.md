@@ -5,14 +5,14 @@
 # Halligalli Arena
 
 Halligalli Arena is a bilingual exact-five card-reaction game. The current
-product slice delivers the complete browser-local Single-Player Path plus a
-two-through-six-seat FastAPI/Redis authoritative match.
+product slice delivers the browser-local Single-Player Path plus a FastAPI/Redis
+authoritative multiplayer match on four through eight Table Seats.
 
 It is a Product Monorepo with two application owners. The Web application keeps
 all active round state in memory and preserves only normalized presentation
 preferences in browser storage. The API owns ephemeral Redis room state and
-the two-through-six-seat ready/start/turn/bell/result path, including the
-shared scoring ledger and stable Seat Indexes.
+Room Configuration, Seat Occupancy, ready/start/turn/bell/result path, shared
+scoring ledger, and stable Seat Indexes.
 
 ## Local development
 
@@ -39,16 +39,17 @@ pnpm run test
 pnpm run typecheck
 pnpm run build
 pnpm run check
-pnpm run test:e2e    # after pnpm run dev; includes two-seat, six-seat, reconnect, and sequential-room journeys
+pnpm run test:e2e    # after pnpm run dev; includes 4/2, 8/2, 8/8, reconnect, duplicate-entry, and sequential-room journeys
 ```
 
 ## Current game behavior
 
 - 72-card Halligalli inventory: banana, strawberry, lemon, and grape.
-- Two through six browser-local seats with clockwise flips and top-card-only
-  totals.
-- Multiplayer rooms have six stable slots and use one authority-owned,
-  deterministic 72-card sequence for two through six occupied Seats.
+- The Single-Player Path uses four through eight Table Seats, exactly one Human
+  Participant, and automatic Neutral Seats with clockwise flips.
+- Multiplayer Room Configuration independently selects four through eight Table
+  Seats and two through the selected seat count Human Participants. Neutral
+  Seats reveal and affect Bell totals but never ring or score.
 - Ring only when one fruit totals exactly five; a correct ring collects the
   table, while a wrong ring pays ceiling-half of the table cards.
 - Easy, Normal, and Boss difficulties; 45/60/90-second rounds; button and
@@ -65,7 +66,7 @@ The release characterization and exact fixture handoff are in
 
 `halligalli_settings` is the only Halligalli browser key retained by this
 product slice. It stores normalized language, sound, difficulty, duration, and
-player-count preferences. Historical best/recent results, history, trends,
+Table Seat count preferences. Historical best/recent results, history, trends,
 daily goals, and achievements are removed on load and are never written again.
 
 There are no accounts, payments, durable match records, player profiles, or

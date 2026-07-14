@@ -13,6 +13,7 @@ import type { PlayerState, RoundSnapshot } from "../game/types.js";
 function makePlayer(id: number, overrides: Partial<PlayerState> = {}): PlayerState {
   return {
     id,
+    isHuman: id === 0,
     labelZh: `P${id}`,
     labelEn: `P${id}`,
     drawPile: [],
@@ -108,7 +109,7 @@ describe("game rules", () => {
       },
       difficulty: "normal",
       durationSec: 60,
-      playerCount: 4,
+      tableSeatCount: 4,
     };
 
     const resolved = reconcilePendingBellWindow(snapshot, {
@@ -140,7 +141,7 @@ describe("game rules", () => {
       },
       difficulty: "hard",
       durationSec: 90,
-      playerCount: 5,
+      tableSeatCount: 5,
     });
 
     expect(summary).toEqual({
@@ -153,7 +154,7 @@ describe("game rules", () => {
       bestReactionMs: 300,
       difficulty: "hard",
       durationSec: 90,
-      playerCount: 5,
+      tableSeatCount: 5,
     });
   });
 });

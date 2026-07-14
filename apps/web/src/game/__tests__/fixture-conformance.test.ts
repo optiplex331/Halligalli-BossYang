@@ -6,6 +6,7 @@ import { finishSinglePlayerMatch, resolveSinglePlayerBell } from "../lifecycle.j
 import {
   applyScoringPenalty,
   createDeck,
+  createPlayers,
   evaluateBellAvailability,
   sumBreakdown,
 } from "../rules.js";
@@ -25,6 +26,9 @@ interface FixtureCase {
   award?: number;
   assessed?: { wrongPenalty?: number; cardPenalty?: number; missedPenalty?: number };
   topCards?: FixtureCard[];
+  kind?: string;
+  tableSeatCount?: number;
+  humanSeatIndexes?: number[];
 }
 
 interface SinglePlayerFixture {
@@ -48,6 +52,7 @@ function fixtureCase(id: string): FixtureCase {
 function player(id: number, faceUpPile: PlayerState["faceUpPile"]): PlayerState {
   return {
     id,
+    isHuman: id === 0,
     labelZh: `玩家${id + 1}`,
     labelEn: `Player ${id + 1}`,
     drawPile: [],
@@ -57,6 +62,28 @@ function player(id: number, faceUpPile: PlayerState["faceUpPile"]): PlayerState 
 }
 
 describe("v1 single-player behavior fixtures", () => {
+  it("covers every supported Single-Player table with one Human Participant", () => {
+    const cases = fixture.cases.filter((item) => item.kind === "single-player-table");
+
+    expect(cases.map((item) => item.tableSeatCount)).toEqual([4, 5, 6, 7, 8]);
+    for (const item of cases) {
+      const seats = createPlayers(item.tableSeatCount ?? 0, FRUITS);
+      expect(seats).toHaveLength(Number(item.tableSeatCount));
+      expect(seats.filter((seat) => seat.isHuman).map((seat) => seat.id)).toEqual(item.humanSeatIndexes);
+      expect(seats.reduce((total, seat) => total + seat.drawPile.length, 0)).toBe(72);
+    }
+  });
+
+  it("declares all twenty-five supported multiplayer table/occupancy configurations", () => {
+    const cases = fixture.cases.filter((item) => item.kind === "multiplayer-table");
+
+    expect(cases).toHaveLength(25);
+    expect(cases.map((item) => [item.tableSeatCount, item.humanSeatIndexes?.length])).toEqual(
+      Array.from({ length: 5 }, (_, offset) => offset + 4).flatMap((tableSeatCount) =>
+        Array.from({ length: tableSeatCount - 1 }, (_, offset) => [tableSeatCount, offset + 2]),
+      ),
+    );
+  });
   it("keeps the catalog inventory as language-neutral data", () => {
     const expected = fixtureCase("catalog-inventory").expected;
     const deck = createDeck(FRUITS);
@@ -102,7 +129,7 @@ describe("v1 single-player behavior fixtures", () => {
         scoreBreakdown: INITIAL_BREAKDOWN,
         difficulty: mode,
         durationSec: 60,
-        playerCount: 3,
+        tableSeatCount: 4,
         maxStreak: 0,
         streak: 0,
       },
@@ -135,7 +162,7 @@ describe("v1 single-player behavior fixtures", () => {
         scoreBreakdown: INITIAL_BREAKDOWN,
         difficulty: mode,
         durationSec: 60,
-        playerCount: 2,
+        tableSeatCount: 4,
         maxStreak: 0,
         streak: 0,
       },

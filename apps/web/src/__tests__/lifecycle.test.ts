@@ -44,14 +44,15 @@ describe("game lifecycle cleanup", () => {
     const players: PlayerState[] = [
       {
         id: 0,
+        isHuman: true,
         labelZh: "你",
         labelEn: "You",
         drawPile: [],
         wonPile: [],
         faceUpPile: [{ id: "banana", fruit: "banana", count: 5 }],
       },
-      { id: 1, labelZh: "P1", labelEn: "P1", drawPile: [], wonPile: [], faceUpPile: [] },
-      { id: 2, labelZh: "P2", labelEn: "P2", drawPile: [], wonPile: [], faceUpPile: [] },
+      { id: 1, isHuman: false, labelZh: "P1", labelEn: "P1", drawPile: [], wonPile: [], faceUpPile: [] },
+      { id: 2, isHuman: false, labelZh: "P2", labelEn: "P2", drawPile: [], wonPile: [], faceUpPile: [] },
     ];
 
     const result = resolveSinglePlayerBell({
@@ -67,7 +68,7 @@ describe("game lifecycle cleanup", () => {
         scoreBreakdown: INITIAL_BREAKDOWN,
         difficulty: "easy",
         durationSec: 60,
-        playerCount: 3,
+        tableSeatCount: 4,
         maxStreak: 0,
         streak: 0,
       },
@@ -100,7 +101,7 @@ describe("game lifecycle cleanup", () => {
       scoreBreakdown: { ...INITIAL_BREAKDOWN, correctBase: 120 },
       difficulty: "easy",
       durationSec: 60,
-      playerCount: 3,
+      tableSeatCount: 4,
     }, bellState);
 
     expect(result.pendingResolution).toMatchObject({ missed: true, missedFruit: "grape" });
@@ -120,7 +121,7 @@ describe("game lifecycle cleanup", () => {
       scoreBreakdown: { ...INITIAL_BREAKDOWN, correctBase: 12 },
       difficulty: "normal",
       durationSec: 60,
-      playerCount: 3,
+      tableSeatCount: 4,
       maxStreak: 0,
       streak: 2,
     });

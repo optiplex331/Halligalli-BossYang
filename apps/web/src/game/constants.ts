@@ -27,7 +27,7 @@ export const LEGACY_PROGRESS_KEYS = [
 export const DEFAULT_SETTINGS: GameSettings = {
   difficulty: "normal",
   duration: 60,
-  playerCount: 4,
+  tableSeatCount: 4,
   language: "en",
   soundEnabled: true,
 };
@@ -42,7 +42,7 @@ export const INITIAL_SUMMARY: RoundSummary = {
   bestReactionMs: 0,
   difficulty: DEFAULT_SETTINGS.difficulty,
   durationSec: DEFAULT_SETTINGS.duration,
-  playerCount: DEFAULT_SETTINGS.playerCount,
+  tableSeatCount: DEFAULT_SETTINGS.tableSeatCount,
 };
 
 export const INITIAL_BREAKDOWN: ScoreBreakdown = {

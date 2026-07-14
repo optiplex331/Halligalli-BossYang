@@ -1,76 +1,79 @@
 # Kubernetes
 
-Azure Kubernetes Production runs the standalone Halligalli runtime: one Node.js process serves built frontend assets, `/readyz`, `/health`, and same-origin socket.io behind `https://play.halligalli.games`.
+The Child Repo supplies the Web and FastAPI API images consumed by the
+Infrastructure Repo's closed Halligalli chart. The chart is used only for an
+explicitly approved, short-lived AKS Portfolio Proof Environment; the completed
+2026-07-13 proof was destroyed and no workload is currently deployed.
 
-The production-used Helm Chart, Argo CD Application, production values, ingress host, TLS intent, namespace binding, and digest-pinned image selection live in the Azure Production Infrastructure Repo under `gitops/azure-kubernetes-production/`. This product repository owns the application runtime and GHCR standalone Release Images, not the production render surface.
+The Infrastructure Repo owns the chart, Argo CD Applications, proof values,
+ingress, and digest selection. This document records the product runtime
+contract, not a live-cluster operation procedure.
 
 ## Product Runtime Contract
 
-The Kubernetes runtime uses the Dockerfile `standalone` target. That target includes both the Vite build output and the Node.js/socket.io server in one image.
+The paired runtime has three components:
+
+| Component | Product implementation | Container contract |
+|---|---|---|
+| Web | React/Vite build served by nginx | HTTP on port `8080`; readiness is `/` |
+| API | FastAPI with native WebSocket and Redis authority | HTTP/WebSocket on port `8000`; readiness is `/internal/ready` |
+| Redis | Ephemeral multiplayer state and concurrency substrate | Redis on port `6379`; no persistence or recovery |
+
+Build both product images with the declared package command:
 
 ```bash
-docker build --target standalone -t halligalli-arena:standalone .
-docker run --rm -p 3001:3001 halligalli-arena:standalone
-curl --fail http://localhost:3001/readyz
-curl --fail http://localhost:3001/health
+pnpm run images:build
 ```
 
-The Dockerfile final target is the standalone image. Use `--target standalone` in production-facing validation for clarity and to match the container workflow.
+Both images contain build-authored Release Identity. Web packages a generated
+static JSON file and API packages `release-identity.json`; runtime environment
+variables cannot rewrite either value. `/internal/identity` is diagnostic image
+content, not proof of which digest Kubernetes actually runs. The API reads
+`HALLIGALLI_REDIS_URL`; local Compose supplies the disposable Redis service.
 
-For active production, Release Tags build, scan, and publish immutable standalone GHCR images. The infrastructure repo then selects a reviewed image digest in Azure Kubernetes Desired State.
+## Routed Traffic
 
-## Runtime Environment
+The proof chart exposes one public origin. Ingress sends:
 
-The standalone server defaults are intentionally small:
+| Path | Destination |
+|---|---|
+| `/` | Web Service |
+| `/api/v1` | API Service |
+| `/ws/v1` | API Service |
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `PORT` | `3001` | HTTP, `/readyz`, `/health`, static frontend, and socket.io listener. |
-| `APP_VERSION` | `local` | Human-readable release version reported by `/health`. Release images receive this from the workflow build args. |
-| `COMMIT_SHA` | `unknown` | Release commit reported by `/health`. If unset, the server falls back to `GITHUB_SHA` when present. |
-| `HALLIGALLI_ALLOWED_ORIGINS` | unset | Optional comma-separated socket.io CORS allow-list for deliberate split-origin runs. Active AKS same-origin production leaves this unset. |
-| `HALLIGALLI_DIST_DIR` | auto-detected `dist` | Optional static asset root override for local or test runs. |
+The API contract currently exposes room creation and joining under
+`/api/v1/rooms`, room snapshots under `/api/v1/rooms/{room_code}`, and native
+WebSocket commands under `/ws/v1/rooms/{room_code}`. `/internal/ready`,
+`/internal/identity`, and `/internal/metrics` remain behind the API Service.
 
-`/readyz` returns `{"status":"ready"}`. `/health` returns `status`, active `rooms`, `version`, and `commit`; rollback verification should check both the endpoint status and the expected release identity.
+For same-origin browser traffic, leave `VITE_HALLIGALLI_BACKEND_URL` unset.
+The optional variable is only for deliberate split-origin local or test runs.
 
-## Same-Origin Traffic
-
-The active runtime serves one public origin:
-
-```text
-https://play.halligalli.games
-```
-
-The same origin handles:
-
-- frontend assets
-- `/readyz`
-- `/health`
-- `/socket.io`
-
-Do not set `VITE_HALLIGALLI_BACKEND_URL` for active AKS production. The old `https://api.halligalli.games` backend entry belongs only to the historical Container Apps-backed Azure Production path.
-
-## Active Production Ownership
-
-Use the infrastructure repo for production Kubernetes work:
+## Repository Ownership
 
 | Concern | Owner |
 |---|---|
-| Production-used Helm Chart | Azure Production Infrastructure Repo |
-| Argo CD Application | Azure Production Infrastructure Repo |
-| Production values and image digest | Azure Production Infrastructure Repo |
-| AKS Terraform and runbooks | Azure Production Infrastructure Repo |
-| Product source, tests, build, and standalone image | Child Repo |
+| Web/API source, tests, Dockerfiles, and release images | Child Repo |
+| AKS Terraform and operation approval boundary | Infrastructure Repo |
+| Helm chart, Argo CD Applications, proof values, and selected digests | Infrastructure Repo |
+| Private planning, ADRs, and cross-repo learning | Workbench |
 
-Child Repo pull requests must not introduce real Azure Kubernetes Desired State, kubeconfigs, rendered live manifests, Kubernetes Secrets, cloud credentials, or production chart templates.
+Child Repo pull requests must not introduce real Azure Kubernetes desired state,
+kubeconfigs, rendered live manifests, Kubernetes Secrets, cloud credentials, or
+production chart templates.
 
 ## Rollback Shape
 
-Application rollback is a GitOps desired-state change in the infrastructure repo:
+Application rollback is a reviewed Infrastructure Repo desired-state change:
 
-1. Identify the previous known-good standalone Release Image digest and release commit.
-2. Revert or edit Azure Kubernetes Desired State to the previous digest and matching `releaseIdentity`.
-3. Let Argo CD sync or trigger a manual sync after review.
-4. Verify `https://play.halligalli.games/readyz`, `https://play.halligalli.games/health`, and a socket.io multiplayer room.
+1. Identify a known-good schema-V2 Paired Release and its Web/API digests.
+2. Change the GitOps values to that complete pair and matching display-only `releaseVersion`.
+3. Let Argo CD reconcile after the Infrastructure review boundary.
+4. Use the Infrastructure verifier to compare every current Web/API Pod
+   `imageID` with the selected digests, then verify readiness and a
+   four-seat/two-human or eight-seat/two-human REST/native-WebSocket journey.
 
-If ingress, certificate, cluster, or Argo CD infrastructure is broken, use the Azure Kubernetes Production infrastructure runbook. Do not recover by reactivating Container Apps as fallback unless a future ADR explicitly reverses the AKS cutover decision.
+Do not roll back one image independently, use a mutable tag, or recreate the
+retired Container Apps path. If AKS, ingress, certificate, or Argo CD recovery
+is required, use the Infrastructure Repo's AKS Portfolio Proof Procedure inside
+a new explicitly approved proof window.

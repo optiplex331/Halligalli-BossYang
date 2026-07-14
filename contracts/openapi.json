@@ -25,6 +25,57 @@
         "title": "CardSnapshot",
         "type": "object"
       },
+      "CreateRoomRequest": {
+        "properties": {
+          "credentialVerifier": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Credentialverifier",
+            "type": "string"
+          },
+          "difficulty": {
+            "enum": [
+              "easy",
+              "normal",
+              "hard"
+            ],
+            "title": "Difficulty",
+            "type": "string"
+          },
+          "durationSec": {
+            "minimum": 1.0,
+            "title": "Durationsec",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 24,
+            "minLength": 1,
+            "pattern": "^[^\\r\\n]+$",
+            "title": "Name",
+            "type": "string"
+          },
+          "tableSeatCount": {
+            "maximum": 8.0,
+            "minimum": 4.0,
+            "title": "Tableseatcount",
+            "type": "integer"
+          },
+          "targetHumanParticipantCount": {
+            "minimum": 2.0,
+            "title": "Targethumanparticipantcount",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "credentialVerifier",
+          "tableSeatCount",
+          "targetHumanParticipantCount",
+          "difficulty",
+          "durationSec"
+        ],
+        "title": "CreateRoomRequest",
+        "type": "object"
+      },
       "EntryRequest": {
         "properties": {
           "credentialVerifier": {
@@ -183,8 +234,75 @@
         "title": "ProblemDetails",
         "type": "object"
       },
+      "RevealSnapshot": {
+        "properties": {
+          "seatIndex": {
+            "title": "Seatindex",
+            "type": "integer"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sequence",
+          "seatIndex"
+        ],
+        "title": "RevealSnapshot",
+        "type": "object"
+      },
+      "RoomConfiguration": {
+        "properties": {
+          "difficulty": {
+            "enum": [
+              "easy",
+              "normal",
+              "hard"
+            ],
+            "title": "Difficulty",
+            "type": "string"
+          },
+          "durationSec": {
+            "title": "Durationsec",
+            "type": "integer"
+          },
+          "tableSeatCount": {
+            "title": "Tableseatcount",
+            "type": "integer"
+          },
+          "targetHumanParticipantCount": {
+            "title": "Targethumanparticipantcount",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tableSeatCount",
+          "targetHumanParticipantCount",
+          "difficulty",
+          "durationSec"
+        ],
+        "title": "RoomConfiguration",
+        "type": "object"
+      },
       "RoomSnapshot": {
         "properties": {
+          "allowedCommands": {
+            "items": {
+              "enum": [
+                "ready",
+                "start",
+                "bell",
+                "leave",
+                "forfeit",
+                "continue",
+                "post_match_leave"
+              ],
+              "type": "string"
+            },
+            "title": "Allowedcommands",
+            "type": "array"
+          },
           "bellAvailable": {
             "default": false,
             "title": "Bellavailable",
@@ -207,7 +325,10 @@
             ],
             "title": "Bellfruit"
           },
-          "currentTurn": {
+          "configuration": {
+            "$ref": "#/components/schemas/RoomConfiguration"
+          },
+          "currentTurnSeatIndex": {
             "anyOf": [
               {
                 "type": "integer"
@@ -216,7 +337,7 @@
                 "type": "null"
               }
             ],
-            "title": "Currentturn"
+            "title": "Currentturnseatindex"
           },
           "lastEvent": {
             "anyOf": [
@@ -234,17 +355,19 @@
             ],
             "title": "Lastevent"
           },
+          "lastReveal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RevealSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "matchNumber": {
             "default": 0,
             "title": "Matchnumber",
-            "type": "integer"
-          },
-          "maxParticipants": {
-            "title": "Maxparticipants",
-            "type": "integer"
-          },
-          "minParticipants": {
-            "title": "Minparticipants",
             "type": "integer"
           },
           "participants": {
@@ -299,18 +422,11 @@
             "title": "Scoreboard",
             "type": "array"
           },
-          "topCards": {
+          "seats": {
             "items": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/CardSnapshot"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/TableSeatSnapshot"
             },
-            "title": "Topcards",
+            "title": "Seats",
             "type": "array"
           },
           "turnDeadlineAt": {
@@ -333,8 +449,7 @@
           "roomCode",
           "revision",
           "phase",
-          "minParticipants",
-          "maxParticipants",
+          "configuration",
           "viewerSeatIndex",
           "participants"
         ],
@@ -381,6 +496,34 @@
         },
         "title": "ScoreBreakdown",
         "type": "object"
+      },
+      "TableSeatSnapshot": {
+        "properties": {
+          "faceUpCardCount": {
+            "default": 0,
+            "title": "Faceupcardcount",
+            "type": "integer"
+          },
+          "seatIndex": {
+            "title": "Seatindex",
+            "type": "integer"
+          },
+          "topCard": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CardSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "seatIndex"
+        ],
+        "title": "TableSeatSnapshot",
+        "type": "object"
       }
     }
   },
@@ -410,7 +553,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/EntryRequest"
+                "$ref": "#/components/schemas/CreateRoomRequest"
               }
             }
           },

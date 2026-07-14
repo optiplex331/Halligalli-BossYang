@@ -38,6 +38,8 @@ class ContainerWorkflowTest(unittest.TestCase):
         self.assertNotIn("redis:8.0.1-alpine", workflow)
         self.assertIn("--web-digest", workflow)
         self.assertIn("--api-digest", workflow)
+        self.assertIn("-e HALLIGALLI_RELEASE_VERSION=runtime-override", workflow)
+        self.assertIn("-e HALLIGALLI_RELEASE_COMMIT=runtime-override", workflow)
 
     def test_both_release_images_receive_provenance_before_pair_attestation(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")

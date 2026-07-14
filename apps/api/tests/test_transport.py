@@ -37,12 +37,12 @@ class RoomTransportTest(unittest.TestCase):
         create = client.post(
             "/api/v1/rooms",
             headers={"Idempotency-Key": "c97c807c-4c73-4ea0-bfc7-2a8bd4d68cce"},
-            json={"name": "Host", "credentialVerifier": verifier(host_credential)},
+            json={"name": "Host", "credentialVerifier": verifier(host_credential), "tableSeatCount": 4, "targetHumanParticipantCount": 2, "difficulty": "normal", "durationSec": 60},
         )
         repeated = client.post(
             "/api/v1/rooms",
             headers={"Idempotency-Key": "c97c807c-4c73-4ea0-bfc7-2a8bd4d68cce"},
-            json={"name": "Host", "credentialVerifier": verifier(host_credential)},
+            json={"name": "Host", "credentialVerifier": verifier(host_credential), "tableSeatCount": 4, "targetHumanParticipantCount": 2, "difficulty": "normal", "durationSec": 60},
         )
         joined = client.post(
             "/api/v1/rooms/ABCD/participants",
@@ -68,7 +68,8 @@ class RoomTransportTest(unittest.TestCase):
         self.assertEqual(guest_snapshot.status_code, 200)
         self.assertEqual(snapshot.json()["viewerSeatIndex"], 0)
         self.assertEqual(guest_snapshot.json()["viewerSeatIndex"], 1)
-        self.assertEqual(snapshot.json()["minParticipants"], 2)
+        self.assertEqual(snapshot.json()["configuration"]["targetHumanParticipantCount"], 2)
+        self.assertEqual(len(snapshot.json()["seats"]), 4)
         self.assertEqual(snapshot.json()["revision"], guest_snapshot.json()["revision"])
         self.assertEqual([item["name"] for item in snapshot.json()["participants"]], ["Host", "Guest"])
         self.assertNotIn(host_credential, json.dumps(snapshot.json()))

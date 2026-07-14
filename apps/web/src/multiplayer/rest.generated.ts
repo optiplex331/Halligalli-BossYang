@@ -69,6 +69,24 @@ export interface components {
              */
             fruit: "banana" | "strawberry" | "lemon" | "grape";
         };
+        /** CreateRoomRequest */
+        CreateRoomRequest: {
+            /** Credentialverifier */
+            credentialVerifier: string;
+            /**
+             * Difficulty
+             * @enum {string}
+             */
+            difficulty: "easy" | "normal" | "hard";
+            /** Durationsec */
+            durationSec: number;
+            /** Name */
+            name: string;
+            /** Tableseatcount */
+            tableSeatCount: number;
+            /** Targethumanparticipantcount */
+            targetHumanParticipantCount: number;
+        };
         /** EntryRequest */
         EntryRequest: {
             /** Credentialverifier */
@@ -133,8 +151,31 @@ export interface components {
             /** Type */
             type: string;
         };
+        /** RevealSnapshot */
+        RevealSnapshot: {
+            /** Seatindex */
+            seatIndex: number;
+            /** Sequence */
+            sequence: number;
+        };
+        /** RoomConfiguration */
+        RoomConfiguration: {
+            /**
+             * Difficulty
+             * @enum {string}
+             */
+            difficulty: "easy" | "normal" | "hard";
+            /** Durationsec */
+            durationSec: number;
+            /** Tableseatcount */
+            tableSeatCount: number;
+            /** Targethumanparticipantcount */
+            targetHumanParticipantCount: number;
+        };
         /** RoomSnapshot */
         RoomSnapshot: {
+            /** Allowedcommands */
+            allowedCommands?: ("ready" | "start" | "bell" | "leave" | "forfeit" | "continue" | "post_match_leave")[];
             /**
              * Bellavailable
              * @default false
@@ -142,19 +183,17 @@ export interface components {
             bellAvailable: boolean;
             /** Bellfruit */
             bellFruit?: ("banana" | "strawberry" | "lemon" | "grape") | null;
-            /** Currentturn */
-            currentTurn?: number | null;
+            configuration: components["schemas"]["RoomConfiguration"];
+            /** Currentturnseatindex */
+            currentTurnSeatIndex?: number | null;
             /** Lastevent */
             lastEvent?: ("correct_bell" | "wrong_bell" | "missed_bell") | null;
+            lastReveal?: components["schemas"]["RevealSnapshot"] | null;
             /**
              * Matchnumber
              * @default 0
              */
             matchNumber: number;
-            /** Maxparticipants */
-            maxParticipants: number;
-            /** Minparticipants */
-            minParticipants: number;
             /** Participants */
             participants: components["schemas"]["ParticipantSnapshot"][];
             /**
@@ -171,8 +210,8 @@ export interface components {
             roomCode: string;
             /** Scoreboard */
             scoreboard?: components["schemas"]["ParticipantScore"][];
-            /** Topcards */
-            topCards?: (components["schemas"]["CardSnapshot"] | null)[];
+            /** Seats */
+            seats?: components["schemas"]["TableSeatSnapshot"][];
             /** Turndeadlineat */
             turnDeadlineAt?: number | null;
             /** Viewerseatindex */
@@ -216,6 +255,17 @@ export interface components {
              */
             wrongPenalty: number;
         };
+        /** TableSeatSnapshot */
+        TableSeatSnapshot: {
+            /**
+             * Faceupcardcount
+             * @default 0
+             */
+            faceUpCardCount: number;
+            /** Seatindex */
+            seatIndex: number;
+            topCard?: components["schemas"]["CardSnapshot"] | null;
+        };
     };
     responses: never;
     parameters: never;
@@ -236,7 +286,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["EntryRequest"];
+                "application/json": components["schemas"]["CreateRoomRequest"];
             };
         };
         responses: {

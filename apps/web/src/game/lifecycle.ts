@@ -35,7 +35,7 @@ export interface SinglePlayerMatchState extends RoundSnapshot {
   scoreBreakdown: ScoreBreakdown;
   difficulty: Difficulty;
   durationSec: number;
-  playerCount: number;
+  tableSeatCount: number;
   maxStreak: number;
   streak: number;
 }

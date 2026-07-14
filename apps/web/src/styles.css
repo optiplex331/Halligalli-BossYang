@@ -587,16 +587,7 @@ h2 {
 
 .table-felt {
   position: relative;
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  grid-template-rows: auto auto auto;
-  grid-template-areas:
-    ". top ."
-    "left bell right"
-    ". you .";
-  align-items: center;
-  justify-items: center;
-  gap: 20px 12px;
+  min-height: 720px;
   padding: 32px 24px;
   border-radius: var(--r-xl);
   background:
@@ -609,32 +600,18 @@ h2 {
   overflow: hidden;
 }
 
-.table-scene.players-3 .table-felt {
-  grid-template-areas:
-    ". top ."
-    ". bell right"
-    ". you .";
+.table-seat {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(var(--seat-angle)) translateY(-275px) rotate(calc(-1 * var(--seat-angle)));
 }
 
-.table-scene.players-2 .table-felt {
-  grid-template-areas:
-    ". top ."
-    ". bell ."
-    ". you .";
-}
-
-.table-scene.players-5 .table-felt {
-  grid-template-areas:
-    "tl . tr"
-    "left bell right"
-    ". you .";
-}
-
-.table-scene.players-6 .table-felt {
-  grid-template-areas:
-    "tl top tr"
-    "left bell right"
-    ". you .";
+.center-bell {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
 }
 
 /* Subtle grid pattern on felt */
@@ -1134,7 +1111,6 @@ h2 {
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  transition: transform 0.45s cubic-bezier(0.4, 0.0, 0.2, 1);
   will-change: transform;
 }
 
@@ -1164,6 +1140,13 @@ h2 {
 
 .center-bell {
   position: relative;
+}
+
+.table-felt > .center-bell {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .bell-ripple-ring {
@@ -1344,13 +1327,13 @@ h2 {
   }
 }
 
-.card-3d-inner.face-up.card-swap {
-  animation: flip-full 0.42s cubic-bezier(0.4, 0.0, 0.2, 1);
+.card-3d-inner.face-up.just-flipped {
+  animation: reveal-half-turn 0.42s cubic-bezier(0.4, 0.0, 0.2, 1);
 }
 
-@keyframes flip-full {
-  from { transform: rotateY(180deg); }
-  to   { transform: rotateY(540deg); }
+@keyframes reveal-half-turn {
+  from { transform: rotateY(0deg); }
+  to   { transform: rotateY(180deg); }
 }
 
 /* ── Multiplayer Card ─────────────────────────────────────── */
@@ -1567,6 +1550,16 @@ h2 {
   font: inherit;
 }
 
+.room-entry-controls select {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: rgba(8, 13, 23, 0.72);
+  color: var(--text-0);
+  font: inherit;
+}
+
 .room-entry-error {
   margin: 0;
   color: #ff9b9b;
@@ -1597,9 +1590,10 @@ h2 {
 }
 
 .multiplayer-cards {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  position: relative;
+  min-height: 440px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, var(--felt-1), var(--felt-0));
 }
 
 .multiplayer-cards-2 {
@@ -1617,6 +1611,14 @@ h2 {
   border-radius: var(--r-sm);
   background: rgba(8, 13, 23, 0.72);
   text-align: center;
+}
+
+.multiplayer-cards .multiplayer-card {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(150px, 22vw);
+  transform: translate(-50%, -50%) rotate(var(--seat-angle)) translateY(-165px) rotate(calc(-1 * var(--seat-angle)));
 }
 
 .multiplayer-card strong {
@@ -1690,6 +1692,42 @@ h2 {
 
   .multiplayer-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 639px) {
+  .table-felt {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-height: 0;
+    gap: 10px;
+    padding-bottom: 112px;
+  }
+
+  .table-seat,
+  .multiplayer-cards .multiplayer-card {
+    position: relative;
+    inset: auto;
+    width: auto;
+    transform: none;
+  }
+
+  .table-felt > .center-bell {
+    position: sticky;
+    left: auto;
+    top: auto;
+    bottom: 12px;
+    grid-column: 1 / -1;
+    transform: none;
+    z-index: 20;
+  }
+
+  .multiplayer-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-height: 0;
+    gap: 10px;
+    background: none;
   }
 }
 
@@ -2087,7 +2125,7 @@ h2 {
   .screen-enter,
   .home-enter > *,
   .card-collected,
-  .card-3d-inner.face-up.card-swap,
+  .card-3d-inner.face-up.just-flipped,
   .card-3d-inner.just-flipped .card-3d-front::after,
   .glow-button,
   .glow-button::before,
@@ -2095,6 +2133,11 @@ h2 {
     animation: none;
     opacity: 1;
     transform: none;
+  }
+
+  .card-3d-inner.face-up,
+  .card-3d-inner.face-up.just-flipped {
+    transform: rotateY(180deg);
   }
 
   .table-felt.boss-disrupting,

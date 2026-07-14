@@ -24,6 +24,7 @@ export interface SeatLayout {
 
 export interface PlayerState {
   id: number;
+  isHuman: boolean;
   labelZh: string;
   labelEn: string;
   drawPile: Card[];
@@ -64,7 +65,7 @@ export interface RoundSnapshot {
   scoreBreakdown?: ScoreBreakdown;
   difficulty?: Difficulty;
   durationSec?: number;
-  playerCount?: number;
+  tableSeatCount?: number;
   maxStreak?: number;
 }
 
@@ -78,13 +79,13 @@ export interface RoundSummary {
   bestReactionMs: number;
   difficulty: Difficulty;
   durationSec: number;
-  playerCount: number;
+  tableSeatCount: number;
 }
 
 export interface GameSettings {
   difficulty: Difficulty;
   duration: number;
-  playerCount: number;
+  tableSeatCount: number;
   language: Language;
   soundEnabled: boolean;
 }

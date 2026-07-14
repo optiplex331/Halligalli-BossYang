@@ -5,13 +5,14 @@ export interface RoomSeatProjection {
   seatNumber: number;
   name: string;
   ready: boolean;
-  card: NonNullable<RoomSnapshot["topCards"]>[number] | null;
+  card: NonNullable<RoomSnapshot["seats"]>[number]["topCard"] | null;
+  faceUpCardCount: number;
+  occupied: boolean;
   currentTurn: boolean;
 }
 
 export interface RoomProjection {
   snapshot: RoomSnapshot;
-  cards: NonNullable<RoomSnapshot["topCards"]>;
   seats: RoomSeatProjection[];
   scoreboard: NonNullable<RoomSnapshot["scoreboard"]>;
   lastEvent: RoomSnapshot["lastEvent"];
@@ -21,30 +22,26 @@ export interface RoomProjection {
 }
 
 export function projectRoomSnapshot(snapshot: RoomSnapshot): RoomProjection {
-  const cards = snapshot.topCards ?? [];
-  const viewer = snapshot.participants.find(
-    (participant) => participant.seatIndex === snapshot.viewerSeatIndex,
-  );
-
+  const allowedCommands = snapshot.allowedCommands ?? [];
   return {
     snapshot,
-    cards,
-    seats: snapshot.participants.map((participant) => ({
-      seatIndex: participant.seatIndex,
-      seatNumber: participant.seatIndex + 1,
-      name: participant.name,
-      ready: participant.ready,
-      card: cards[participant.seatIndex] ?? null,
-      currentTurn: snapshot.currentTurn === participant.seatIndex,
-    })),
+    seats: (snapshot.seats ?? []).map((seat) => {
+      const participant = snapshot.participants.find((item) => item.seatIndex === seat.seatIndex);
+      return {
+        seatIndex: seat.seatIndex,
+        seatNumber: seat.seatIndex + 1,
+        name: participant?.name ?? "",
+        ready: participant?.ready ?? false,
+        occupied: Boolean(participant),
+        card: seat.topCard ?? null,
+        faceUpCardCount: seat.faceUpCardCount,
+        currentTurn: snapshot.currentTurnSeatIndex === seat.seatIndex,
+      };
+    }),
     scoreboard: snapshot.scoreboard ?? [],
     lastEvent: snapshot.lastEvent,
-    canReady: snapshot.phase === "lobby" && !viewer?.ready,
-    canStart:
-      snapshot.phase === "lobby" &&
-      snapshot.viewerSeatIndex === 0 &&
-      snapshot.participants.length >= snapshot.minParticipants &&
-      snapshot.participants.every((participant) => participant.ready),
-    canRing: snapshot.phase === "playing" && snapshot.bellAvailable,
+    canReady: allowedCommands.includes("ready"),
+    canStart: allowedCommands.includes("start"),
+    canRing: allowedCommands.includes("bell"),
   };
 }

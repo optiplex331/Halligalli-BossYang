@@ -1,14 +1,16 @@
 # Halligalli API
 
 This package owns FastAPI transport and the Redis-backed Multiplayer Authority.
-It currently delivers authenticated two-through-six-seat room entry plus the
+It delivers authenticated four-through-eight-Table-Seat room entry plus the
 authority-owned match path: ready, host start, timed card progression,
 correct/wrong/missed bell windows, the shared score-breakdown ledger, stable
-Seat Indexes, and an ephemeral result. A room has six stable slots and a match
-starts once two through six current participants are all ready.
+Seat Indexes, and an ephemeral result. Room Configuration independently fixes
+the Table Seat count and target Human Participant count. A match starts only
+when that exact target is present and ready.
 While a match is active, the Authority advances one deterministic 72-card
-inventory clockwise through its occupied Seats; its snapshots expose the
-Authority-owned minimum participant count alongside the room capacity.
+inventory clockwise through every Table Seat, including Neutral Seats. Its
+snapshots expose complete seat state, sparse Human Participants, viewer
+capabilities, and participant-only scores/results.
 
 Run the API against an ephemeral Redis instance with:
 
@@ -23,7 +25,7 @@ types. Participant Credentials are browser-memory secrets: callers submit only
 their verifier on entry and use the raw credential later in an Authorization
 header or the first native WebSocket frame.
 
-WebSocket clients send only `ready`, `start`, and `bell` intent frames. The
+WebSocket clients send only room and match intent frames. The
 authority generates cards, deadlines, availability, score, and results, then
 sends complete viewer-specific snapshots for the Web projection to render.
 

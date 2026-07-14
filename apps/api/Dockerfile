@@ -7,15 +7,15 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY apps/api/src ./src
 
+ARG HALLIGALLI_RELEASE_VERSION=local
+ARG HALLIGALLI_RELEASE_COMMIT=development
+RUN python -c 'import json, sys; print(json.dumps({"version": sys.argv[1], "commit": sys.argv[2]}, separators=(",", ":")))' "$HALLIGALLI_RELEASE_VERSION" "$HALLIGALLI_RELEASE_COMMIT" > /app/src/halligalli_api/release-identity.json
+
 FROM python:3.14-slim-bookworm
 
 WORKDIR /app
 
-ARG HALLIGALLI_RELEASE_VERSION=local
-ARG HALLIGALLI_RELEASE_COMMIT=development
-ENV HALLIGALLI_RELEASE_VERSION=$HALLIGALLI_RELEASE_VERSION \
-    HALLIGALLI_RELEASE_COMMIT=$HALLIGALLI_RELEASE_COMMIT \
-    PATH=/app/.venv/bin:$PATH \
+ENV PATH=/app/.venv/bin:$PATH \
     PYTHONPATH=/app/src \
     PYTHONDONTWRITEBYTECODE=1
 

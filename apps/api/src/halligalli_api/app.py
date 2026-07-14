@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import os
 import asyncio
+import json
 import time
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from inspect import isawaitable
+from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -38,9 +40,30 @@ from .authority import (
 from .observability import Telemetry, elapsed_since
 
 
+_RELEASE_IDENTITY_PATH = Path(__file__).with_name("release-identity.json")
+
+
+def _load_release_identity() -> dict[str, str]:
+    identity = json.loads(_RELEASE_IDENTITY_PATH.read_text(encoding="utf-8"))
+    if (
+        not isinstance(identity, dict)
+        or not isinstance(identity.get("version"), str)
+        or not isinstance(identity.get("commit"), str)
+    ):
+        raise RuntimeError("Release identity must contain string version and commit values")
+    return {"version": identity["version"], "commit": identity["commit"]}
+
+
 class EntryRequest(ApiModel):
     name: str = Field(min_length=1, max_length=24, pattern=r"^[^\r\n]+$")
     credential_verifier: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class CreateRoomRequest(EntryRequest):
+    table_seat_count: int = Field(ge=4, le=8)
+    target_human_participant_count: int = Field(ge=2)
+    difficulty: Literal["easy", "normal", "hard"]
+    duration_sec: int = Field(ge=1)
 
 
 class ProblemDetails(ApiModel):
@@ -142,6 +165,7 @@ def _room_command(payload: WebSocketRoomCommand, credential: str):
 
 
 def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
+    build_identity = _load_release_identity()
     telemetry = Telemetry()
     selected_authority = authority or _runtime_authority(telemetry)
     hub = RoomSocketHub()
@@ -260,10 +284,7 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
 
     @app.get("/internal/identity", include_in_schema=False)
     async def release_identity() -> dict[str, str]:
-        return {
-            "version": os.environ.get("HALLIGALLI_RELEASE_VERSION", app.version),
-            "commit": os.environ.get("HALLIGALLI_RELEASE_COMMIT", "development"),
-        }
+        return dict(build_identity)
 
     @app.get("/internal/ready", include_in_schema=False)
     async def readiness() -> JSONResponse:
@@ -317,7 +338,7 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
         },
     )
     async def create_room(
-        request: EntryRequest,
+        request: CreateRoomRequest,
         idempotency_key: Annotated[UUID, Header(alias="Idempotency-Key")],
     ) -> EntryResult:
         return await app.state.authority.execute(
@@ -326,6 +347,10 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
                 idempotency_key=str(idempotency_key),
                 name=request.name.strip(),
                 credential_verifier=request.credential_verifier,
+                table_seat_count=request.table_seat_count,
+                target_human_participant_count=request.target_human_participant_count,
+                difficulty=request.difficulty,
+                duration_sec=request.duration_sec,
             ),
         )
 
