@@ -175,12 +175,7 @@ export interface components {
         /** RoomSnapshot */
         RoomSnapshot: {
             /** Allowedcommands */
-            allowedCommands?: ("ready" | "start" | "bell" | "leave" | "forfeit" | "continue" | "post_match_leave")[];
-            /**
-             * Bellavailable
-             * @default false
-             */
-            bellAvailable: boolean;
+            allowedCommands: ("ready" | "start" | "bell" | "leave" | "forfeit" | "continue" | "post_match_leave")[];
             /** Bellfruit */
             bellFruit?: ("banana" | "strawberry" | "lemon" | "grape") | null;
             configuration: components["schemas"]["RoomConfiguration"];
@@ -209,9 +204,9 @@ export interface components {
             /** Roomcode */
             roomCode: string;
             /** Scoreboard */
-            scoreboard?: components["schemas"]["ParticipantScore"][];
+            scoreboard: components["schemas"]["ParticipantScore"][];
             /** Seats */
-            seats?: components["schemas"]["TableSeatSnapshot"][];
+            seats: components["schemas"]["TableSeatSnapshot"][];
             /** Turndeadlineat */
             turnDeadlineAt?: number | null;
             /** Viewerseatindex */

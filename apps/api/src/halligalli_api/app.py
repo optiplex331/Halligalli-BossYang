@@ -111,10 +111,10 @@ class RoomSocketHub:
                 snapshot = await authority.snapshot(room_code, Viewer(credential=member.credential))
                 if snapshot.revision <= member.revision:
                     continue
+                member.revision = snapshot.revision
                 await websocket.send_json(
                     {"type": "snapshot", "snapshot": snapshot.model_dump(by_alias=True)},
                 )
-                member.revision = snapshot.revision
             except (AuthorityError, RuntimeError):
                 self.detach(room_code, websocket)
 

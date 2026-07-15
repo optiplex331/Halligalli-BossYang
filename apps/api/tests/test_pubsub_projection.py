@@ -26,6 +26,9 @@ class _ViewerAuthority:
                 ParticipantSnapshot(name="Host", seat_index=0),
                 ParticipantSnapshot(name="Guest", seat_index=1),
             ],
+            seats=[],
+            allowed_commands=[],
+            scoreboard=[],
         )
 
 

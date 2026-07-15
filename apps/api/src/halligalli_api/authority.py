@@ -162,12 +162,11 @@ class RoomSnapshot(ApiModel):
     participants: list[ParticipantSnapshot]
     current_turn_seat_index: int | None = None
     turn_deadline_at: int | None = None
-    seats: list[TableSeatSnapshot] = Field(default_factory=list)
+    seats: list[TableSeatSnapshot]
     last_reveal: RevealSnapshot | None = None
-    allowed_commands: list[Literal["ready", "start", "bell", "leave", "forfeit", "continue", "post_match_leave"]] = Field(default_factory=list)
-    bell_available: bool = False
+    allowed_commands: list[Literal["ready", "start", "bell", "leave", "forfeit", "continue", "post_match_leave"]]
     bell_fruit: Literal["banana", "strawberry", "lemon", "grape"] | None = None
-    scoreboard: list[ParticipantScore] = Field(default_factory=list)
+    scoreboard: list[ParticipantScore]
     last_event: Literal["correct_bell", "wrong_bell", "missed_bell"] | None = None
     result: MatchResult | None = None
     match_number: int = 0
@@ -413,10 +412,10 @@ class _Room:
                 key: _IdempotencyEntry(**entry)
                 for key, entry in raw["idempotency"].items()
             },
-            commands={key: _CommandEntry(**entry) for key, entry in raw.get("commands", {}).items()},
-            match_number=raw.get("match_number", 0),
-            host_seat_index=raw.get("host_seat_index", 0),
-            post_match_deadline_at=raw.get("post_match_deadline_at"),
+            commands={key: _CommandEntry(**entry) for key, entry in raw["commands"].items()},
+            match_number=raw["match_number"],
+            host_seat_index=raw["host_seat_index"],
+            post_match_deadline_at=raw["post_match_deadline_at"],
             match=(
                 _Match(
                     current_turn=raw["match"]["current_turn"],
@@ -427,7 +426,7 @@ class _Room:
                     ],
                     face_up_card_counts=raw["match"]["face_up_card_counts"],
                     frozen_human_seat_indexes=raw["match"]["frozen_human_seat_indexes"],
-                    reveal_sequence=raw["match"].get("reveal_sequence", 0),
+                    reveal_sequence=raw["match"]["reveal_sequence"],
                     next_card_index=raw["match"]["next_card_index"],
                     bell_fruit=raw["match"]["bell_fruit"],
                     bell_opened_at=raw["match"]["bell_opened_at"],
@@ -438,7 +437,7 @@ class _Room:
                         if raw["match"]["result"] is not None
                         else None
                     ),
-                    number=raw["match"].get("number", 0),
+                    number=raw["match"]["number"],
                 )
                 if raw["match"] is not None
                 else None
@@ -541,7 +540,6 @@ def _snapshot_for_verifier(room: _Room, verifier: str) -> RoomSnapshot:
                     else None
                 ),
                 allowed_commands=_allowed_commands(room, participant),
-                bell_available=bool(match and match.bell_fruit),
                 bell_fruit=match.bell_fruit if match else None,
                 scoreboard=_scoreboard_for(match),
                 last_event=match.last_event if match else None,
@@ -865,92 +863,8 @@ def _join_room(room: _Room, command: JoinRoom) -> EntryResult:
     )
 
 
-class InMemoryMultiplayerAuthority:
-    """Test-only implementation of the same authority interface as Redis."""
-
-    def __init__(self, room_codes: object | None = None) -> None:
-        self._rooms: dict[str, _Room] = {}
-        self._create_entries: dict[str, tuple[str, str]] = {}
-        self._room_codes = iter(room_codes) if room_codes is not None else None
-
-    def _new_room_code(self) -> str:
-        if self._room_codes is not None:
-            return next(self._room_codes)
-        return "".join(secrets.choice(ROOM_CODE_ALPHABET) for _ in range(4))
-
-    async def execute(
-        self,
-        room_code: str | None,
-        command: AuthorityCommand,
-    ) -> AuthorityResult:
-        if isinstance(command, CreateRoom):
-            return self._create(command)
-        room = _require_room(self._rooms.get(room_code or ""))
-        if isinstance(command, JoinRoom):
-            return self._join(room, command)
-        return _apply_room_command(room, command)
-
-    def _create(self, command: CreateRoom) -> EntryResult:
-        if not MIN_TABLE_SEATS <= command.table_seat_count <= MAX_TABLE_SEATS:
-            raise AuthorityError("invalid_room_configuration", 422, "Table Seat count must be between 4 and 8")
-        if not MIN_HUMAN_PARTICIPANTS <= command.target_human_participant_count <= command.table_seat_count:
-            raise AuthorityError("invalid_room_configuration", 422, "Human Participant target must fit the table")
-        fingerprint = _command_fingerprint(command)
-        cached = self._create_entries.get(command.idempotency_key)
-        if cached:
-            cached_fingerprint, cached_room_code = cached
-            if not secrets.compare_digest(cached_fingerprint, fingerprint):
-                raise AuthorityError("idempotency_conflict", 409, "Idempotency key was reused")
-            room = _require_room(self._rooms.get(cached_room_code))
-            return EntryResult(
-                room_code=room.code,
-                snapshot=_snapshot_for_verifier(room, command.credential_verifier),
-            )
-
-        for _ in range(8):
-            code = self._new_room_code()
-            if code not in self._rooms:
-                break
-        else:
-            raise AuthorityError("room_code_unavailable", 503, "Room code is unavailable")
-
-        room = _Room(
-            code=code,
-            table_seat_count=command.table_seat_count,
-            target_human_participant_count=command.target_human_participant_count,
-            difficulty=command.difficulty,
-            duration_sec=command.duration_sec,
-        )
-        room.participants.append(
-            _Participant(name=command.name, credential_verifier=command.credential_verifier, seat_index=0),
-        )
-        room.idempotency[command.idempotency_key] = _IdempotencyEntry(
-            fingerprint=fingerprint,
-            seat_index=0,
-        )
-        self._rooms[code] = room
-        self._create_entries[command.idempotency_key] = (fingerprint, code)
-        return EntryResult(
-            room_code=code,
-            snapshot=_snapshot_for_verifier(room, command.credential_verifier),
-        )
-
-    def _join(self, room: _Room, command: JoinRoom) -> EntryResult:
-        return _join_room(room, command)
-
-    async def snapshot(self, room_code: str, viewer: Viewer) -> RoomSnapshot:
-        room = _require_room(self._rooms.get(room_code))
-        return _snapshot_for_verifier(room, credential_verifier(viewer.credential))
-
-    def active_room_count(self) -> int:
-        return len(self._rooms)
-
-    async def readiness(self) -> bool:
-        return True
-
-
 class RedisMultiplayerAuthority:
-    """Redis-backed runtime authority. In-memory authority is never selected here."""
+    """Redis-backed runtime authority."""
 
     def __init__(self, redis_client: object, telemetry: object | None = None) -> None:
         self._redis = redis_client

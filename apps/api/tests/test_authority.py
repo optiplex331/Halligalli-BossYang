@@ -5,19 +5,19 @@ import unittest
 
 from halligalli_api.authority import (
     CreateRoom,
-    InMemoryMultiplayerAuthority,
     JoinRoom,
     Viewer,
 )
+from redis_test_case import RedisAsyncTestCase
 
 
 def verifier(credential: str) -> str:
     return hashlib.sha256(credential.encode()).hexdigest()
 
 
-class EntryAuthorityTest(unittest.IsolatedAsyncioTestCase):
+class EntryAuthorityTest(RedisAsyncTestCase):
     async def test_two_participants_share_an_idempotent_lobby_snapshot(self) -> None:
-        authority = InMemoryMultiplayerAuthority(room_codes=iter(["ABCD"]))
+        authority = self.authority
         host_credential = "host-credential"
         guest_credential = "guest-credential"
 
@@ -63,8 +63,7 @@ class EntryAuthorityTest(unittest.IsolatedAsyncioTestCase):
             Viewer(credential=guest_credential),
         )
 
-        self.assertEqual(created.room_code, "ABCD")
-        self.assertEqual(repeated.room_code, "ABCD")
+        self.assertEqual(repeated.room_code, created.room_code)
         self.assertEqual(joined.snapshot.revision, 2)
         self.assertEqual(host_snapshot.revision, guest_snapshot.revision)
         self.assertEqual(host_snapshot.viewer_seat_index, 0)

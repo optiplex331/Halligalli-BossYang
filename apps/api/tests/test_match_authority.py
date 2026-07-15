@@ -7,20 +7,20 @@ from halligalli_api.authority import (
     AdvanceTurn,
     Bell,
     CreateRoom,
-    InMemoryMultiplayerAuthority,
     JoinRoom,
     Ready,
     Start,
 )
+from redis_test_case import RedisAsyncTestCase
 
 
 def verifier(credential: str) -> str:
     return hashlib.sha256(credential.encode()).hexdigest()
 
 
-class TwoSeatMatchAuthorityTest(unittest.IsolatedAsyncioTestCase):
+class TwoSeatMatchAuthorityTest(RedisAsyncTestCase):
     async def test_authority_progresses_two_ready_players_to_a_valid_bell_result(self) -> None:
-        authority = InMemoryMultiplayerAuthority(room_codes=iter(["ABCD"]))
+        authority = self.authority
         host = verifier("host-credential")
         guest = verifier("guest-credential")
         created = await authority.execute(None, CreateRoom("create-1", "Host", host, 4, 2, "normal", 60))
@@ -44,7 +44,7 @@ class TwoSeatMatchAuthorityTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(completed.snapshot.revision, 7)
 
     async def test_wrong_and_missed_windows_keep_applied_penalties_at_the_floor(self) -> None:
-        authority = InMemoryMultiplayerAuthority(room_codes=iter(["WXYZ"]))
+        authority = self.authority
         host = verifier("host-credential")
         guest = verifier("guest-credential")
         created = await authority.execute(None, CreateRoom("create-2", "Host", host, 4, 2, "normal", 60))

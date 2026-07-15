@@ -9,7 +9,6 @@ from halligalli_api.authority import (
     AdvanceTurn,
     Bell,
     CreateRoom,
-    InMemoryMultiplayerAuthority,
     JoinRoom,
     Ready,
     ScoreBreakdown,
@@ -17,6 +16,7 @@ from halligalli_api.authority import (
     apply_scoring_penalty,
     sum_breakdown,
 )
+from redis_test_case import RedisAsyncTestCase
 
 
 FIXTURE = json.loads(
@@ -51,11 +51,11 @@ class SharedScoringFixtureTest(unittest.TestCase):
             self.assertEqual(breakdown.missed_penalty, expected.get("missedPenalty", 0))
 
 
-class SharedCorrectBellFixtureTest(unittest.IsolatedAsyncioTestCase):
+class SharedCorrectBellFixtureTest(RedisAsyncTestCase):
     async def test_authority_consumes_the_two_seat_correct_bell_vector(self) -> None:
         case = fixture_case("two-seat-correct-bell")
         expected = case["expected"]
-        authority = InMemoryMultiplayerAuthority(room_codes=iter(["ABCD"]))
+        authority = self.authority
         host = verifier("host-credential")
         guest = verifier("guest-credential")
         created = await authority.execute(None, CreateRoom("create-1", "Host", host, 4, 2, "normal", 60))
@@ -81,7 +81,7 @@ class SharedCorrectBellFixtureTest(unittest.IsolatedAsyncioTestCase):
     async def test_authority_consumes_wrong_and_missed_floor_vectors(self) -> None:
         wrong = fixture_case("two-seat-wrong-floor")
         missed = fixture_case("two-seat-missed-floor")
-        authority = InMemoryMultiplayerAuthority(room_codes=iter(["WXYZ"]))
+        authority = self.authority
         host = verifier("host-credential")
         guest = verifier("guest-credential")
         created = await authority.execute(None, CreateRoom("create-2", "Host", host, 4, 2, "normal", 60))

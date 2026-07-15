@@ -8,8 +8,8 @@ from fastapi.testclient import TestClient
 from opentelemetry.sdk.trace.export import SpanExportResult, SpanExporter
 
 from halligalli_api.app import create_app
-from halligalli_api.authority import InMemoryMultiplayerAuthority
 from halligalli_api.observability import Telemetry
+from redis_test_case import RedisTestCase
 
 
 class CapturingExporter(SpanExporter):
@@ -24,10 +24,10 @@ class CapturingExporter(SpanExporter):
         return None
 
 
-class ObservabilityTest(unittest.TestCase):
+class ObservabilityTest(RedisTestCase):
     def test_operational_surfaces_emit_redacted_trace_and_metrics(self) -> None:
         credential = "do-not-log-this-credential"
-        authority = InMemoryMultiplayerAuthority(room_codes=iter(["ABCD"]))
+        authority = self.authority
         with self.assertLogs("halligalli.telemetry", level="INFO") as captured, TestClient(create_app(authority)) as client:
             created = client.post(
                 "/api/v1/rooms",

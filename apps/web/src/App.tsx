@@ -583,7 +583,7 @@ export default function App() {
       ...gameStateRef.current,
       ...resolvedSnapshot,
       score: result.summary.score,
-      scoreBreakdown: resolvedSnapshot.scoreBreakdown ?? INITIAL_BREAKDOWN,
+      scoreBreakdown: resolvedSnapshot.scoreBreakdown,
     };
 
     bellStateRef.current = result.bellState;
@@ -859,19 +859,19 @@ export default function App() {
                       </button>
                     </div>
                   )}
-                  {roomProjection.lastEvent === "correct_bell" && (
+                  {roomProjection.snapshot.lastEvent === "correct_bell" && (
                     <p className="multiplayer-event">{t("correctBellEvent")}</p>
                   )}
-                  {roomProjection.lastEvent === "wrong_bell" && (
+                  {roomProjection.snapshot.lastEvent === "wrong_bell" && (
                     <p className="multiplayer-event">{t("wrongBellEvent")}</p>
                   )}
-                  {roomProjection.lastEvent === "missed_bell" && (
+                  {roomProjection.snapshot.lastEvent === "missed_bell" && (
                     <p className="multiplayer-event">{t("missedBellEvent")}</p>
                   )}
-                  {roomProjection.scoreboard.length > 0 && (
+                  {roomProjection.snapshot.scoreboard.length > 0 && (
                     <section className="multiplayer-scoreboard" aria-label={t("scoreboardTitle")}>
                       <h3>{t("scoreboardTitle")}</h3>
-                      {roomProjection.scoreboard.map((score) => {
+                      {roomProjection.snapshot.scoreboard.map((score) => {
                         const participant = roomProjection.snapshot.participants.find(
                           (item) => item.seatIndex === score.seatIndex,
                         );

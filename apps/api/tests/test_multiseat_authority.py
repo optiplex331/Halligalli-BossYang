@@ -7,32 +7,32 @@ from halligalli_api.authority import (
     AdvanceTurn,
     Bell,
     CreateRoom,
-    InMemoryMultiplayerAuthority,
     JoinRoom,
     Ready,
     Start,
     TURN_DURATION_MS,
 )
+from redis_test_case import RedisAsyncTestCase
 
 
 def verifier(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
-class TableSeatMatrixAuthorityTest(unittest.IsolatedAsyncioTestCase):
+class TableSeatMatrixAuthorityTest(RedisAsyncTestCase):
     async def _started_room(self, table_seats: int, humans: int):
         code = f"{table_seats}{humans}XY"
-        authority = InMemoryMultiplayerAuthority(room_codes=iter([code]))
+        authority = self.authority
         credentials = [verifier(f"{code}-{seat}") for seat in range(humans)]
         created = await authority.execute(
             None,
-            CreateRoom("create", "Host", credentials[0], table_seats, humans, "normal", 60),
+            CreateRoom(f"create-{code}", "Host", credentials[0], table_seats, humans, "normal", 60),
         )
         for seat in range(1, humans):
-            await authority.execute(code, JoinRoom(f"join-{seat}", f"P{seat + 1}", credentials[seat]))
+            await authority.execute(created.room_code, JoinRoom(f"join-{code}-{seat}", f"P{seat + 1}", credentials[seat]))
         for credential in credentials:
-            await authority.execute(code, Ready(credential))
-        started = await authority.execute(code, Start(credentials[0], now_ms=1_000))
+            await authority.execute(created.room_code, Ready(credential))
+        started = await authority.execute(created.room_code, Start(credentials[0], now_ms=1_000))
         return authority, credentials, started
 
     async def test_all_twenty_five_supported_multiplayer_configurations(self) -> None:

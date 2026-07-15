@@ -55,7 +55,7 @@ class RedisAdapterTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(snapshot.revision, 6)
         self.assertEqual(snapshot.viewer_seat_index, 5)
-        self.assertEqual(snapshot.max_participants, 6)
+        self.assertEqual(snapshot.configuration.target_human_participant_count, 6)
         self.assertEqual([participant.seat_index for participant in snapshot.participants], list(range(6)))
         self.assertEqual(await self.authority.active_room_count(), 1)
 

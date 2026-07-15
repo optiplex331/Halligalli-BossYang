@@ -1,10 +1,4 @@
-import {
-  COUNT_DISTRIBUTION,
-  DEFAULT_SETTINGS,
-  FRUIT_KEYS,
-  INITIAL_BREAKDOWN,
-  INITIAL_SUMMARY,
-} from "./constants.js";
+import { COUNT_DISTRIBUTION, FRUIT_KEYS } from "./constants.js";
 import type {
   BellEvaluation,
   BellState,
@@ -331,7 +325,7 @@ export function reconcilePendingBellWindow(
       ...snapshot,
       missedHits: snapshot.missedHits + 1,
       scoreBreakdown: applyScoringPenalty(
-        snapshot.scoreBreakdown ?? INITIAL_BREAKDOWN,
+        snapshot.scoreBreakdown,
         { missedPenalty: 30 },
       ),
     },
@@ -341,8 +335,8 @@ export function reconcilePendingBellWindow(
 }
 
 export function createRoundSummary(snapshot: RoundSnapshot): RoundSummary {
-  const scoreBreakdown = snapshot.scoreBreakdown ?? INITIAL_BREAKDOWN;
-  const reactionTimes = snapshot.reactionTimes ?? [];
+  const scoreBreakdown = snapshot.scoreBreakdown;
+  const reactionTimes = snapshot.reactionTimes;
   const accuracy = calcAccuracy(
     snapshot.correctHits,
     snapshot.wrongHits,
@@ -366,8 +360,8 @@ export function createRoundSummary(snapshot: RoundSnapshot): RoundSummary {
     accuracy,
     avgReactionMs,
     bestReactionMs,
-    difficulty: snapshot.difficulty ?? DEFAULT_SETTINGS.difficulty,
-    durationSec: snapshot.durationSec ?? DEFAULT_SETTINGS.duration,
-    tableSeatCount: snapshot.tableSeatCount ?? INITIAL_SUMMARY.tableSeatCount,
+    difficulty: snapshot.difficulty,
+    durationSec: snapshot.durationSec,
+    tableSeatCount: snapshot.tableSeatCount,
   };
 }

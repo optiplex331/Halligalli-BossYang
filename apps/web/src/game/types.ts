@@ -61,11 +61,11 @@ export interface RoundSnapshot {
   correctHits: number;
   wrongHits: number;
   missedHits: number;
-  reactionTimes?: number[];
-  scoreBreakdown?: ScoreBreakdown;
-  difficulty?: Difficulty;
-  durationSec?: number;
-  tableSeatCount?: number;
+  reactionTimes: number[];
+  scoreBreakdown: ScoreBreakdown;
+  difficulty: Difficulty;
+  durationSec: number;
+  tableSeatCount: number;
   maxStreak?: number;
 }
 

@@ -35,7 +35,7 @@ Stop the local stack with `pnpm run dev:down`.
 ## Checks
 
 ```bash
-pnpm run test
+HALLIGALLI_TEST_REDIS_URL=redis://localhost:6379/0 pnpm run test  # with an isolated Redis running
 pnpm run typecheck
 pnpm run build
 pnpm run check

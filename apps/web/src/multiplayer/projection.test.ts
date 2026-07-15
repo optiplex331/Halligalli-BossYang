@@ -29,7 +29,6 @@ function snapshot(): RoomSnapshot {
     lastReveal: { sequence: 7, seatIndex: 4 },
     allowedCommands: ["bell", "forfeit"],
     scoreboard: [],
-    bellAvailable: true,
     bellFruit: "banana",
     matchNumber: 1,
   };
