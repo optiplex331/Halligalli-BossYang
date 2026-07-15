@@ -40,7 +40,6 @@ def resolve_routing(env: Mapping[str, str]) -> dict[str, str]:
     event_name = env.get("GITHUB_EVENT_NAME", "")
     ref_type = env.get("GITHUB_REF_TYPE", "")
     ref_name = env.get("GITHUB_REF_NAME", "")
-
     tag_release = is_release_tag(ref_type, ref_name)
     workflow_dispatch = event_name == "workflow_dispatch"
 
@@ -48,6 +47,8 @@ def resolve_routing(env: Mapping[str, str]) -> dict[str, str]:
     delivery_control_checks_required = delivery_control or workflow_dispatch
     container_build_required = product_runtime or workflow_dispatch or tag_release
 
+    # Prefer event-level categories before file-based categories so release
+    # and manual runs remain recognizable even without changed-file inputs.
     if tag_release:
         classification = "release-tag"
     elif workflow_dispatch:
