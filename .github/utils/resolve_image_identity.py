@@ -19,15 +19,12 @@ import re
 import subprocess
 import sys
 from collections.abc import Callable, Sequence
-from typing import Mapping, Optional
+from typing import Mapping
 
 from release_utils import append_github_outputs
 
 RELEASE_TAG_PATTERN = "v[0-9]*.[0-9]*.[0-9]*"
 RELEASE_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
-RELEASE_PLEASE_SUBJECT_RE = re.compile(
-    r"^chore: release v(?P<version>[0-9]+\.[0-9]+\.[0-9]+)(?: \(#[0-9]+\))?$"
-)
 
 
 class ImageIdentityError(Exception):
@@ -75,23 +72,6 @@ def is_master_push(event_name: str, ref_type: str, ref_name: str) -> bool:
     """Master product-runtime pushes may publish Development GHCR Images."""
 
     return event_name == "push" and ref_type == "branch" and ref_name == "master"
-
-
-def release_please_version(subject: str) -> Optional[str]:
-    """Return the Release Please version from a release commit subject."""
-
-    match = RELEASE_PLEASE_SUBJECT_RE.fullmatch(subject)
-    if match is None:
-        return None
-    return match.group("version")
-
-
-def release_please_commit_version(
-    git: Callable[[Sequence[str], bool], str],
-) -> Optional[str]:
-    """Return the Release Please version from the current commit subject."""
-
-    return release_please_version(git(["log", "-1", "--pretty=%s"], False))
 
 
 def run_git(args: Sequence[str], allow_failure: bool = False) -> str:
@@ -149,25 +129,19 @@ def resolve_identity(
         if exact_tag:
             version = exact_tag.removeprefix("v")
         else:
-            # Release Please may create the tag after the master workflow has
-            # already started, so also recognize the release commit itself.
-            release_commit_version = release_please_commit_version(git)
-            if release_commit_version:
-                version = release_commit_version
-            else:
-                describe = git(
-                    [
-                        "describe",
-                        "--tags",
-                        "--first-parent",
-                        "--long",
-                        "--abbrev=7",
-                        "--match",
-                        RELEASE_TAG_PATTERN,
-                    ]
-                )
-                version = parse_extended_version(describe)
-                should_push_image = True
+            describe = git(
+                [
+                    "describe",
+                    "--tags",
+                    "--first-parent",
+                    "--long",
+                    "--abbrev=7",
+                    "--match",
+                    RELEASE_TAG_PATTERN,
+                ]
+            )
+            version = parse_extended_version(describe)
+            should_push_image = True
     else:
         # Pull request and other non-publishing contexts still get a stable tag
         # for logs and local workflow plumbing.
