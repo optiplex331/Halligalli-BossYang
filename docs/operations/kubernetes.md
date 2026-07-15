@@ -9,6 +9,9 @@ The Infrastructure Repo owns the chart, Argo CD Applications, proof values,
 ingress, and digest selection. This document records the product runtime
 contract, not a live-cluster operation procedure.
 
+The authoritative completed proof record is the Infrastructure Repo's
+[`aks-portfolio-proof-2026-07-13-passed.json`](https://github.com/optiplex331/Halligalli-gitops-repo/blob/main/evidence/aks-portfolio-proof-2026-07-13-passed.json).
+
 ## Product Runtime Contract
 
 The paired runtime has three components:

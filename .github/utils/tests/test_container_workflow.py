@@ -63,6 +63,5 @@ class ContainerWorkflowTest(unittest.TestCase):
         self.assertIn("gh release upload", workflow)
         self.assertNotIn("--clobber", workflow)
 
-
 if __name__ == "__main__":
     unittest.main()

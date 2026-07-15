@@ -8,21 +8,21 @@ from halligalli_api.authority import (
     ContinueMatch,
     CreateRoom,
     Forfeit,
-    InMemoryMultiplayerAuthority,
     JoinRoom,
     Leave,
     Ready,
     Start,
 )
+from redis_test_case import RedisAsyncTestCase
 
 
 def verifier(credential: str) -> str:
     return hashlib.sha256(credential.encode()).hexdigest()
 
 
-class RoomLifecycleTest(unittest.IsolatedAsyncioTestCase):
+class RoomLifecycleTest(RedisAsyncTestCase):
     async def test_lobby_vacancy_reuses_the_lowest_stable_seat(self) -> None:
-        authority = InMemoryMultiplayerAuthority(room_codes=iter(["LIFE"]))
+        authority = self.authority
         host, guest, replacement = (verifier(value) for value in ("host", "guest", "replacement"))
         created = await authority.execute(None, CreateRoom("create", "Host", host, 4, 2, "normal", 60))
         await authority.execute(created.room_code, JoinRoom("guest", "Guest", guest))
@@ -33,7 +33,7 @@ class RoomLifecycleTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([(participant.seat_index, participant.active) for participant in joined.snapshot.participants], [(0, True), (1, True)])
 
     async def test_forfeit_then_continue_creates_a_new_sequential_match_and_deduplicates_commands(self) -> None:
-        authority = InMemoryMultiplayerAuthority(room_codes=iter(["NEXT"]))
+        authority = self.authority
         credentials = [verifier(value) for value in ("host", "guest", "third")]
         created = await authority.execute(None, CreateRoom("create", "Host", credentials[0], 4, 3, "normal", 60))
         await authority.execute(created.room_code, JoinRoom("join-guest", "Guest", credentials[1]))

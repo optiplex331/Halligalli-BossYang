@@ -67,9 +67,32 @@ jobs:
         if: steps.changes.outputs.product_checks_required == 'true'
         run: pnpm install --frozen-lockfile
 
-      - name: Run tests
+      - name: Run Web tests
         if: steps.changes.outputs.product_checks_required == 'true'
-        run: pnpm run test
+        run: pnpm --dir apps/web run test
+
+      - name: Run Redis-backed API integration tests
+        if: steps.changes.outputs.product_checks_required == 'true'
+        env:
+          HALLIGALLI_TEST_REDIS_URL: redis://localhost:6379/0
+        run: |
+          redis_container=halligalli-api-tests-redis
+          cleanup() {
+            docker rm --force "$redis_container" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          cleanup
+          docker run --detach --name "$redis_container" --publish 6379:6379 \
+            redis@sha256:62b5498c91778f738f0efbf0a6fd5b434011235a3e7b5f2ed4a2c0c63bb1c786
+          for _ in $(seq 1 30); do
+            if docker exec "$redis_container" redis-cli ping | grep --quiet PONG; then
+              pnpm run test:api
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs "$redis_container"
+          exit 1
 
       - name: Typecheck
         if: steps.changes.outputs.product_checks_required == 'true'

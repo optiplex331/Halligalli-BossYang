@@ -303,11 +303,6 @@
             "title": "Allowedcommands",
             "type": "array"
           },
-          "bellAvailable": {
-            "default": false,
-            "title": "Bellavailable",
-            "type": "boolean"
-          },
           "bellFruit": {
             "anyOf": [
               {
@@ -451,7 +446,10 @@
           "phase",
           "configuration",
           "viewerSeatIndex",
-          "participants"
+          "participants",
+          "seats",
+          "allowedCommands",
+          "scoreboard"
         ],
         "title": "RoomSnapshot",
         "type": "object"

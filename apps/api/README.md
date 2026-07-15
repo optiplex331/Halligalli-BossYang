@@ -18,8 +18,11 @@ Run the API against an ephemeral Redis instance with:
 HALLIGALLI_REDIS_URL=redis://localhost:6379/0 pnpm run dev:api
 ```
 
-The runtime selects `RedisMultiplayerAuthority`; `InMemoryMultiplayerAuthority`
-exists only for interface tests. REST contract truth is generated from Pydantic
+Runtime and API behavior tests use `RedisMultiplayerAuthority`; set
+`HALLIGALLI_TEST_REDIS_URL` to an isolated ephemeral Redis database when running
+the API suite (for example,
+`HALLIGALLI_TEST_REDIS_URL=redis://localhost:6379/0 pnpm run test:api`). REST
+contract truth is generated from Pydantic
 into `../../contracts/openapi.json`, and the Web consumes its generated REST
 types. Participant Credentials are browser-memory secrets: callers submit only
 their verifier on entry and use the raw credential later in an Authorization

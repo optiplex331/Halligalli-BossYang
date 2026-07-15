@@ -121,7 +121,7 @@ describe("game rules", () => {
 
     expect(resolved.missed).toBe(true);
     expect(resolved.snapshot.missedHits).toBe(1);
-    expect(resolved.snapshot.scoreBreakdown?.missedPenalty).toBe(30);
+    expect(resolved.snapshot.scoreBreakdown.missedPenalty).toBe(30);
   });
 
   it("creates the expected round summary from score breakdown and reactions", () => {

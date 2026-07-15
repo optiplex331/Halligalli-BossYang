@@ -236,12 +236,15 @@ describe("v1 single-player behavior fixtures", () => {
         missedHits: 0,
         reactionTimes: [],
         scoreBreakdown: { ...INITIAL_BREAKDOWN, correctBase: current.startingScore ?? 0 },
+        difficulty: "normal",
+        durationSec: 60,
+        tableSeatCount: 4,
       },
       { available: true, fruitKey: "grape", startedAt: 1_000, handled: false },
     );
 
     expect(result.summary.score).toBe(current.expected.score);
     expect(result.summary.missedHits).toBe(current.expected.missedHits);
-    expect(result.pendingResolution.snapshot.scoreBreakdown?.missedPenalty).toBe(current.expected.missedPenalty);
+    expect(result.pendingResolution.snapshot.scoreBreakdown.missedPenalty).toBe(current.expected.missedPenalty);
   });
 });
