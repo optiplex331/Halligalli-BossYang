@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.0](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.7.2...v0.8.0) (2026-07-16)
+
+
+### Features
+
+* **game:** separate table seats and harden release identity ([#72](https://github.com/optiplex331/Halligalli-BossYang/issues/72)) ([8289fa6](https://github.com/optiplex331/Halligalli-BossYang/commit/8289fa67387285de1a967998cbb859d5bb5193bc))
+
+
+### Bug Fixes
+
+* **ci:** pin actionlint binary version ([284f8e4](https://github.com/optiplex331/Halligalli-BossYang/commit/284f8e430c7d4f5617de5b3a85b11de1ec1afe6c))
+* **release:** align manifest with latest release ([29d706a](https://github.com/optiplex331/Halligalli-BossYang/commit/29d706af3b24b5f030242b1410cc3daac98199a0))
+* **release:** align manifest with latest release ([f0150ff](https://github.com/optiplex331/Halligalli-BossYang/commit/f0150ff40d0184d916ad678aba7b29039bd7ae23))
+
 ## [0.7.2](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.7.1...v0.7.2) (2026-07-13)
 
 
