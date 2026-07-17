@@ -1,18 +1,4 @@
-"""Test container image identity and push-policy resolution.
-
-Purpose:
-- Protect GHCR image naming, version derivation, and push decisions.
-Fixtures:
-- Fake GitHub context values and a fake git runner with deterministic command
-  outputs.
-Coverage:
-- Release tags publish canonical release images.
-- Master pushes publish development images unless HEAD is already release-tagged.
-- Pull requests receive non-publishing build tags.
-- Missing required release history fails explicitly.
-Boundaries:
-- Does not use real git history, Docker, GHCR, or GitHub Actions.
-"""
+"""Public image identity and push-policy decisions."""
 
 import unittest
 

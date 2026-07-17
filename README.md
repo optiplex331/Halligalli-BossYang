@@ -47,7 +47,7 @@ HALLIGALLI_TEST_REDIS_URL=redis://localhost:6379/0 pnpm run test  # with an isol
 pnpm run typecheck
 pnpm run build
 pnpm run check
-pnpm run test:e2e    # after pnpm run dev; includes 4/2, 8/2, 8/8, reconnect, duplicate-entry, and sequential-room journeys
+pnpm run test:e2e    # after pnpm run dev; one sequential-room Paired Runtime journey
 ```
 
 ## Current game behavior
@@ -87,7 +87,7 @@ contracts/
 ├── fixtures/               # Versioned language-neutral behavior data
 └── openapi.json            # Pydantic-generated REST contract snapshot
 tests/
-└── e2e/                    # Cross-Web/API Compose journeys
+└── e2e/                    # Cross-Web/API Compose journey
 compose.yaml                # Web + API + Redis local development stack
 ```
 

@@ -1,9 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { LEGACY_PROGRESS_KEYS } from "../game/constants.js";
 import {
   loadSettings,
   normalizeSettings,
-  removeLegacyProgress,
   saveSettings,
 } from "../game/persistence.js";
 
@@ -26,8 +24,8 @@ describe("Local Preferences", () => {
     globalThis.window = originalWindow;
   });
 
-  it("accepts Table Seat counts and ignores the retired player count", () => {
-    expect(normalizeSettings({ tableSeatCount: 8, playerCount: 6, language: "zh", soundEnabled: false })).toEqual({
+  it("normalizes Local Preferences at their persistence boundary", () => {
+    expect(normalizeSettings({ tableSeatCount: 8, language: "zh", soundEnabled: false })).toEqual({
       difficulty: "normal",
       duration: 60,
       tableSeatCount: 8,
@@ -48,14 +46,4 @@ describe("Local Preferences", () => {
     });
   });
 
-  it("removes every legacy progress record without touching settings", () => {
-    saveSettings({ difficulty: "easy", duration: 45, tableSeatCount: 4, language: "zh", soundEnabled: false });
-    for (const key of LEGACY_PROGRESS_KEYS) {
-      store.set(key, "legacy");
-    }
-
-    removeLegacyProgress();
-
-    expect([...store.keys()]).toEqual(["halligalli_settings"]);
-  });
 });
