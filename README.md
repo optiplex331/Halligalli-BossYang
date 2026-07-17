@@ -8,11 +8,19 @@ Halligalli Arena is a bilingual exact-five card-reaction game. The current
 product slice delivers the browser-local Single-Player Path plus a FastAPI/Redis
 authoritative multiplayer match on four through eight Table Seats.
 
+[Play the live demo](https://play.halligalli.games)
+
 It is a Product Monorepo with two application owners. The Web application keeps
 all active round state in memory and preserves only normalized presentation
 preferences in browser storage. The API owns ephemeral Redis room state and
 Room Configuration, Seat Occupancy, ready/start/turn/bell/result path, shared
 scoring ledger, and stable Seat Indexes.
+
+## DevOps
+
+The project publishes paired Web/API releases and promotes them independently
+to Container Apps and AKS. See [DEVOPS.md](DEVOPS.md) for the two-minute
+architecture and delivery overview.
 
 ## Local development
 
@@ -39,7 +47,7 @@ HALLIGALLI_TEST_REDIS_URL=redis://localhost:6379/0 pnpm run test  # with an isol
 pnpm run typecheck
 pnpm run build
 pnpm run check
-pnpm run test:e2e    # after pnpm run dev; includes 4/2, 8/2, 8/8, reconnect, duplicate-entry, and sequential-room journeys
+pnpm run test:e2e    # after pnpm run dev; one sequential-room Paired Runtime journey
 ```
 
 ## Current game behavior
@@ -58,9 +66,6 @@ pnpm run test:e2e    # after pnpm run dev; includes 4/2, 8/2, 8/8, reconnect, du
   keyboard focus, 44 px mobile controls, and reduced-motion coverage.
 - Per-transition score floor and score-breakdown ledger, so absorbed penalties
   never become hidden debt.
-
-The release characterization and exact fixture handoff are in
-[docs/baselines/v0.6.0-behavior-contract.md](docs/baselines/v0.6.0-behavior-contract.md).
 
 ## Storage and privacy
 
@@ -82,7 +87,7 @@ contracts/
 ├── fixtures/               # Versioned language-neutral behavior data
 └── openapi.json            # Pydantic-generated REST contract snapshot
 tests/
-└── e2e/                    # Cross-Web/API Compose journeys
+└── e2e/                    # Cross-Web/API Compose journey
 compose.yaml                # Web + API + Redis local development stack
 ```
 
@@ -94,23 +99,3 @@ The Web image installs its build dependencies, including React and ReactDOM,
 before Vite produces `dist/`. Its nginx runtime contains only that generated
 static output, so these browser-bundle packages are development dependencies
 rather than Node.js runtime dependencies.
-
-## Boundaries
-
-- React, Vite, TypeScript, and plain CSS belong to `apps/web`.
-- FastAPI, Redis, REST, and native WebSocket work belong to `apps/api`.
-- The old Node.js/socket.io standalone runtime is not retained as a fallback.
-- Cloud desired state, Helm charts, Terraform, credentials, and operations stay
-  in the infrastructure repository.
-
-## Paired releases
-
-A Release Tag builds `halligalli-web` and `halligalli-api` from the same commit.
-The release workflow scans both non-root images, checks their shared runtime
-identity through a local paired smoke, then publishes one schema-V2
-`release-attestation.json` containing both immutable digests. The product
-repository never selects Infrastructure GitOps state or carries an
-Infrastructure write credential.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for local contribution guidance and
-[SECURITY.md](SECURITY.md) for security reporting.

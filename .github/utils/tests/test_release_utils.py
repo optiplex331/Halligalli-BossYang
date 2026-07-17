@@ -1,16 +1,4 @@
-"""Test shared release utility helper behavior.
-
-Purpose:
-- Protect health identity validation and GitHub step-output formatting.
-Fixtures:
-- In-memory JSON payloads, expected identity dictionaries, and output mappings.
-Coverage:
-- Accept matching /health identity.
-- Reject mismatched release identity.
-- Format GitHub outputs without writing when no output path is provided.
-Boundaries:
-- Does not read workflow files, call GitHub Actions, or require pnpm install.
-"""
+"""Public input/output contracts for release utilities."""
 
 import unittest
 
@@ -22,9 +10,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from release_utils import (  # noqa: E402
     append_github_outputs,
 )
-from release_attestation import (  # noqa: E402
-    ReleaseAttestationError,
-    build_release_attestation,
+from paired_release_manifest import (  # noqa: E402
+    PairedReleaseManifestError,
+    build_paired_release_manifest,
 )
 from release_asset import ReleaseAssetError, assess_release_asset  # noqa: E402
 from paired_smoke import PairedSmokeError, validate_paired_runtime  # noqa: E402
@@ -37,9 +25,9 @@ class ReleaseUtilsTest(unittest.TestCase):
             ["version=0.2.0", "commit_sha=abc123"],
         )
 
-    def test_builds_a_schema_v2_paired_release_attestation(self):
+    def test_builds_a_schema_v2_paired_release_manifest(self):
         self.assertEqual(
-            build_release_attestation(
+            build_paired_release_manifest(
                 tag="v1.2.3",
                 commit="a" * 40,
                 web_image="ghcr.io/example/halligalli-web:1.2.3",
@@ -68,8 +56,8 @@ class ReleaseUtilsTest(unittest.TestCase):
         )
 
     def test_rejects_non_release_or_mutable_attestation_inputs(self):
-        with self.assertRaisesRegex(ReleaseAttestationError, "formal release tag"):
-            build_release_attestation(
+        with self.assertRaisesRegex(PairedReleaseManifestError, "formal release tag"):
+            build_paired_release_manifest(
                 tag="pr-abcdef0",
                 commit="a" * 40,
                 web_image="ghcr.io/example/halligalli-web:pr-abcdef0",
@@ -79,8 +67,8 @@ class ReleaseUtilsTest(unittest.TestCase):
             )
 
     def test_rejects_partial_or_mixed_pair_attestation(self):
-        with self.assertRaisesRegex(ReleaseAttestationError, "both Web and API"):
-            build_release_attestation(
+        with self.assertRaisesRegex(PairedReleaseManifestError, "both Web and API"):
+            build_paired_release_manifest(
                 tag="v1.2.3",
                 commit="a" * 40,
                 web_image="ghcr.io/example/halligalli-web:1.2.3",
@@ -90,8 +78,8 @@ class ReleaseUtilsTest(unittest.TestCase):
             )
 
     def test_rejects_mixed_image_versions(self):
-        with self.assertRaisesRegex(ReleaseAttestationError, "Image tags"):
-            build_release_attestation(
+        with self.assertRaisesRegex(PairedReleaseManifestError, "Image tags"):
+            build_paired_release_manifest(
                 tag="v1.2.3",
                 commit="a" * 40,
                 web_image="ghcr.io/example/halligalli-web:1.2.3",

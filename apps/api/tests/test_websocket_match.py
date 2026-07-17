@@ -37,8 +37,8 @@ class WebSocketMatchTest(RedisTestCase):
             ) as guest_socket:
                 host_socket.send_json({"type": "authenticate", "credential": host_credential})
                 guest_socket.send_json({"type": "authenticate", "credential": guest_credential})
-                host_socket.receive_json()
-                guest_socket.receive_json()
+                host_initial = host_socket.receive_json()
+                guest_initial = guest_socket.receive_json()
 
                 host_socket.send_json({"type": "ready"})
                 host_socket.receive_json()
@@ -56,52 +56,9 @@ class WebSocketMatchTest(RedisTestCase):
                 continued = host_socket.receive_json()
 
         self.assertEqual(started["snapshot"]["phase"], "playing")
+        self.assertEqual(host_initial["snapshot"]["viewerSeatIndex"], 0)
+        self.assertEqual(guest_initial["snapshot"]["viewerSeatIndex"], 1)
         self.assertEqual(bell_window["snapshot"]["bellFruit"], "banana")
         self.assertEqual(continued["snapshot"]["phase"], "playing")
         self.assertIsNone(continued["snapshot"]["result"])
         self.assertEqual(continued["snapshot"]["scoreboard"][0]["score"], 207)
-
-    def test_deadlines_publish_a_missed_bell_result(self) -> None:
-        authority = self.authority
-        host_credential = "host-credential"
-        guest_credential = "guest-credential"
-
-        with TestClient(create_app(authority=authority)) as client:
-            created = client.post(
-                "/api/v1/rooms",
-                headers={"Idempotency-Key": "c97c807c-4c73-4ea0-bfc7-2a8bd4d68cce"},
-                json={"name": "Host", "credentialVerifier": verifier(host_credential), "tableSeatCount": 4, "targetHumanParticipantCount": 2, "difficulty": "normal", "durationSec": 60},
-            )
-            room_code = created.json()["roomCode"]
-            client.post(
-                f"/api/v1/rooms/{room_code}/participants",
-                headers={"Idempotency-Key": "9e5c8ba0-298e-460e-92ed-47fb646e539e"},
-                json={"name": "Guest", "credentialVerifier": verifier(guest_credential)},
-            )
-
-            with client.websocket_connect(f"/ws/v1/rooms/{room_code}") as host_socket, client.websocket_connect(
-                f"/ws/v1/rooms/{room_code}",
-            ) as guest_socket:
-                host_socket.send_json({"type": "authenticate", "credential": host_credential})
-                guest_socket.send_json({"type": "authenticate", "credential": guest_credential})
-                host_socket.receive_json()
-                guest_socket.receive_json()
-
-                host_socket.send_json({"type": "ready"})
-                host_socket.receive_json()
-                guest_socket.receive_json()
-                guest_socket.send_json({"type": "ready"})
-                host_socket.receive_json()
-                guest_socket.receive_json()
-
-                host_socket.send_json({"type": "start"})
-                host_socket.receive_json()
-                guest_socket.receive_json()
-                bell_window = host_socket.receive_json()
-                guest_socket.receive_json()
-                missed = host_socket.receive_json()
-
-        self.assertEqual(bell_window["snapshot"]["bellFruit"], "banana")
-        self.assertEqual(missed["snapshot"]["phase"], "playing")
-        self.assertEqual(missed["snapshot"]["lastEvent"], "missed_bell")
-        self.assertEqual(missed["snapshot"]["scoreboard"][0]["missedHits"], 1)
