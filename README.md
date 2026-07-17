@@ -8,6 +8,8 @@ Halligalli Arena is a bilingual exact-five card-reaction game. The current
 product slice delivers the browser-local Single-Player Path plus a FastAPI/Redis
 authoritative multiplayer match on four through eight Table Seats.
 
+[Play the live demo](https://play.halligalli.games)
+
 It is a Product Monorepo with two application owners. The Web application keeps
 all active round state in memory and preserves only normalized presentation
 preferences in browser storage. The API owns ephemeral Redis room state and
