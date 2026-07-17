@@ -14,6 +14,12 @@ preferences in browser storage. The API owns ephemeral Redis room state and
 Room Configuration, Seat Occupancy, ready/start/turn/bell/result path, shared
 scoring ledger, and stable Seat Indexes.
 
+## DevOps
+
+The project publishes paired Web/API releases and promotes them independently
+to Container Apps and AKS. See [DEVOPS.md](DEVOPS.md) for the two-minute
+architecture and delivery overview.
+
 ## Local development
 
 ```bash
@@ -59,9 +65,6 @@ pnpm run test:e2e    # after pnpm run dev; includes 4/2, 8/2, 8/8, reconnect, du
 - Per-transition score floor and score-breakdown ledger, so absorbed penalties
   never become hidden debt.
 
-The release characterization and exact fixture handoff are in
-[docs/baselines/v0.6.0-behavior-contract.md](docs/baselines/v0.6.0-behavior-contract.md).
-
 ## Storage and privacy
 
 `halligalli_settings` is the only Halligalli browser key retained by this
@@ -94,23 +97,3 @@ The Web image installs its build dependencies, including React and ReactDOM,
 before Vite produces `dist/`. Its nginx runtime contains only that generated
 static output, so these browser-bundle packages are development dependencies
 rather than Node.js runtime dependencies.
-
-## Boundaries
-
-- React, Vite, TypeScript, and plain CSS belong to `apps/web`.
-- FastAPI, Redis, REST, and native WebSocket work belong to `apps/api`.
-- The old Node.js/socket.io standalone runtime is not retained as a fallback.
-- Cloud desired state, Helm charts, Terraform, credentials, and operations stay
-  in the infrastructure repository.
-
-## Paired releases
-
-A Release Tag builds `halligalli-web` and `halligalli-api` from the same commit.
-The release workflow scans both non-root images, checks their shared runtime
-identity through a local paired smoke, then publishes one schema-V2
-`release-attestation.json` containing both immutable digests. The product
-repository never selects Infrastructure GitOps state or carries an
-Infrastructure write credential.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for local contribution guidance and
-[SECURITY.md](SECURITY.md) for security reporting.
