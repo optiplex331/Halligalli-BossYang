@@ -1,16 +1,4 @@
-"""Test shared release utility helper behavior.
-
-Purpose:
-- Protect health identity validation and GitHub step-output formatting.
-Fixtures:
-- In-memory JSON payloads, expected identity dictionaries, and output mappings.
-Coverage:
-- Accept matching /health identity.
-- Reject mismatched release identity.
-- Format GitHub outputs without writing when no output path is provided.
-Boundaries:
-- Does not read workflow files, call GitHub Actions, or require pnpm install.
-"""
+"""Public input/output contracts for release utilities."""
 
 import unittest
 

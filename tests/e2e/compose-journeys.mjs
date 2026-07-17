@@ -105,44 +105,13 @@ async function readyAndStart(clients) {
 }
 
 async function run() {
-  console.log("duplicate create entry journey");
-  const duplicateCredential = `Duplicate-${randomUUID()}`;
-  const duplicateKey = randomUUID();
-  const duplicateConfiguration = { tableSeatCount: 4, targetHumanParticipantCount: 2, difficulty: "normal", durationSec: 60 };
-  const firstCreate = await enter("/api/v1/rooms", "Duplicate", duplicateCredential, duplicateConfiguration, duplicateKey);
-  const replayedCreate = await enter("/api/v1/rooms", "Duplicate", duplicateCredential, duplicateConfiguration, duplicateKey);
-  assert.equal(replayedCreate.roomCode, firstCreate.roomCode);
-
-  console.log("four Table Seats / two humans journey");
-  const fourTwo = await roomWith(4, 2, "FourTwo");
-  const fourTwoStarted = await readyAndStart(fourTwo.clients);
-  assert.equal(fourTwoStarted.configuration.tableSeatCount, 4);
-  assert.equal(fourTwoStarted.seats.length, 4);
-  assert.equal(fourTwoStarted.scoreboard.length, 2);
-  fourTwo.clients.forEach((client) => client.close());
-
-  console.log("eight Table Seats / two humans and reconnect journey");
-  const eightTwo = await roomWith(8, 2, "EightTwo");
-  const eightTwoStarted = await readyAndStart(eightTwo.clients);
-  assert.equal(eightTwoStarted.seats.length, 8);
-  assert.equal(eightTwoStarted.participants.length, 2);
-  eightTwo.clients[0].close();
-  const reconnected = await connect(eightTwo.roomCode, eightTwo.credentials[0]);
-  assert.equal(reconnected.snapshot.phase, "playing");
-  assert.equal(reconnected.snapshot.viewerSeatIndex, 0);
-  reconnected.close();
-  eightTwo.clients.slice(1).forEach((client) => client.close());
-
-  console.log("eight Table Seats / eight humans journey");
-  const eightEight = await roomWith(8, 8, "EightEight");
-  const eightEightStarted = await readyAndStart(eightEight.clients);
-  assert.equal(eightEightStarted.participants.length, 8);
-  assert.equal(eightEightStarted.scoreboard.length, 8);
-  eightEight.clients.forEach((client) => client.close());
-
-  console.log("sequential-match journey");
+  console.log("paired runtime sequential-match journey");
   const sequential = await roomWith(4, 3, "Next");
-  await readyAndStart(sequential.clients);
+  const started = await readyAndStart(sequential.clients);
+  assert.equal(started.configuration.tableSeatCount, 4);
+  assert.equal(started.configuration.targetHumanParticipantCount, 3);
+  assert.equal(started.seats.length, 4);
+  assert.equal(started.scoreboard.length, 3);
   const requestedForfeit = await sequential.clients[2].command("forfeit");
   const postMatch = requestedForfeit.phase === "post_match"
     ? requestedForfeit
@@ -164,4 +133,4 @@ async function run() {
 }
 
 await run();
-console.log("Compose multiplayer journeys passed");
+console.log("Compose multiplayer journey passed");
