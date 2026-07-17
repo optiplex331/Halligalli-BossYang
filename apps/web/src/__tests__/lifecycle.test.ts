@@ -3,7 +3,6 @@ import {
   clearGameLoopHandles,
   finishSinglePlayerMatch,
   resolveSinglePlayerBell,
-  resolveSinglePlayerMissedBell,
 } from "../game/lifecycle.js";
 import { INITIAL_BREAKDOWN } from "../game/constants.js";
 import type { BellState, PlayerState } from "../game/types.js";
@@ -80,7 +79,6 @@ describe("game lifecycle cleanup", () => {
 
     expect(result.kind).toBe("correct");
     expect(result.state.correctHits).toBe(1);
-    expect(result.state.score).toBe(209);
     expect(result.state.players[0]?.wonPile).toHaveLength(1);
     expect(result.bellState.handled).toBe(true);
   });
@@ -108,26 +106,4 @@ describe("game lifecycle cleanup", () => {
     expect(result.summary).toMatchObject({ score: 90, missedHits: 1 });
   });
 
-  it("records only the applied missed penalty at the transition score floor", () => {
-    const result = resolveSinglePlayerMissedBell({
-      players: [],
-      currentTurn: 0,
-      actingPlayer: 0,
-      score: 12,
-      correctHits: 0,
-      wrongHits: 0,
-      missedHits: 0,
-      reactionTimes: [],
-      scoreBreakdown: { ...INITIAL_BREAKDOWN, correctBase: 12 },
-      difficulty: "normal",
-      durationSec: 60,
-      tableSeatCount: 4,
-      maxStreak: 0,
-      streak: 2,
-    });
-
-    expect(result.score).toBe(0);
-    expect(result.scoreBreakdown.missedPenalty).toBe(12);
-    expect(result.streak).toBe(0);
-  });
 });

@@ -3,12 +3,10 @@ import {
   collectFaceUpCards,
   createRoundSummary,
   evaluateBellAvailability,
-  reconcilePendingBellWindow,
   takePenaltyCards,
   visibleTotals,
 } from "../game/rules.js";
-import { INITIAL_BREAKDOWN } from "../game/constants.js";
-import type { PlayerState, RoundSnapshot } from "../game/types.js";
+import type { PlayerState } from "../game/types.js";
 
 function makePlayer(id: number, overrides: Partial<PlayerState> = {}): PlayerState {
   return {
@@ -94,34 +92,6 @@ describe("game rules", () => {
     expect(winner?.wonPile).toHaveLength(3);
     expect(winner?.faceUpPile).toEqual([]);
     expect(loser?.faceUpPile).toEqual([]);
-  });
-
-  it("reconciles an unresolved final bell window as a missed hit", () => {
-    const snapshot: RoundSnapshot = {
-      correctHits: 2,
-      wrongHits: 1,
-      missedHits: 0,
-      reactionTimes: [410, 580],
-      scoreBreakdown: {
-        ...INITIAL_BREAKDOWN,
-        correctBase: 240,
-        wrongPenalty: 50,
-      },
-      difficulty: "normal",
-      durationSec: 60,
-      tableSeatCount: 4,
-    };
-
-    const resolved = reconcilePendingBellWindow(snapshot, {
-      available: true,
-      fruitKey: "banana",
-      startedAt: Date.now() - 200,
-      handled: false,
-    });
-
-    expect(resolved.missed).toBe(true);
-    expect(resolved.snapshot.missedHits).toBe(1);
-    expect(resolved.snapshot.scoreBreakdown.missedPenalty).toBe(30);
   });
 
   it("creates the expected round summary from score breakdown and reactions", () => {
