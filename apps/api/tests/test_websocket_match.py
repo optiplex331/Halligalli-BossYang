@@ -37,8 +37,8 @@ class WebSocketMatchTest(RedisTestCase):
             ) as guest_socket:
                 host_socket.send_json({"type": "authenticate", "credential": host_credential})
                 guest_socket.send_json({"type": "authenticate", "credential": guest_credential})
-                host_socket.receive_json()
-                guest_socket.receive_json()
+                host_initial = host_socket.receive_json()
+                guest_initial = guest_socket.receive_json()
 
                 host_socket.send_json({"type": "ready"})
                 host_socket.receive_json()
@@ -56,6 +56,8 @@ class WebSocketMatchTest(RedisTestCase):
                 continued = host_socket.receive_json()
 
         self.assertEqual(started["snapshot"]["phase"], "playing")
+        self.assertEqual(host_initial["snapshot"]["viewerSeatIndex"], 0)
+        self.assertEqual(guest_initial["snapshot"]["viewerSeatIndex"], 1)
         self.assertEqual(bell_window["snapshot"]["bellFruit"], "banana")
         self.assertEqual(continued["snapshot"]["phase"], "playing")
         self.assertIsNone(continued["snapshot"]["result"])
