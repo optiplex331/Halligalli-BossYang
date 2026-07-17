@@ -1,4 +1,4 @@
-"""Static contracts for formal Release Attestation publication."""
+"""Static contracts for formal Paired Release Manifest publication."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "container.yml"
 class ContainerWorkflowTest(unittest.TestCase):
     def test_release_asset_write_permission_is_isolated_to_tag_publication(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
-        build_job, publish_job = workflow.split("  publish-release-attestation:", maxsplit=1)
+        build_job, publish_job = workflow.split("  publish-paired-release-manifest:", maxsplit=1)
 
         self.assertIn("contents: read", build_job)
         self.assertIn("packages: write", build_job)
@@ -21,7 +21,7 @@ class ContainerWorkflowTest(unittest.TestCase):
         self.assertIn("github.ref_type == 'tag'", publish_job)
         self.assertIn("contents: write", publish_job)
 
-    def test_paired_images_are_scanned_and_smoked_before_attestation(self) -> None:
+    def test_paired_images_are_scanned_and_smoked_before_manifest(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
         self.assertIn("apps/web/Dockerfile", workflow)
@@ -41,7 +41,7 @@ class ContainerWorkflowTest(unittest.TestCase):
         self.assertIn("-e HALLIGALLI_RELEASE_VERSION=runtime-override", workflow)
         self.assertIn("-e HALLIGALLI_RELEASE_COMMIT=runtime-override", workflow)
 
-    def test_both_release_images_receive_provenance_before_pair_attestation(self) -> None:
+    def test_both_release_images_receive_provenance_before_pair_manifest(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
         self.assertIn("attestations: write", workflow)
@@ -53,13 +53,14 @@ class ContainerWorkflowTest(unittest.TestCase):
         self.assertIn("subject-digest: ${{ steps.push.outputs.api_digest }}", workflow)
         self.assertLess(
             workflow.index("Attest API release image"),
-            workflow.index("Write release attestation"),
+            workflow.index("Write paired release manifest"),
         )
 
     def test_release_asset_publication_never_clobbers_existing_evidence(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
         self.assertIn("release_asset.py", workflow)
+        self.assertIn("paired-release-manifest.json", workflow)
         self.assertIn("gh release upload", workflow)
         self.assertNotIn("--clobber", workflow)
 

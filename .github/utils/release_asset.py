@@ -1,4 +1,4 @@
-"""Fail-closed publication decisions for a formal Release Attestation asset."""
+"""Fail-closed publication decisions for a Paired Release Manifest asset."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from release_utils import append_github_outputs
 
 
 class ReleaseAssetError(ValueError):
-    """Raised when an existing Release asset conflicts with new provenance."""
+    """Raised when an existing Release asset conflicts with the candidate manifest."""
 
 
 def assess_release_asset(candidate: bytes, existing: bytes | None) -> dict[str, str]:
@@ -24,7 +24,7 @@ def assess_release_asset(candidate: bytes, existing: bytes | None) -> dict[str, 
         return {"action": "upload", "sha256": candidate_digest}
     if hashlib.sha256(existing).hexdigest() != candidate_digest:
         raise ReleaseAssetError(
-            "release-attestation.json already exists with different contents"
+            "paired-release-manifest.json already exists with different contents"
         )
     return {"action": "reuse", "sha256": candidate_digest}
 
