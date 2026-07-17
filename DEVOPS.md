@@ -30,7 +30,7 @@ flowchart LR
 | Paired supply chain | One Release Tag builds and scans non-root Web/API images from one commit, records per-image GitHub provenance and publishes a manifest binding both immutable digests. | [container workflow](.github/workflows/container.yml), [manifest builder](.github/utils/paired_release_manifest.py) |
 | Independent delivery | Container Apps and AKS consume the same paired release through separate target-scoped promotion lanes; one promotion cannot change both targets. | [Infrastructure repository](https://github.com/optiplex331/Halligalli-infrastructure) |
 | Observability | The API exposes internal readiness and Prometheus metrics, emits redacted structured telemetry and OTLP traces, and local Compose connects OpenTelemetry Collector to Tempo. | [API surfaces](apps/api/src/halligalli_api/app.py), [telemetry](apps/api/src/halligalli_api/observability.py), [local stack](compose.yaml) |
-| Protected rollback | Desired state is digest-pinned and Web/API rollback is always paired. Deployment credentials are isolated in target-specific protected GitHub Environments and released after reviewer approval. | [Infrastructure repository](https://github.com/optiplex331/Halligalli-infrastructure) |
+| Protected rollback | Desired state is digest-pinned and Web/API rollback is always paired. Container Apps uses an explicit local operator deployment after PR review; AKS retains its target-owned GitOps path. | [Infrastructure repository](https://github.com/optiplex331/Halligalli-infrastructure) |
 
 ## Delivery controls
 
@@ -42,8 +42,10 @@ flowchart LR
   workflows propose target-owned desired-state changes for review.
 - Container Apps uses candidate revision validation before traffic switching;
   AKS uses digest-pinned Helm values reconciled by Argo CD.
-- Azure deployment credentials stay outside Git in target-specific protected
-  GitHub Environments. Workflow permissions are read-only unless a focused job
-  needs narrowly scoped write access.
+- Container Apps deployment is deliberately not executed by GitHub Actions.
+  After PR review, the operator signs in locally with Azure CLI and runs the
+  revision-safe deployment script; no Azure credential is stored in GitHub.
+- Workflow permissions are read-only unless a focused promotion job needs
+  narrowly scoped repository write access.
 - Readiness, public monitoring and deployment evidence are separate signals;
   none is treated as a substitute for the others.
