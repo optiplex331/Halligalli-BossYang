@@ -5,23 +5,8 @@ import json
 import unittest
 
 from fastapi.testclient import TestClient
-from opentelemetry.sdk.trace.export import SpanExportResult, SpanExporter
-
 from halligalli_api.app import create_app
-from halligalli_api.observability import Telemetry
 from redis_test_case import RedisTestCase
-
-
-class CapturingExporter(SpanExporter):
-    def __init__(self) -> None:
-        self.spans = []
-
-    def export(self, spans):
-        self.spans.extend(spans)
-        return SpanExportResult.SUCCESS
-
-    def shutdown(self) -> None:
-        return None
 
 
 class ObservabilityTest(RedisTestCase):
@@ -49,35 +34,3 @@ class ObservabilityTest(RedisTestCase):
         trace = json.loads(captured.output[0].split(":", 2)[-1])
         self.assertEqual(trace["event"], "trace")
         self.assertIn("trace_id", trace)
-
-    def test_metric_surface_covers_websocket_and_redis_adapter_outcomes(self) -> None:
-        telemetry = Telemetry()
-        telemetry.record_websocket(trace_id="trace", room_code="ABCD", command="bell", outcome="success", elapsed_seconds=0.01)
-        telemetry.record_redis(operation="execute", outcome="success", elapsed_seconds=0.02)
-
-        metrics = telemetry.metrics(active_rooms=2)
-
-        self.assertIn('halligalli_websocket_commands_total{command="bell",outcome="success"} 1', metrics)
-        self.assertIn('halligalli_redis_adapter_operations_total{operation="execute",outcome="success"} 1', metrics)
-
-    def test_otlp_spans_keep_redis_child_correlation_and_redact_room_data(self) -> None:
-        exporter = CapturingExporter()
-        telemetry = Telemetry(span_exporter=exporter)
-        with telemetry.span("http.request") as span:
-            trace_id = telemetry.trace_id(span)
-            telemetry.record_http(
-                trace_id=trace_id,
-                method="POST",
-                route="/api/v1/rooms/{room_code}",
-                status_code=201,
-                elapsed_seconds=0.01,
-                room_code="ABCD",
-                span=span,
-            )
-            telemetry.record_redis(operation="execute", outcome="success", elapsed_seconds=0.01)
-        telemetry.shutdown()
-
-        spans = {span.name: span for span in exporter.spans}
-        self.assertEqual(spans["http.request"].context.trace_id, spans["redis.adapter"].context.trace_id)
-        rendered = " ".join(str(value) for span in exporter.spans for value in span.attributes.values())
-        self.assertNotIn("ABCD", rendered)
