@@ -9,6 +9,7 @@ export default defineConfig({
     exclude: [
       ...configDefaults.exclude,
       "../../.github/utils/tests/test_*.py",
+      "tests/layout.spec.ts",
     ],
   },
   server: {

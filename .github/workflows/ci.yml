@@ -71,6 +71,10 @@ jobs:
         if: steps.changes.outputs.product_checks_required == 'true'
         run: pnpm --dir apps/web run test
 
+      - name: Run Web layout tests
+        if: steps.changes.outputs.product_checks_required == 'true'
+        run: pnpm --dir apps/web run test:layout
+
       - name: Run Redis-backed API integration tests
         if: steps.changes.outputs.product_checks_required == 'true'
         env:

@@ -47,6 +47,7 @@ HALLIGALLI_TEST_REDIS_URL=redis://localhost:6379/0 pnpm run test  # with an isol
 pnpm run typecheck
 pnpm run build
 pnpm run check
+pnpm --dir apps/web run test:layout  # real-Chrome responsive game-flow checks
 pnpm run test:e2e    # after pnpm run dev; one sequential-room Paired Runtime journey
 ```
 
@@ -55,6 +56,8 @@ pnpm run test:e2e    # after pnpm run dev; one sequential-room Paired Runtime jo
 - 72-card Halligalli inventory: banana, strawberry, lemon, and grape.
 - The Single-Player Path uses four through eight Table Seats, exactly one Human
   Participant, and automatic Neutral Seats with clockwise flips.
+- Responsive ring and grid layouts keep every Table Seat card fully visible
+  without card or Bell overlap from the 320 px mobile boundary upward.
 - Multiplayer Room Configuration independently selects four through eight Table
   Seats and two through the selected seat count Human Participants. Neutral
   Seats reveal and affect Bell totals but never ring or score.
