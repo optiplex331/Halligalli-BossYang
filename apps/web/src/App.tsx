@@ -92,7 +92,7 @@ const COPY = {
     bellSuccess: "抢铃成功，收走场上 {count} 张牌，然后由你重新开始出牌。",
     bellPenalty: "错拍了，罚出 {count} 张牌压到你桌面的底部。",
     bellPenaltyNone: "错拍了，但你已经没有可罚出的暗牌了。",
-    penaltyBanner: "惩罚：罚出 {count} 张牌",
+    gameUpdate: "场上提示",
     bossTitle: "Yang哥 Boss",
     bossWatching: "Yang哥正在盯场",
     bossHint: "Boss模式下，Yang哥会在你漏拍后高调开嘲。",
@@ -172,7 +172,7 @@ const COPY = {
     bellSuccess: "Successful ring. You take {count} table cards and start the next round.",
     bellPenalty: "Wrong ring. You pay {count} cards to the bottom of your face-up pile.",
     bellPenaltyNone: "Wrong ring, but you have no hidden cards left to pay.",
-    penaltyBanner: "Penalty: pay {count} cards",
+    gameUpdate: "Table update",
     bossTitle: "Boss Yang",
     bossWatching: "Boss Yang is watching",
     bossHint: "In Boss Mode, Boss Yang goes loud after a missed bell.",
@@ -342,7 +342,6 @@ export default function App() {
   const [countdown, setCountdown] = useState<{ runId: number; value: 3 | 2 | 1 } | null>(null);
   const [activeBellFruit, setActiveBellFruit] = useState<FruitKey | null>(null);
   const [feedback, setFeedback] = useState({ type: "idle" as FeedbackType, message: "" });
-  const [penaltyNotice, setPenaltyNotice] = useState("");
   const [bossTaunt, setBossTaunt] = useState("");
   const [bellPressed, setBellPressed] = useState(false);
   const [latestReveal, setLatestReveal] = useState<{ sequence: number; seatIndex: number } | null>(null);
@@ -359,7 +358,6 @@ export default function App() {
   const revealIntervalRef = useRef<number | null>(null);
   const countdownIntervalRef = useRef<number | null>(null);
   const feedbackTimeoutRef = useRef<number | null>(null);
-  const penaltyTimeoutRef = useRef<number | null>(null);
   const bossTauntTimeoutRef = useRef<number | null>(null);
   const startupTimeoutRef = useRef<number | null>(null);
   const flipTimeoutRef = useRef<number | null>(null);
@@ -409,7 +407,6 @@ export default function App() {
     clearTimer(revealIntervalRef, window.clearInterval);
     clearTimer(countdownIntervalRef, window.clearInterval);
     clearTimer(feedbackTimeoutRef, window.clearTimeout);
-    clearTimer(penaltyTimeoutRef, window.clearTimeout);
     clearTimer(bossTauntTimeoutRef, window.clearTimeout);
     clearTimer(startupTimeoutRef, window.clearTimeout);
     clearTimer(flipTimeoutRef, window.clearTimeout);
@@ -518,7 +515,6 @@ export default function App() {
     setResultSummary(null);
     setSecondsLeft(settings.duration);
     setActiveBellFruit(null);
-    setPenaltyNotice("");
     setBossTaunt("");
     setFeedback({ type: "idle", message: "" });
     setScreen("play");
@@ -564,11 +560,6 @@ export default function App() {
       "error",
       result.penaltyCount ? t("bellPenalty", { count: result.penaltyCount }) : t("bellPenaltyNone"),
     );
-    if (result.penaltyCount) {
-      setPenaltyNotice(t("penaltyBanner", { count: result.penaltyCount }));
-      clearTimer(penaltyTimeoutRef, window.clearTimeout);
-      penaltyTimeoutRef.current = window.setTimeout(() => setPenaltyNotice(""), 1_500);
-    }
     playFeedback("penalty");
   }
 
@@ -925,9 +916,18 @@ export default function App() {
               <span className="pill">{t("timeLeft", { seconds: secondsLeft })}</span>
               <button className="ghost-button" disabled={Boolean(countdown)} onClick={finishGame}>{t("endGame")}</button>
             </div>
-            <div className={`feedback ${feedback.type}`} aria-live="polite" aria-atomic="true">{feedback.message}</div>
-            {penaltyNotice && <div className="penalty-banner" aria-live="assertive" aria-atomic="true">{penaltyNotice}</div>}
             <div className={`table-scene players-${settings.tableSeatCount}`}>
+              {feedback.message && (
+                <div
+                  className={`game-feedback ${feedback.type}`}
+                  role="status"
+                  aria-live={feedback.type === "error" ? "assertive" : "polite"}
+                  aria-atomic="true"
+                >
+                  <span className="game-feedback-label">{t("gameUpdate")}</span>
+                  <span className="game-feedback-message">{feedback.message}</span>
+                </div>
+              )}
               <div className="table-felt">
                 <div className="boss-presence"><img className="boss-presence-avatar" src="/yang-boss.png" alt="" /><span>{t("bossWatching")}</span></div>
                 {bossTaunt && <div className="boss-taunt" aria-live="polite" aria-atomic="true">{bossTaunt}</div>}

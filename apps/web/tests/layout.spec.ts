@@ -41,8 +41,20 @@ async function expectCompleteTable(page: Page, tableSeatCount: number): Promise<
   });
 }
 
+async function expectFeedbackClearOfPlayContent(page: Page): Promise<void> {
+  const feedback = await box(page.locator(".game-feedback"));
+  const boss = await box(page.locator(".boss-presence"));
+  expect(overlapArea(feedback, boss)).toBeLessThanOrEqual(1);
+
+  const cards = page.locator(".table-card-shell");
+  for (let index = 0; index < await cards.count(); index += 1) {
+    expect(overlapArea(feedback, await box(cards.nth(index)))).toBeLessThanOrEqual(1);
+  }
+}
+
 test("all Table Seat cards remain complete across responsive table layouts", async ({ page }) => {
   test.setTimeout(120_000);
+  await page.clock.install();
   for (const width of VIEWPORT_WIDTHS) {
     await page.setViewportSize({ width, height: 1000 });
     for (const tableSeatCount of TABLE_SEAT_COUNTS) {
@@ -50,7 +62,9 @@ test("all Table Seat cards remain complete across responsive table layouts", asy
       await page.getByRole("button", { name: "English", exact: true }).click({ force: true });
       await page.getByRole("button", { name: `${tableSeatCount} seats`, exact: true }).click({ force: true });
       await page.getByRole("button", { name: "Start Practice", exact: true }).click({ force: true });
+      await page.clock.fastForward(3_100);
       await expectCompleteTable(page, tableSeatCount);
+      await expectFeedbackClearOfPlayContent(page);
     }
   }
 });
@@ -78,6 +92,7 @@ for (const language of ["en", "zh"] as const) {
     await expect(endRound).toBeDisabled();
     await expect(endRound).toBeEnabled({ timeout: 5_000 });
     await expectCompleteTable(page, 8);
+    await expectFeedbackClearOfPlayContent(page);
     await endRound.click();
     await expect(page.locator(".result-hero")).toBeVisible();
     expect(await documentOverflow()).toBe(0);

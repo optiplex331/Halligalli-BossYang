@@ -26,7 +26,6 @@ describe("game lifecycle cleanup", () => {
       revealIntervalRef: { current: 11 },
       countdownIntervalRef: { current: 12 },
       feedbackTimeoutRef: { current: 21 },
-      penaltyTimeoutRef: { current: 22 },
       bossTauntTimeoutRef: { current: 23 },
       startupTimeoutRef: { current: 24 },
     });
@@ -34,8 +33,8 @@ describe("game lifecycle cleanup", () => {
     expect(clearInterval).toHaveBeenCalledTimes(2);
     expect(clearInterval).toHaveBeenNthCalledWith(1, 11);
     expect(clearInterval).toHaveBeenNthCalledWith(2, 12);
-    expect(clearTimeout).toHaveBeenCalledTimes(4);
-    expect(clearTimeout).toHaveBeenNthCalledWith(4, 24);
+    expect(clearTimeout).toHaveBeenCalledTimes(3);
+    expect(clearTimeout).toHaveBeenNthCalledWith(3, 24);
   });
 
   it("returns a final summary after reconciling a pending bell window", () => {
