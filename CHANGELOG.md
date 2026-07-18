@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.3](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.8.2...v0.8.3) (2026-07-18)
+
+
+### Bug Fixes
+
+* **web:** speed up reveals and float game feedback ([#89](https://github.com/optiplex331/Halligalli-BossYang/issues/89)) ([bd1b6ad](https://github.com/optiplex331/Halligalli-BossYang/commit/bd1b6adcfd23d30584a032ea808611769518f099))
+
 ## [0.8.2](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.8.1...v0.8.2) (2026-07-18)
 
 
