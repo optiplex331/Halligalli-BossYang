@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.8.1...v0.8.2) (2026-07-18)
+
+
+### Bug Fixes
+
+* **web:** rebalance reveal timing ([#87](https://github.com/optiplex331/Halligalli-BossYang/issues/87)) ([74f930f](https://github.com/optiplex331/Halligalli-BossYang/commit/74f930ff4e44d29f0cb6710dbb739ae27fbc2005))
+
 ## [0.8.1](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.8.0...v0.8.1) (2026-07-18)
 
 
