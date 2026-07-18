@@ -40,11 +40,13 @@ flowchart LR
   image pairs with matching provenance and a valid paired manifest.
 - The Product repository has no Infrastructure write credential. Promotion
   workflows propose target-owned desired-state changes for review.
-- Container Apps uses candidate revision validation before traffic switching;
-  AKS uses digest-pinned Helm values reconciled by Argo CD.
+- Container Apps uses Terraform-owned Single revision readiness followed by an
+  immediate read-only public smoke; AKS uses digest-pinned Helm values
+  reconciled by Argo CD.
 - Container Apps deployment is deliberately not executed by GitHub Actions.
   After PR review, the operator signs in locally with Azure CLI and runs the
-  revision-safe deployment script; no Azure credential is stored in GitHub.
+  reviewed saved Terraform plan, explicitly approves apply, and immediately
+  runs the read-only public smoke; no Azure credential is stored in GitHub.
 - Workflow permissions are read-only unless a focused promotion job needs
   narrowly scoped repository write access.
 - Readiness, public monitoring and deployment evidence are separate signals;

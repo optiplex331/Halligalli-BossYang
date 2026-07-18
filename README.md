@@ -46,7 +46,7 @@ Stop the local stack with `pnpm run dev:down`.
 HALLIGALLI_TEST_REDIS_URL=redis://localhost:6379/0 pnpm run test  # with an isolated Redis running
 pnpm run typecheck
 pnpm run build
-pnpm run check
+HALLIGALLI_TEST_REDIS_URL=redis://localhost:6379/0 pnpm run check
 pnpm --dir apps/web run test:layout  # real-Chrome responsive game-flow checks
 pnpm run test:e2e    # after pnpm run dev; one sequential-room Paired Runtime journey
 ```
