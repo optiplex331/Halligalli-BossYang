@@ -30,17 +30,7 @@ async function credentialVerifier(credential: string): Promise<string> {
   return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function backendOrigin(): string {
-  return import.meta.env.VITE_HALLIGALLI_BACKEND_URL ?? "";
-}
-
 function websocketOrigin(): string {
-  const configured = backendOrigin();
-  if (configured) {
-    const url = new URL(configured);
-    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-    return url.origin;
-  }
   return `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
 }
 
@@ -49,7 +39,7 @@ async function readEntry(
   payload: EntryRequest | CreateRoomRequest,
   idempotencyKey: string,
 ): Promise<EntryResult> {
-  const response = await fetch(`${backendOrigin()}${path}`, {
+  const response = await fetch(path, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -65,7 +55,7 @@ async function readEntry(
 }
 
 async function readSnapshot(session: RoomSession): Promise<RoomSnapshot> {
-  const response = await fetch(`${backendOrigin()}/api/v1/rooms/${encodeURIComponent(session.roomCode)}`, {
+  const response = await fetch(`/api/v1/rooms/${encodeURIComponent(session.roomCode)}`, {
     headers: { Authorization: `Bearer ${session.credential}` },
   });
   if (!response.ok) throw new Error("Room snapshot is unavailable");
