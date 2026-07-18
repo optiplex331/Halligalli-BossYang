@@ -554,6 +554,8 @@ h2 {
 /* ── Table Scene ───────────────────────────────────────────── */
 
 .table-scene {
+  --table-min-height: 840px;
+  --seat-radius: 275px;
   --card-width: 176px;
   --card-height: 232px;
   --pip-size: clamp(1.3rem, 2.4vw, 2.35rem);
@@ -583,11 +585,23 @@ h2 {
   --pip-size: clamp(0.95rem, 1.75vw, 1.75rem);
 }
 
+.table-scene.players-7 {
+  --card-width: 128px;
+  --card-height: 169px;
+  --pip-size: clamp(0.9rem, 1.6vw, 1.55rem);
+}
+
+.table-scene.players-8 {
+  --card-width: 116px;
+  --card-height: 154px;
+  --pip-size: clamp(0.82rem, 1.45vw, 1.4rem);
+}
+
 /* ── Table Felt ────────────────────────────────────────────── */
 
 .table-felt {
   position: relative;
-  min-height: 720px;
+  min-height: var(--table-min-height);
   padding: 32px 24px;
   border-radius: var(--r-xl);
   background:
@@ -604,7 +618,7 @@ h2 {
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%) rotate(var(--seat-angle)) translateY(-275px) rotate(calc(-1 * var(--seat-angle)));
+  transform: translate(-50%, -50%) rotate(var(--seat-angle)) translateY(calc(-1 * var(--seat-radius))) rotate(calc(-1 * var(--seat-angle)));
 }
 
 .center-bell {
@@ -1551,6 +1565,8 @@ h2 {
 }
 
 .room-entry-controls select {
+  min-width: 0;
+  width: 100%;
   min-height: 44px;
   padding: 0 12px;
   border: 1px solid var(--border-1);
@@ -1692,6 +1708,17 @@ h2 {
 
   .multiplayer-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .room-entry-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .room-entry-controls > .primary-button,
+  .room-entry-controls > .ghost-button {
+    width: 100%;
   }
 }
 
@@ -2199,6 +2226,7 @@ h2 {
   }
 
   .table-scene {
+    --seat-radius: 230px;
     --card-width: 148px;
     --card-height: 198px;
     --pip-size: clamp(1rem, 2vw, 1.8rem);
@@ -2211,8 +2239,8 @@ h2 {
   }
 
   .center-bell {
-    width: 180px;
-    height: 180px;
+    width: 158px;
+    height: 158px;
   }
 
   .boss-taunt {
@@ -2346,7 +2374,9 @@ h2 {
 
   .primary-button,
   .ghost-button,
-  .chip {
-    min-height: 44px;
+  .chip,
+  .room-entry-controls input,
+  .room-entry-controls select {
+    min-height: 46px;
   }
 }

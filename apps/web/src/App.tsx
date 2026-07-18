@@ -923,7 +923,7 @@ export default function App() {
             {countdown && <div className="countdown-overlay" role="status" aria-live="assertive" aria-atomic="true"><span key={`${countdown.runId}-${countdown.value}`} className="countdown-number" data-countdown-run={countdown.runId} data-countdown-value={countdown.value}>{countdown.value}</span></div>}
             <div className="play-topbar minimal">
               <span className="pill">{t("timeLeft", { seconds: secondsLeft })}</span>
-              <button className="ghost-button" onClick={finishGame}>{t("endGame")}</button>
+              <button className="ghost-button" disabled={Boolean(countdown)} onClick={finishGame}>{t("endGame")}</button>
             </div>
             <div className={`feedback ${feedback.type}`} aria-live="polite" aria-atomic="true">{feedback.message}</div>
             {penaltyNotice && <div className="penalty-banner" aria-live="assertive" aria-atomic="true">{penaltyNotice}</div>}
