@@ -165,7 +165,6 @@ interface GameLoopHandles {
   revealIntervalRef: TimerRef;
   countdownIntervalRef: TimerRef;
   feedbackTimeoutRef: TimerRef;
-  penaltyTimeoutRef: TimerRef;
   bossTauntTimeoutRef: TimerRef;
   startupTimeoutRef: TimerRef;
 }
@@ -187,7 +186,6 @@ export function clearGameLoopHandles(handles: GameLoopHandles): void {
     revealIntervalRef,
     countdownIntervalRef,
     feedbackTimeoutRef,
-    penaltyTimeoutRef,
     bossTauntTimeoutRef,
     startupTimeoutRef,
   } = handles;
@@ -195,7 +193,6 @@ export function clearGameLoopHandles(handles: GameLoopHandles): void {
   clearIntervalRef(revealIntervalRef);
   clearIntervalRef(countdownIntervalRef);
   clearTimeoutRef(feedbackTimeoutRef);
-  clearTimeoutRef(penaltyTimeoutRef);
   clearTimeoutRef(bossTauntTimeoutRef);
   clearTimeoutRef(startupTimeoutRef);
 }

@@ -19,13 +19,13 @@ export const MODES = {
   easy: {
     label: "简单",
     labelEn: "Easy",
-    revealMs: 1600,
+    revealMs: 1450,
     scoreBonusWindow: 1900,
   },
   normal: {
     label: "标准",
     labelEn: "Normal",
-    revealMs: 1250,
+    revealMs: 1100,
     scoreBonusWindow: 1500,
   },
   hard: {
