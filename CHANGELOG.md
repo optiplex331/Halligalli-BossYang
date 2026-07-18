@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.8.0...v0.8.1) (2026-07-18)
+
+
+### Bug Fixes
+
+* **web:** keep table cards fully visible ([#84](https://github.com/optiplex331/Halligalli-BossYang/issues/84)) ([8cab7be](https://github.com/optiplex331/Halligalli-BossYang/commit/8cab7be7e61db5b9fcc4e833468113d6f264007c))
+
 ## [0.8.0](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.7.2...v0.8.0) (2026-07-16)
 
 
