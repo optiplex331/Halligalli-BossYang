@@ -171,7 +171,7 @@ jobs:
           --api-image "${{ steps.release.outputs.api_image_tag }}" --api-digest "${{ steps.push.outputs.api_digest }}"
           --output paired-release-manifest.json
 
-      - name: Publish paired release manifest artifact
+      - name: Upload paired release manifest artifact
         if: github.ref_type == 'tag' && steps.release.outputs.should_push_image == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -208,19 +208,7 @@ jobs:
             sleep 5
           done
 
-      - name: Download existing Release asset
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p .existing-release-asset
-          gh release download "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --pattern paired-release-manifest.json --dir .existing-release-asset || true
-
-      - name: Assess Release asset publication
-        id: asset
-        run: python3 .github/utils/release_asset.py --candidate .paired-release-manifest/paired-release-manifest.json --existing .existing-release-asset/paired-release-manifest.json
-
       - name: Upload Release asset
-        if: steps.asset.outputs.action == 'upload'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${GITHUB_REF_NAME}" .paired-release-manifest/paired-release-manifest.json --repo "${GITHUB_REPOSITORY}"
