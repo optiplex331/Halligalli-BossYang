@@ -4,8 +4,7 @@ Purpose:
 - Keep Product checks and Container build and scan present while routing heavy
   work by change type.
 Inputs:
-- Environment from dorny/paths-filter: PRODUCT_RUNTIME, DELIVERY_CONTROL,
-  RELEASE_METADATA.
+- Environment from dorny/paths-filter: PRODUCT_RUNTIME, DELIVERY_CONTROL.
 - GitHub environment: GITHUB_EVENT_NAME, GITHUB_REF_TYPE, GITHUB_REF_NAME.
 Outputs:
 - GitHub step outputs for classification, changed groups, and required work
@@ -36,7 +35,6 @@ def is_release_tag(ref_type: str, ref_name: str) -> bool:
 def resolve_routing(env: Mapping[str, str]) -> dict[str, str]:
     product_runtime = is_true(env.get("PRODUCT_RUNTIME", "false"))
     delivery_control = is_true(env.get("DELIVERY_CONTROL", "false"))
-    release_metadata = is_true(env.get("RELEASE_METADATA", "false"))
     event_name = env.get("GITHUB_EVENT_NAME", "")
     ref_type = env.get("GITHUB_REF_TYPE", "")
     ref_name = env.get("GITHUB_REF_NAME", "")
@@ -57,15 +55,12 @@ def resolve_routing(env: Mapping[str, str]) -> dict[str, str]:
         classification = "product-runtime"
     elif delivery_control:
         classification = "delivery-control"
-    elif release_metadata:
-        classification = "release-metadata"
     else:
         classification = "metadata-or-docs"
 
     return {
         "product_runtime": str(product_runtime).lower(),
         "delivery_control": str(delivery_control).lower(),
-        "release_metadata": str(release_metadata).lower(),
         "classification": classification,
         "product_checks_required": str(product_checks_required).lower(),
         "delivery_control_checks_required": str(

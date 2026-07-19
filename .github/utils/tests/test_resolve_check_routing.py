@@ -16,7 +16,6 @@ BASE_ENV = {
     "GITHUB_REF_NAME": "feature",
     "PRODUCT_RUNTIME": "false",
     "DELIVERY_CONTROL": "false",
-    "RELEASE_METADATA": "false",
 }
 
 
@@ -49,12 +48,6 @@ class ResolveCheckRoutingTest(unittest.TestCase):
 
         self.assertEqual(outputs["classification"], "delivery-control")
         self.assertEqual(outputs["delivery_control_checks_required"], "true")
-        self.assertEqual(outputs["container_build_required"], "false")
-
-    def test_release_metadata_skips_container_build(self):
-        outputs = route(RELEASE_METADATA="true")
-
-        self.assertEqual(outputs["classification"], "release-metadata")
         self.assertEqual(outputs["container_build_required"], "false")
 
     def test_docs_only_master_push_does_not_publish_development_image(self):
