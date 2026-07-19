@@ -7,8 +7,7 @@ Inputs:
 - Environment from dorny/paths-filter: PRODUCT_RUNTIME, DELIVERY_CONTROL.
 - GitHub environment: GITHUB_EVENT_NAME, GITHUB_REF_TYPE, GITHUB_REF_NAME.
 Outputs:
-- GitHub step outputs for classification, changed groups, and required work
-  booleans.
+- GitHub step outputs for changed groups and required work booleans.
 Boundaries:
 - Does not inspect changed files directly.
 - Does not run product tests, actionlint, Docker builds, or image scans.
@@ -45,23 +44,9 @@ def resolve_routing(env: Mapping[str, str]) -> dict[str, str]:
     delivery_control_checks_required = delivery_control or workflow_dispatch
     container_build_required = product_runtime or workflow_dispatch or tag_release
 
-    # Prefer event-level categories before file-based categories so release
-    # and manual runs remain recognizable even without changed-file inputs.
-    if tag_release:
-        classification = "release-tag"
-    elif workflow_dispatch:
-        classification = "workflow-dispatch"
-    elif product_runtime:
-        classification = "product-runtime"
-    elif delivery_control:
-        classification = "delivery-control"
-    else:
-        classification = "metadata-or-docs"
-
     return {
         "product_runtime": str(product_runtime).lower(),
         "delivery_control": str(delivery_control).lower(),
-        "classification": classification,
         "product_checks_required": str(product_checks_required).lower(),
         "delivery_control_checks_required": str(
             delivery_control_checks_required

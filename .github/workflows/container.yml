@@ -37,7 +37,7 @@ jobs:
 
       - name: Skip container build and scan
         if: steps.changes.outputs.container_build_required != 'true'
-        run: echo "Container work is not required for ${{ steps.changes.outputs.classification }} changes."
+        run: echo "Container work is not required for these changes."
 
       - name: Set up Docker Buildx
         if: steps.changes.outputs.container_build_required == 'true'

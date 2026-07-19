@@ -7,9 +7,6 @@ inputs:
     required: true
 
 outputs:
-  classification:
-    description: Human-readable change classification.
-    value: ${{ steps.routing.outputs.classification }}
   product_runtime:
     description: Whether product runtime files changed.
     value: ${{ steps.routing.outputs.product_runtime }}

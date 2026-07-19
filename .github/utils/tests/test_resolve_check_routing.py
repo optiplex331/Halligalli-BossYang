@@ -33,20 +33,17 @@ class ResolveCheckRoutingTest(unittest.TestCase):
             GITHUB_REF_NAME="v0.6.0",
         )
 
-        self.assertEqual(outputs["classification"], "release-tag")
         self.assertEqual(outputs["container_build_required"], "true")
 
     def test_product_runtime_requires_product_checks_and_container_build(self):
         outputs = route(PRODUCT_RUNTIME="true")
 
-        self.assertEqual(outputs["classification"], "product-runtime")
         self.assertEqual(outputs["product_checks_required"], "true")
         self.assertEqual(outputs["container_build_required"], "true")
 
     def test_delivery_control_skips_container_build(self):
         outputs = route(DELIVERY_CONTROL="true")
 
-        self.assertEqual(outputs["classification"], "delivery-control")
         self.assertEqual(outputs["delivery_control_checks_required"], "true")
         self.assertEqual(outputs["container_build_required"], "false")
 
@@ -57,13 +54,11 @@ class ResolveCheckRoutingTest(unittest.TestCase):
             GITHUB_REF_NAME="master",
         )
 
-        self.assertEqual(outputs["classification"], "metadata-or-docs")
         self.assertEqual(outputs["container_build_required"], "false")
 
     def test_workflow_dispatch_runs_all_checks(self):
         outputs = route(GITHUB_EVENT_NAME="workflow_dispatch")
 
-        self.assertEqual(outputs["classification"], "workflow-dispatch")
         self.assertEqual(outputs["product_checks_required"], "true")
         self.assertEqual(outputs["delivery_control_checks_required"], "true")
         self.assertEqual(outputs["container_build_required"], "true")
