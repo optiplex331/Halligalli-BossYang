@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim AS build
+FROM ghcr.io/astral-sh/uv:0.11.29-python3.14-alpine@sha256:dc5f47bcfb47e7978ba601eb369af00fee8ff80a5ab5d8565e407fa96a4aa81c AS build
 
 WORKDIR /app
 
@@ -11,13 +11,13 @@ ARG HALLIGALLI_RELEASE_VERSION=local
 ARG HALLIGALLI_RELEASE_COMMIT=development
 RUN python -c 'import json, sys; print(json.dumps({"version": sys.argv[1], "commit": sys.argv[2]}, separators=(",", ":")))' "$HALLIGALLI_RELEASE_VERSION" "$HALLIGALLI_RELEASE_COMMIT" > /app/src/halligalli_api/release-identity.json
 
-FROM python:3.14-slim-bookworm
+FROM python:3.14-slim-bookworm@sha256:86f975aca15cf04a40b399eebede9aea7c82eae084d1f1a0a6ef6bcaae871a30
 
 WORKDIR /app
 
 ENV PATH=/app/.venv/bin:$PATH \
-    PYTHONPATH=/app/src \
-    PYTHONDONTWRITEBYTECODE=1
+  PYTHONPATH=/app/src \
+  PYTHONDONTWRITEBYTECODE=1
 
 COPY --from=build /app/.venv /app/.venv
 COPY --from=build /app/src /app/src

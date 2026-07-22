@@ -138,7 +138,10 @@ jobs:
             if [[ -z "$digest" ]]; then
               digest="$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}')"
             fi
-            [[ -n "$digest" ]] || { echo "Could not resolve pushed image digest for $image." >&2; exit 1; }
+            if [[ -z "$digest" ]]; then
+              echo "Could not resolve pushed image digest for $image." >&2
+              exit 1
+            fi
             printf '%s' "$digest"
           }
           web_digest="$(digest_for "${{ steps.release.outputs.web_image_tag }}")"
