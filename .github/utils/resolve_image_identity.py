@@ -46,10 +46,8 @@ def parse_extended_version(describe: str) -> str:
     return f"{base}-{int(count):04d}-g{git_ref}"
 
 
-def is_release_tag(ref_type: str, ref_name: str) -> bool:
-    """Release tags are the only refs that may publish canonical release images."""
-
-    return ref_type == "tag" and RELEASE_TAG_RE.fullmatch(ref_name or "") is not None
+def is_release_tag(ref_name: str) -> bool:
+    return RELEASE_TAG_RE.fullmatch(ref_name or "") is not None
 
 
 def is_master_push(event_name: str, ref_type: str, ref_name: str) -> bool:
@@ -82,7 +80,7 @@ def resolve_identity(
     env: Mapping[str, str],
     git: Callable[[Sequence[str], bool], str] = run_git,
 ) -> dict[str, str]:
-    """Resolve image tag, version, commit SHA, and publish/promotion decisions."""
+    """Resolve image tag, version, commit SHA, and publish decision."""
 
     image = normalize_image(env.get("GITHUB_REPOSITORY", ""))
     ref_type = env.get("GITHUB_REF_TYPE", "")
@@ -91,9 +89,10 @@ def resolve_identity(
     commit_sha = git(["rev-parse", "HEAD"], False)
     should_push_image = False
 
-    if is_release_tag(ref_type, ref_name):
-        # Release-tag builds are canonical paired GHCR artifacts. The
-        # infrastructure repo deploys reviewed image digests through GitOps.
+    if ref_type == "tag":
+        if not is_release_tag(ref_name):
+            raise ImageIdentityError("Release tag must match vX.Y.Z")
+        # Release-tag builds are canonical paired GHCR artifacts.
         version = ref_name.removeprefix("v")
         should_push_image = True
     elif is_master_push(event_name, ref_type, ref_name):
