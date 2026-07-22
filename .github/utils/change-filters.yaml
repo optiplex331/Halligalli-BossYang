@@ -22,8 +22,3 @@ delivery_control:
   - ".github/utils/*.py"
   - ".github/utils/**/*.py"
   - ".github/dependabot.yml"
-
-release_metadata:
-  - ".github/utils/.release-please-manifest.json"
-  - ".github/utils/release-please-config.json"
-  - "CHANGELOG.md"

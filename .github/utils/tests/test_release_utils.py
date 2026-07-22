@@ -14,7 +14,6 @@ from paired_release_manifest import (  # noqa: E402
     PairedReleaseManifestError,
     build_paired_release_manifest,
 )
-from release_asset import ReleaseAssetError, assess_release_asset  # noqa: E402
 from paired_smoke import PairedSmokeError, validate_paired_runtime  # noqa: E402
 
 
@@ -102,25 +101,6 @@ class ReleaseUtilsTest(unittest.TestCase):
                 version="1.2.3",
                 commit="a" * 40,
             )
-
-    def test_uploads_a_new_release_asset(self):
-        assessment = assess_release_asset(b'{"releaseTag":"v1.2.3"}\n', None)
-
-        self.assertEqual(assessment["action"], "upload")
-        self.assertRegex(assessment["sha256"], r"^[0-9a-f]{64}$")
-
-    def test_reuses_an_identical_release_asset(self):
-        contents = b'{"releaseTag":"v1.2.3"}\n'
-
-        self.assertEqual(assess_release_asset(contents, contents)["action"], "reuse")
-
-    def test_rejects_overwriting_a_different_release_asset(self):
-        with self.assertRaisesRegex(ReleaseAssetError, "already exists with different contents"):
-            assess_release_asset(
-                b'{"releaseTag":"v1.2.3"}\n',
-                b'{"releaseTag":"v1.2.2"}\n',
-            )
-
 
 if __name__ == "__main__":
     unittest.main()
