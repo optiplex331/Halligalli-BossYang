@@ -4,7 +4,7 @@ import os
 import sys
 from typing import Mapping
 
-from release_utils import append_github_outputs
+from release_utils import write_github_outputs
 
 
 def is_true(value: object) -> bool:
@@ -32,9 +32,7 @@ def resolve_routing(env: Mapping[str, str]) -> dict[str, str]:
 
 
 def main() -> None:
-    outputs = resolve_routing(os.environ)
-    for line in append_github_outputs(outputs):
-        print(line)
+    write_github_outputs(resolve_routing(os.environ))
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ import sys
 from collections.abc import Callable, Sequence
 from typing import Mapping
 
-from release_utils import append_github_outputs
+from release_utils import write_github_outputs
 
 RELEASE_TAG_PATTERN = "v[0-9]*.[0-9]*.[0-9]*"
 RELEASE_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
@@ -145,9 +145,7 @@ def main() -> None:
     """CLI entry point used by GitHub Actions steps."""
 
     try:
-        outputs = resolve_identity(os.environ)
-        for line in append_github_outputs(outputs):
-            print(line)
+        write_github_outputs(resolve_identity(os.environ))
     except ImageIdentityError as error:
         print(error, file=sys.stderr)
         sys.exit(1)
