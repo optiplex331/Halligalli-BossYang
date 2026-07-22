@@ -1,17 +1,4 @@
-"""Resolve Two-Gate CI routing decisions for required check jobs.
-
-Purpose:
-- Keep Product checks and Container build and scan present while routing heavy
-  work by change type.
-Inputs:
-- Environment from dorny/paths-filter: PRODUCT_RUNTIME, DELIVERY_CONTROL.
-- GitHub environment: GITHUB_EVENT_NAME, GITHUB_REF_TYPE, GITHUB_REF_NAME.
-Outputs:
-- GitHub step outputs for changed groups and required work booleans.
-Boundaries:
-- Does not inspect changed files directly.
-- Does not run product tests, actionlint, Docker builds, or image scans.
-"""
+"""Resolve work behind the stable Two-Gate CI jobs."""
 
 import os
 import re
@@ -45,8 +32,6 @@ def resolve_routing(env: Mapping[str, str]) -> dict[str, str]:
     container_build_required = product_runtime or workflow_dispatch or tag_release
 
     return {
-        "product_runtime": str(product_runtime).lower(),
-        "delivery_control": str(delivery_control).lower(),
         "product_checks_required": str(product_checks_required).lower(),
         "delivery_control_checks_required": str(
             delivery_control_checks_required

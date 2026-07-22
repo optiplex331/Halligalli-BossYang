@@ -7,12 +7,6 @@ inputs:
     required: true
 
 outputs:
-  product_runtime:
-    description: Whether product runtime files changed.
-    value: ${{ steps.routing.outputs.product_runtime }}
-  delivery_control:
-    description: Whether delivery control files changed.
-    value: ${{ steps.routing.outputs.delivery_control }}
   product_checks_required:
     description: Whether heavy product checks are required.
     value: ${{ steps.routing.outputs.product_checks_required }}
@@ -33,7 +27,6 @@ runs:
       with:
         token: ${{ inputs.token }}
         filters: .github/utils/change-filters.yaml
-        list-files: shell
 
     - name: Resolve routing
       id: routing

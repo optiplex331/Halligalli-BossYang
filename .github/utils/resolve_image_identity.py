@@ -1,20 +1,6 @@
-"""Resolve GHCR image identity and push policy for container builds.
+"""Resolve GHCR image identity and push policy for container builds."""
 
-Purpose:
-- Give the Container workflow a deterministic image name, version, tag, commit,
-  and push decision.
-Inputs:
-- GitHub environment: GITHUB_REPOSITORY, GITHUB_REF_TYPE, GITHUB_REF_NAME,
-  GITHUB_EVENT_NAME, GITHUB_SHA.
-- Local git history and release tags.
-Outputs:
-- GitHub step outputs: web_image_tag, api_image_tag, version, commit_sha,
-  should_push_image.
-Boundaries:
-- Does not build, scan, push, or deploy images.
-- Does not choose the production digest; the infrastructure repo owns that.
-"""
-
+import os
 import re
 import subprocess
 import sys
@@ -29,8 +15,6 @@ RELEASE_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
 
 class ImageIdentityError(Exception):
     """Raised when GitHub context or git history cannot produce an image identity."""
-
-    pass
 
 
 def normalize_image(repository: str) -> str:
@@ -162,7 +146,7 @@ def main() -> None:
     """CLI entry point used by GitHub Actions steps."""
 
     try:
-        outputs = resolve_identity(dict(__import__("os").environ))
+        outputs = resolve_identity(os.environ)
         for line in append_github_outputs(outputs):
             print(line)
     except ImageIdentityError as error:

@@ -7,9 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from release_utils import (  # noqa: E402
-    append_github_outputs,
-)
+from release_utils import append_github_outputs  # noqa: E402
 from paired_release_manifest import (  # noqa: E402
     PairedReleaseManifestError,
     build_paired_release_manifest,

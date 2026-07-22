@@ -16,9 +16,4 @@ product_runtime:
   - "uv.lock"
 
 delivery_control:
-  - ".github/actions/**"
-  - ".github/workflows/**"
-  - ".github/utils/change-filters.yaml"
-  - ".github/utils/*.py"
-  - ".github/utils/**/*.py"
-  - ".github/dependabot.yml"
+  - ".github/**"

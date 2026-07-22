@@ -57,6 +57,21 @@ class ResolveImageIdentityTest(unittest.TestCase):
         self.assertEqual(outputs["api_image_tag"], "ghcr.io/optiplex331/halligalli-bossyang-api:0.3.0")
         self.assertEqual(outputs["should_push_image"], "true")
 
+    def test_non_semver_tag_does_not_publish(self):
+        outputs = resolve_identity(
+            {
+                "GITHUB_REPOSITORY": "owner/repo",
+                "GITHUB_REF_TYPE": "tag",
+                "GITHUB_REF_NAME": "v1.2.3-rc",
+                "GITHUB_EVENT_NAME": "push",
+                "GITHUB_SHA": "abc1234def5678",
+            },
+            fake_git({("rev-parse", "HEAD"): "abc1234def5678"}),
+        )
+
+        self.assertEqual(outputs["version"], "pr-abc1234")
+        self.assertEqual(outputs["should_push_image"], "false")
+
     def test_master_release_subject_without_exact_tag_publishes_development_image(self):
         git = fake_git(
             {
