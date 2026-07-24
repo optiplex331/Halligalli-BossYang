@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.4](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.8.3...v0.8.4) (2026-07-24)
+
+
+### Bug Fixes
+
+* **build:** align API builder and runtime libc ([4a29459](https://github.com/optiplex331/Halligalli-BossYang/commit/4a29459625788795717fb2b00dea393ce780ce5d))
+
 ## [0.8.3](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.8.2...v0.8.3) (2026-07-18)
 
 
