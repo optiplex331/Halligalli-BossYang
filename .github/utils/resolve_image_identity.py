@@ -1,27 +1,13 @@
-"""Resolve GHCR image identity and push policy for container builds.
+"""Resolve GHCR image identity and push policy for container builds."""
 
-Purpose:
-- Give the Container workflow a deterministic image name, version, tag, commit,
-  and push decision.
-Inputs:
-- GitHub environment: GITHUB_REPOSITORY, GITHUB_REF_TYPE, GITHUB_REF_NAME,
-  GITHUB_EVENT_NAME, GITHUB_SHA.
-- Local git history and release tags.
-Outputs:
-- GitHub step outputs: web_image_tag, api_image_tag, version, commit_sha,
-  should_push_image.
-Boundaries:
-- Does not build, scan, push, or deploy images.
-- Does not choose the production digest; the infrastructure repo owns that.
-"""
-
+import os
 import re
 import subprocess
 import sys
 from collections.abc import Callable, Sequence
 from typing import Mapping
 
-from release_utils import append_github_outputs
+from release_utils import write_github_outputs
 
 RELEASE_TAG_PATTERN = "v[0-9]*.[0-9]*.[0-9]*"
 RELEASE_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
@@ -29,8 +15,6 @@ RELEASE_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
 
 class ImageIdentityError(Exception):
     """Raised when GitHub context or git history cannot produce an image identity."""
-
-    pass
 
 
 def normalize_image(repository: str) -> str:
@@ -62,10 +46,8 @@ def parse_extended_version(describe: str) -> str:
     return f"{base}-{int(count):04d}-g{git_ref}"
 
 
-def is_release_tag(ref_type: str, ref_name: str) -> bool:
-    """Release tags are the only refs that may publish canonical release images."""
-
-    return ref_type == "tag" and RELEASE_TAG_RE.fullmatch(ref_name or "") is not None
+def is_release_tag(ref_name: str) -> bool:
+    return RELEASE_TAG_RE.fullmatch(ref_name or "") is not None
 
 
 def is_master_push(event_name: str, ref_type: str, ref_name: str) -> bool:
@@ -98,7 +80,7 @@ def resolve_identity(
     env: Mapping[str, str],
     git: Callable[[Sequence[str], bool], str] = run_git,
 ) -> dict[str, str]:
-    """Resolve image tag, version, commit SHA, and publish/promotion decisions."""
+    """Resolve image tag, version, commit SHA, and publish decision."""
 
     image = normalize_image(env.get("GITHUB_REPOSITORY", ""))
     ref_type = env.get("GITHUB_REF_TYPE", "")
@@ -107,9 +89,10 @@ def resolve_identity(
     commit_sha = git(["rev-parse", "HEAD"], False)
     should_push_image = False
 
-    if is_release_tag(ref_type, ref_name):
-        # Release-tag builds are canonical paired GHCR artifacts. The
-        # infrastructure repo deploys reviewed image digests through GitOps.
+    if ref_type == "tag":
+        if not is_release_tag(ref_name):
+            raise ImageIdentityError("Release tag must match vX.Y.Z")
+        # Release-tag builds are canonical paired GHCR artifacts.
         version = ref_name.removeprefix("v")
         should_push_image = True
     elif is_master_push(event_name, ref_type, ref_name):
@@ -162,9 +145,7 @@ def main() -> None:
     """CLI entry point used by GitHub Actions steps."""
 
     try:
-        outputs = resolve_identity(dict(__import__("os").environ))
-        for line in append_github_outputs(outputs):
-            print(line)
+        write_github_outputs(resolve_identity(os.environ))
     except ImageIdentityError as error:
         print(error, file=sys.stderr)
         sys.exit(1)

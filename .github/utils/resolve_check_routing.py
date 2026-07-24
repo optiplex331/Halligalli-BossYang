@@ -1,34 +1,14 @@
-"""Resolve Two-Gate CI routing decisions for required check jobs.
-
-Purpose:
-- Keep Product checks and Container build and scan present while routing heavy
-  work by change type.
-Inputs:
-- Environment from dorny/paths-filter: PRODUCT_RUNTIME, DELIVERY_CONTROL.
-- GitHub environment: GITHUB_EVENT_NAME, GITHUB_REF_TYPE, GITHUB_REF_NAME.
-Outputs:
-- GitHub step outputs for changed groups and required work booleans.
-Boundaries:
-- Does not inspect changed files directly.
-- Does not run product tests, actionlint, Docker builds, or image scans.
-"""
+"""Resolve work behind the stable Two-Gate CI jobs."""
 
 import os
-import re
 import sys
 from typing import Mapping
 
-from release_utils import append_github_outputs
-
-RELEASE_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
+from release_utils import write_github_outputs
 
 
 def is_true(value: object) -> bool:
     return str(value).lower() == "true"
-
-
-def is_release_tag(ref_type: str, ref_name: str) -> bool:
-    return ref_type == "tag" and RELEASE_TAG_RE.fullmatch(ref_name or "") is not None
 
 
 def resolve_routing(env: Mapping[str, str]) -> dict[str, str]:
@@ -36,17 +16,13 @@ def resolve_routing(env: Mapping[str, str]) -> dict[str, str]:
     delivery_control = is_true(env.get("DELIVERY_CONTROL", "false"))
     event_name = env.get("GITHUB_EVENT_NAME", "")
     ref_type = env.get("GITHUB_REF_TYPE", "")
-    ref_name = env.get("GITHUB_REF_NAME", "")
-    tag_release = is_release_tag(ref_type, ref_name)
     workflow_dispatch = event_name == "workflow_dispatch"
 
     product_checks_required = product_runtime or workflow_dispatch
     delivery_control_checks_required = delivery_control or workflow_dispatch
-    container_build_required = product_runtime or workflow_dispatch or tag_release
+    container_build_required = product_runtime or workflow_dispatch or ref_type == "tag"
 
     return {
-        "product_runtime": str(product_runtime).lower(),
-        "delivery_control": str(delivery_control).lower(),
         "product_checks_required": str(product_checks_required).lower(),
         "delivery_control_checks_required": str(
             delivery_control_checks_required
@@ -56,9 +32,7 @@ def resolve_routing(env: Mapping[str, str]) -> dict[str, str]:
 
 
 def main() -> None:
-    outputs = resolve_routing(os.environ)
-    for line in append_github_outputs(outputs):
-        print(line)
+    write_github_outputs(resolve_routing(os.environ))
 
 
 if __name__ == "__main__":

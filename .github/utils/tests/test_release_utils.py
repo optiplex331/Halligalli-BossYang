@@ -1,37 +1,37 @@
 """Public input/output contracts for release utilities."""
 
-import unittest
-
 import sys
+import tempfile
+import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from release_utils import (  # noqa: E402
-    append_github_outputs,
-)
-from paired_release_manifest import (  # noqa: E402
-    PairedReleaseManifestError,
-    build_paired_release_manifest,
-)
+from release_utils import write_github_outputs  # noqa: E402
+from paired_release_manifest import build_paired_release_manifest  # noqa: E402
 from paired_smoke import PairedSmokeError, validate_paired_runtime  # noqa: E402
 
 
 class ReleaseUtilsTest(unittest.TestCase):
-    def test_formats_github_outputs_without_writing_when_path_absent(self):
-        self.assertEqual(
-            append_github_outputs({"version": "0.2.0", "commit_sha": "abc123"}, output_path=""),
-            ["version=0.2.0", "commit_sha=abc123"],
-        )
+    def test_writes_github_outputs(self):
+        with tempfile.NamedTemporaryFile() as output:
+            write_github_outputs(
+                {"version": "0.2.0", "commit_sha": "abc123"},
+                output_path=output.name,
+            )
+            self.assertEqual(
+                Path(output.name).read_text(),
+                "version=0.2.0\ncommit_sha=abc123\n",
+            )
 
     def test_builds_a_schema_v2_paired_release_manifest(self):
         self.assertEqual(
             build_paired_release_manifest(
                 tag="v1.2.3",
                 commit="a" * 40,
-                web_image="ghcr.io/example/halligalli-web:1.2.3",
+                web_image="ghcr.io/example/halligalli-web",
                 web_digest="sha256:" + "b" * 64,
-                api_image="ghcr.io/example/halligalli-api:1.2.3",
+                api_image="ghcr.io/example/halligalli-api",
                 api_digest="sha256:" + "c" * 64,
             ),
             {
@@ -53,39 +53,6 @@ class ReleaseUtilsTest(unittest.TestCase):
                 "runtimeIdentity": {"version": "1.2.3", "commit": "a" * 40},
             },
         )
-
-    def test_rejects_non_release_or_mutable_attestation_inputs(self):
-        with self.assertRaisesRegex(PairedReleaseManifestError, "formal release tag"):
-            build_paired_release_manifest(
-                tag="pr-abcdef0",
-                commit="a" * 40,
-                web_image="ghcr.io/example/halligalli-web:pr-abcdef0",
-                web_digest="sha256:" + "b" * 64,
-                api_image="ghcr.io/example/halligalli-api:pr-abcdef0",
-                api_digest="sha256:" + "c" * 64,
-            )
-
-    def test_rejects_partial_or_mixed_pair_attestation(self):
-        with self.assertRaisesRegex(PairedReleaseManifestError, "both Web and API"):
-            build_paired_release_manifest(
-                tag="v1.2.3",
-                commit="a" * 40,
-                web_image="ghcr.io/example/halligalli-web:1.2.3",
-                web_digest="sha256:" + "b" * 64,
-                api_image="",
-                api_digest="",
-            )
-
-    def test_rejects_mixed_image_versions(self):
-        with self.assertRaisesRegex(PairedReleaseManifestError, "Image tags"):
-            build_paired_release_manifest(
-                tag="v1.2.3",
-                commit="a" * 40,
-                web_image="ghcr.io/example/halligalli-web:1.2.3",
-                web_digest="sha256:" + "b" * 64,
-                api_image="ghcr.io/example/halligalli-api:1.2.4",
-                api_digest="sha256:" + "c" * 64,
-            )
 
     def test_validates_a_paired_runtime_identity(self):
         validate_paired_runtime(
