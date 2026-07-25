@@ -11,7 +11,7 @@ from halligalli_api.authority import (
     Ready,
     Start,
 )
-from redis_test_case import RedisAsyncTestCase, verified_credential
+from redis_test_case import RedisAsyncTestCase, hash_credential
 
 
 class RoomLifecycleTest(RedisAsyncTestCase):
@@ -25,7 +25,7 @@ class RoomLifecycleTest(RedisAsyncTestCase):
         await authority.execute(created.room_code, Leave(guest, "leave-guest"))
         joined = await authority.execute(
             created.room_code,
-            JoinRoom("replacement", "Replacement", verified_credential("replacement")),
+            JoinRoom("replacement", "Replacement", hash_credential("replacement")),
         )
 
         self.assertEqual(joined.snapshot.viewer_seat_index, 1)
@@ -56,7 +56,7 @@ class RoomLifecycleTest(RedisAsyncTestCase):
 
         self.assertEqual(lobby.snapshot.phase, "lobby")
         self.assertEqual([(item.seat_index, item.active) for item in lobby.snapshot.participants], [(0, True), (1, True)])
-        replacement = verified_credential("replacement")
+        replacement = hash_credential("replacement")
         await authority.execute(created.room_code, JoinRoom("join-replacement", "Replacement", replacement))
         await authority.execute(created.room_code, Ready(credentials[0], "ready-host-two"))
         await authority.execute(created.room_code, Ready(credentials[1], "ready-guest-two"))

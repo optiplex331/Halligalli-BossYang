@@ -7,7 +7,7 @@ from halligalli_api.authority import (
     Ready,
     RedisMultiplayerAuthority,
 )
-from redis_test_case import RedisAsyncTestCase, verified_credential
+from redis_test_case import RedisAsyncTestCase, hash_credential
 
 
 class RedisAdapterTest(RedisAsyncTestCase):
@@ -40,7 +40,7 @@ class RedisAdapterTest(RedisAsyncTestCase):
             revision = asyncio.create_task(anext(subscription.events()))
             await self.authority.execute(
                 created.room_code,
-                JoinRoom("join-pubsub", "Guest", verified_credential("guest-credential")),
+                JoinRoom("join-pubsub", "Guest", hash_credential("guest-credential")),
             )
             self.assertEqual(await asyncio.wait_for(revision, timeout=1), created.room_code)
         finally:

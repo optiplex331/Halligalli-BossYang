@@ -13,7 +13,7 @@ from halligalli_api.authority import AuthorityResult, CreateRoom, JoinRoom, Redi
 REDIS_URL = os.environ.get("HALLIGALLI_TEST_REDIS_URL")
 
 
-def verified_credential(value: str) -> str:
+def hash_credential(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
@@ -45,7 +45,7 @@ class RedisAsyncTestCase(unittest.IsolatedAsyncioTestCase):
         table_seats: int = 4,
         target_humans: int | None = None,
     ) -> tuple[AuthorityResult, list[str]]:
-        credentials = [verified_credential(credential) for _, credential in participants]
+        credentials = [hash_credential(credential) for _, credential in participants]
         created = await self.authority.execute(
             None,
             CreateRoom(
