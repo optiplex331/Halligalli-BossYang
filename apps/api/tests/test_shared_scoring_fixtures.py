@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import unittest
 from pathlib import Path
@@ -8,8 +7,6 @@ from pathlib import Path
 from halligalli_api.authority import (
     AdvanceTurn,
     Bell,
-    CreateRoom,
-    JoinRoom,
     Ready,
     ScoreBreakdown,
     Start,
@@ -26,10 +23,6 @@ FIXTURE = json.loads(
 
 def fixture_case(case_id: str) -> dict[str, object]:
     return next(case for case in FIXTURE["cases"] if case["id"] == case_id)
-
-
-def verifier(credential: str) -> str:
-    return hashlib.sha256(credential.encode()).hexdigest()
 
 
 class SharedScoringFixtureTest(unittest.TestCase):
@@ -56,10 +49,11 @@ class SharedCorrectBellFixtureTest(RedisAsyncTestCase):
         case = fixture_case("two-seat-correct-bell")
         expected = case["expected"]
         authority = self.authority
-        host = verifier("host-credential")
-        guest = verifier("guest-credential")
-        created = await authority.execute(None, CreateRoom("create-1", "Host", host, 4, 2, "normal", 60))
-        await authority.execute(created.room_code, JoinRoom("join-1", "Guest", guest))
+        created, credentials = await self.create_room(
+            "correct-bell",
+            (("Host", "host-credential"), ("Guest", "guest-credential")),
+        )
+        host, guest = credentials
         await authority.execute(created.room_code, Ready(host))
         await authority.execute(created.room_code, Ready(guest))
         await authority.execute(created.room_code, Start(host, now_ms=1_000))
@@ -82,10 +76,11 @@ class SharedCorrectBellFixtureTest(RedisAsyncTestCase):
         wrong = fixture_case("two-seat-wrong-floor")
         missed = fixture_case("two-seat-missed-floor")
         authority = self.authority
-        host = verifier("host-credential")
-        guest = verifier("guest-credential")
-        created = await authority.execute(None, CreateRoom("create-2", "Host", host, 4, 2, "normal", 60))
-        await authority.execute(created.room_code, JoinRoom("join-2", "Guest", guest))
+        created, credentials = await self.create_room(
+            "wrong-and-missed",
+            (("Host", "host-credential"), ("Guest", "guest-credential")),
+        )
+        host, guest = credentials
         await authority.execute(created.room_code, Ready(host))
         await authority.execute(created.room_code, Ready(guest))
         await authority.execute(created.room_code, Start(host, now_ms=1_000))
