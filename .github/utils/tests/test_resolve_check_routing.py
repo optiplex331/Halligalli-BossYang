@@ -1,8 +1,7 @@
 """Public routing decisions behind the stable Two-Gate Check Model."""
 
-import unittest
-
 import sys
+import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -17,51 +16,61 @@ BASE_ENV = {
     "PRODUCT_RUNTIME": "false",
     "DELIVERY_CONTROL": "false",
 }
+ROUTING_OUTPUTS = (
+    "product_checks_required",
+    "delivery_control_checks_required",
+    "container_build_required",
+)
 
 
-def route(**updates: str) -> dict[str, str]:
+ROUTING_CASES = (
+    (
+        "release tag",
+        {
+            "GITHUB_EVENT_NAME": "push",
+            "GITHUB_REF_TYPE": "tag",
+            "GITHUB_REF_NAME": "v0.6.0",
+        },
+        ("false", "false", "true"),
+    ),
+    (
+        "product runtime",
+        {"PRODUCT_RUNTIME": "true"},
+        ("true", "false", "true"),
+    ),
+    (
+        "delivery control",
+        {"DELIVERY_CONTROL": "true"},
+        ("false", "true", "false"),
+    ),
+    (
+        "docs-only master push",
+        {
+            "GITHUB_EVENT_NAME": "push",
+            "GITHUB_REF_TYPE": "branch",
+            "GITHUB_REF_NAME": "master",
+        },
+        ("false", "false", "false"),
+    ),
+    (
+        "manual workflow dispatch",
+        {"GITHUB_EVENT_NAME": "workflow_dispatch"},
+        ("true", "true", "true"),
+    ),
+)
+
+
+def route(updates: dict[str, str]) -> dict[str, str]:
     env = dict(BASE_ENV)
     env.update(updates)
     return resolve_routing(env)
 
 
 class ResolveCheckRoutingTest(unittest.TestCase):
-    def test_release_tag_requires_container_build(self):
-        outputs = route(
-            GITHUB_EVENT_NAME="push",
-            GITHUB_REF_TYPE="tag",
-            GITHUB_REF_NAME="v0.6.0",
-        )
-
-        self.assertEqual(outputs["container_build_required"], "true")
-
-    def test_product_runtime_requires_product_checks_and_container_build(self):
-        outputs = route(PRODUCT_RUNTIME="true")
-
-        self.assertEqual(outputs["product_checks_required"], "true")
-        self.assertEqual(outputs["container_build_required"], "true")
-
-    def test_delivery_control_skips_container_build(self):
-        outputs = route(DELIVERY_CONTROL="true")
-
-        self.assertEqual(outputs["delivery_control_checks_required"], "true")
-        self.assertEqual(outputs["container_build_required"], "false")
-
-    def test_docs_only_master_push_does_not_publish_development_image(self):
-        outputs = route(
-            GITHUB_EVENT_NAME="push",
-            GITHUB_REF_TYPE="branch",
-            GITHUB_REF_NAME="master",
-        )
-
-        self.assertEqual(outputs["container_build_required"], "false")
-
-    def test_workflow_dispatch_runs_all_checks(self):
-        outputs = route(GITHUB_EVENT_NAME="workflow_dispatch")
-
-        self.assertEqual(outputs["product_checks_required"], "true")
-        self.assertEqual(outputs["delivery_control_checks_required"], "true")
-        self.assertEqual(outputs["container_build_required"], "true")
+    def test_routing_decision_table(self):
+        for name, inputs, expected in ROUTING_CASES:
+            with self.subTest(name=name):
+                self.assertEqual(route(inputs), dict(zip(ROUTING_OUTPUTS, expected)))
 
 
 if __name__ == "__main__":
