@@ -16,6 +16,12 @@ RUN pnpm --dir apps/web run build \
 
 FROM nginxinc/nginx-unprivileged:1.30-alpine@sha256:4714e0b1b2577eaa1a6131d07c958b67f0eb68e6d0521e90c6e5287db8cf0bc5
 
+# Alpine fixes often land before a new base digest; the Trivy gate relies on
+# this upgrade, and the published image is still pinned by its own digest.
+USER root
+RUN apk upgrade --no-cache
+USER 101
+
 COPY apps/web/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /workspace/apps/web/dist /usr/share/nginx/html
 
