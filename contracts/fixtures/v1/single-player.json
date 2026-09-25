@@ -384,6 +384,18 @@
       "kind": "pending-miss",
       "startingScore": 120,
       "expected": { "score": 90, "missedPenalty": 30, "missedHits": 1 }
+    },
+    {
+      "id": "wrong-bell-card-penalty-policy",
+      "kind": "card-penalty-policy",
+      "note": "Both modes assess ceil(tableCards / 2) penalty cards at 4 points each. Multiplayer card penalties are scoring-only: no cards move, so the full target is assessed. Single-Player card penalties move real cards from the human's hand to the bottom of their face-up pile, so the assessed count is capped by the cards left in hand.",
+      "startingScore": 200,
+      "tableCards": 7,
+      "handCards": 2,
+      "expected": {
+        "multiplayer": { "penaltyCount": 4, "wrongPenalty": 50, "cardPenalty": 16 },
+        "singlePlayer": { "penaltyCount": 2, "wrongPenalty": 50, "cardPenalty": 8 }
+      }
     }
   ]
 }

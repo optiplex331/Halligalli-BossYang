@@ -3,9 +3,10 @@ from __future__ import annotations
 import os
 import asyncio
 import json
+import logging
 import time
 from contextlib import asynccontextmanager
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from inspect import isawaitable
 from pathlib import Path
@@ -15,12 +16,10 @@ from uuid import UUID
 from fastapi import FastAPI, Header, Request, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
-from pydantic import Field
+from pydantic import ConfigDict, Field, ValidationError
 
 from .authority import (
     ApiModel,
-    AdvanceTurn,
-    AdvancePostMatch,
     AuthorityError,
     Bell,
     CreateRoom,
@@ -32,6 +31,7 @@ from .authority import (
     Ready,
     Leave,
     RedisMultiplayerAuthority,
+    RedisRevisionSubscription,
     RoomSnapshot,
     Start,
     Viewer,
@@ -40,6 +40,9 @@ from .authority import (
 from .observability import Telemetry, elapsed_since
 
 
+_logger = logging.getLogger("halligalli.api")
+# Only a credential that no longer authenticates or a room that no longer exists ends the socket.
+_SOCKET_CLOSING_ERRORS = frozenset({"credential_invalid", "room_not_found"})
 _RELEASE_IDENTITY_PATH = Path(__file__).with_name("release-identity.json")
 
 
@@ -60,10 +63,16 @@ class EntryRequest(ApiModel):
 
 
 class CreateRoomRequest(EntryRequest):
+    model_config = ConfigDict(extra="forbid")
+
     table_seat_count: int = Field(ge=4, le=8)
     target_human_participant_count: int = Field(ge=2)
     difficulty: Literal["easy", "normal", "hard"]
-    duration_sec: int = Field(ge=1)
+    duration_sec: int | None = Field(
+        default=None,
+        deprecated=True,
+        description="Ignored. Accepted for one release so pages loaded before its removal can still create rooms.",
+    )
 
 
 class ProblemDetails(ApiModel):
@@ -109,13 +118,18 @@ class RoomSocketHub:
         for websocket, member in members:
             try:
                 snapshot = await authority.snapshot(room_code, Viewer(credential=member.credential))
-                if snapshot.revision <= member.revision:
-                    continue
-                member.revision = snapshot.revision
+            except AuthorityError:
+                self.detach(room_code, websocket)
+                continue
+            if snapshot.revision <= member.revision:
+                continue
+            member.revision = snapshot.revision
+            try:
                 await websocket.send_json(
                     {"type": "snapshot", "snapshot": snapshot.model_dump(by_alias=True)},
                 )
-            except (AuthorityError, RuntimeError):
+            except Exception:
+                # A peer that can no longer receive is gone; it must not break the publisher.
                 self.detach(room_code, websocket)
 
 
@@ -148,9 +162,8 @@ def _viewer_from_authorization(authorization: str | None) -> Viewer:
     return Viewer(credential=credential)
 
 
-def _room_command(payload: WebSocketRoomCommand, credential: str):
+def _room_command(payload: WebSocketRoomCommand, credential: str, now_ms: int):
     verifier = credential_verifier(credential)
-    now_ms = time.time_ns() // 1_000_000
     if payload.type == "ready":
         return Ready(verifier, payload.command_id)
     if payload.type == "start":
@@ -164,73 +177,62 @@ def _room_command(payload: WebSocketRoomCommand, credential: str):
     return ContinueMatch(verifier, payload.type == "continue", payload.command_id)
 
 
-def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
+async def supervise(name: str, run: Callable[[], Awaitable[None]], *, restart_delay_seconds: float = 1.0) -> None:
+    """Keep a background loop alive, restarting it after unexpected failures."""
+    while True:
+        try:
+            await run()
+            return
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            _logger.exception("%s failed; restarting", name)
+            await asyncio.sleep(restart_delay_seconds)
+
+
+def create_app(
+    authority: MultiplayerAuthority | None = None,
+    *,
+    due_interval_seconds: float = 0.1,
+    startup_timeout_seconds: float = 10.0,
+) -> FastAPI:
     build_identity = _load_release_identity()
     telemetry = Telemetry()
     selected_authority = authority or _runtime_authority(telemetry)
     hub = RoomSocketHub()
-    deadline_tasks: set[asyncio.Task[None]] = set()
 
-    def schedule_turn(room_code: str, deadline_at: int) -> None:
-        async def advance_when_due() -> None:
-            delay_seconds = max(0, deadline_at - (time.time_ns() // 1_000_000)) / 1_000
-            await asyncio.sleep(delay_seconds)
-            try:
-                result = await selected_authority.execute(
-                    room_code,
-                    AdvanceTurn(now_ms=time.time_ns() // 1_000_000),
-                )
-            except AuthorityError:
-                return
-            await hub.publish(room_code, selected_authority)
-            if result.snapshot.phase == "playing" and result.snapshot.turn_deadline_at is not None:
-                schedule_turn(room_code, result.snapshot.turn_deadline_at)
-            elif result.snapshot.phase == "post_match" and result.snapshot.post_match_deadline_at is not None:
-                schedule_post_match(room_code, result.snapshot.post_match_deadline_at)
+    async def advance_due_rooms() -> None:
+        while True:
+            for room_code in await selected_authority.advance_due():
+                await hub.publish(room_code, selected_authority)
+            await asyncio.sleep(due_interval_seconds)
 
-        task = asyncio.create_task(advance_when_due())
-        deadline_tasks.add(task)
-        task.add_done_callback(deadline_tasks.discard)
+    ready_subscriptions: list[RedisRevisionSubscription] = []
 
-    def schedule_post_match(room_code: str, deadline_at: int) -> None:
-        async def close_when_due() -> None:
-            delay_seconds = max(0, deadline_at - (time.time_ns() // 1_000_000)) / 1_000
-            await asyncio.sleep(delay_seconds)
-            try:
-                await selected_authority.execute(
-                    room_code,
-                    AdvancePostMatch(now_ms=time.time_ns() // 1_000_000, command_id=f"deadline:{deadline_at}"),
-                )
-            except AuthorityError:
-                return
-            await hub.publish(room_code, selected_authority)
-
-        task = asyncio.create_task(close_when_due())
-        deadline_tasks.add(task)
-        task.add_done_callback(deadline_tasks.discard)
+    async def forward_revisions() -> None:
+        # The first run uses the subscription made during startup; restarts subscribe again.
+        subscription = ready_subscriptions.pop() if ready_subscriptions else await selected_authority.subscribe_revisions()
+        try:
+            await forward_room_revisions(subscription.events(), hub, selected_authority)
+        finally:
+            await subscription.aclose()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        subscription = None
-        revision_task: asyncio.Task[None] | None = None
         if isinstance(selected_authority, RedisMultiplayerAuthority):
-            subscription = await selected_authority.subscribe_revisions()
-            revision_task = asyncio.create_task(
-                forward_room_revisions(subscription.events(), hub, selected_authority),
+            # An unreachable Redis at startup fails the process so the platform restarts it.
+            ready_subscriptions.append(
+                await asyncio.wait_for(selected_authority.subscribe_revisions(), timeout=startup_timeout_seconds),
             )
+        tasks = [asyncio.create_task(supervise("due deadline loop", advance_due_rooms))]
+        if ready_subscriptions:
+            tasks.append(asyncio.create_task(supervise("revision forwarder", forward_revisions)))
         try:
             yield
         finally:
-            pending_tasks = tuple(deadline_tasks)
-            if revision_task is not None:
-                revision_task.cancel()
-                pending_tasks += (revision_task,)
-            for task in pending_tasks:
+            for task in tasks:
                 task.cancel()
-            if pending_tasks:
-                await asyncio.gather(*pending_tasks, return_exceptions=True)
-            if subscription is not None:
-                await subscription.aclose()
+            await asyncio.gather(*tasks, return_exceptions=True)
             close = getattr(selected_authority, "aclose", None)
             if close is not None:
                 await close()
@@ -350,7 +352,6 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
                 table_seat_count=request.table_seat_count,
                 target_human_participant_count=request.target_human_participant_count,
                 difficulty=request.difficulty,
-                duration_sec=request.duration_sec,
             ),
         )
 
@@ -394,6 +395,22 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
             _viewer_from_authorization(authorization),
         )
 
+    def record_client_error(
+        room_code: str,
+        command: str,
+        trace_id: str = "",
+        started_at: float | None = None,
+        span: object | None = None,
+    ) -> None:
+        telemetry.record_websocket(
+            trace_id=trace_id,
+            room_code=room_code,
+            command=command,
+            outcome="client_error",
+            elapsed_seconds=elapsed_since(started_at) if started_at is not None else 0,
+            span=span,
+        )
+
     @app.websocket("/ws/v1/rooms/{room_code}")
     async def room_websocket(websocket: WebSocket, room_code: str) -> None:
         await websocket.accept()
@@ -402,7 +419,7 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
             with telemetry.span("websocket.command") as span:
                 trace_id = telemetry.trace_id(span)
                 started_at = time.perf_counter()
-                payload = WebSocketAuthentication.model_validate(await websocket.receive_json())
+                payload = WebSocketAuthentication.model_validate_json(await websocket.receive_text())
                 snapshot = await app.state.authority.snapshot(
                     canonical_room_code,
                     Viewer(credential=payload.credential),
@@ -415,8 +432,8 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
                     elapsed_seconds=elapsed_since(started_at),
                     span=span,
                 )
-        except (AuthorityError, ValueError):
-            telemetry.record_websocket(trace_id="", room_code=canonical_room_code, command="authenticate", outcome="client_error", elapsed_seconds=0)
+        except (AuthorityError, ValidationError):
+            record_client_error(canonical_room_code, "authenticate")
             await websocket.close(code=1008)
             return
         except WebSocketDisconnect:
@@ -428,30 +445,38 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
         hub.attach(canonical_room_code, websocket, payload.credential, snapshot.revision)
         try:
             while True:
+                message = await websocket.receive_text()
                 with telemetry.span("websocket.command") as span:
                     trace_id = telemetry.trace_id(span)
                     started_at = time.perf_counter()
-                    command_payload = WebSocketRoomCommand.model_validate(await websocket.receive_json())
-                    result = await app.state.authority.execute(
-                        canonical_room_code,
-                        _room_command(command_payload, payload.credential),
-                    )
+                    try:
+                        command_payload = WebSocketRoomCommand.model_validate_json(message)
+                    except ValidationError:
+                        record_client_error(canonical_room_code, "command", trace_id, started_at, span)
+                        await websocket.send_json({"type": "error", "code": "invalid_request", "title": "Command is invalid"})
+                        continue
+                    command_name = command_payload.type
+                    try:
+                        await app.state.authority.execute(
+                            canonical_room_code,
+                            _room_command(command_payload, payload.credential, app.state.authority.now_ms()),
+                        )
+                    except AuthorityError as error:
+                        record_client_error(canonical_room_code, command_name, trace_id, started_at, span)
+                        if error.code in _SOCKET_CLOSING_ERRORS:
+                            await websocket.close(code=1008)
+                            return
+                        await websocket.send_json({"type": "error", "code": error.code, "title": error.title})
+                        continue
                     await hub.publish(canonical_room_code, app.state.authority)
-                    if command_payload.type == "start" and result.snapshot.turn_deadline_at is not None:
-                        schedule_turn(canonical_room_code, result.snapshot.turn_deadline_at)
-                    if result.snapshot.phase == "post_match" and result.snapshot.post_match_deadline_at is not None:
-                        schedule_post_match(canonical_room_code, result.snapshot.post_match_deadline_at)
                     telemetry.record_websocket(
                         trace_id=trace_id,
                         room_code=canonical_room_code,
-                        command=command_payload.type,
+                        command=command_name,
                         outcome="success",
                         elapsed_seconds=elapsed_since(started_at),
                         span=span,
                     )
-        except (AuthorityError, ValueError):
-            telemetry.record_websocket(trace_id="", room_code=canonical_room_code, command="command", outcome="client_error", elapsed_seconds=0)
-            await websocket.close(code=1008)
         except WebSocketDisconnect:
             pass
         finally:

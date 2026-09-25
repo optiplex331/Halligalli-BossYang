@@ -61,6 +61,11 @@ pnpm run test:e2e    # after pnpm run dev; one sequential-room Paired Runtime jo
 - Multiplayer Room Configuration independently selects four through eight Table
   Seats and two through the selected seat count Human Participants. Neutral
   Seats reveal and affect Bell totals but never ring or score.
+- Multiplayer difficulty sets the reveal pace. A match ends when the shuffled
+  deck is exhausted or fewer than two Human Participants remain, so a leaver
+  forfeits instead of stalling the table. Turn and post-match deadlines live in
+  Redis and survive an API restart; the multiplayer `durationSec` input is
+  deprecated and ignored.
 - Ring only when one fruit totals exactly five; a correct ring collects the
   table, while a wrong ring pays ceiling-half of the table cards.
 - Easy, Normal, and Boss difficulties; 45/60/90-second rounds; button and

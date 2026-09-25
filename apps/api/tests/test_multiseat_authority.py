@@ -7,7 +7,6 @@ from halligalli_api.authority import (
     Bell,
     Ready,
     Start,
-    TURN_DURATION_MS,
 )
 from redis_test_case import RedisAsyncTestCase
 
@@ -30,9 +29,28 @@ class TableSeatMatrixAuthorityTest(RedisAsyncTestCase):
         started = await authority.execute(created.room_code, Start(credentials[0], now_ms=1_000))
         return authority, credentials, started
 
+    async def test_difficulty_sets_the_turn_interval_and_bell_window(self) -> None:
+        paces = {}
+        for difficulty in ("easy", "normal", "hard"):
+            created, credentials = await self.create_room(
+                f"pace-{difficulty}",
+                (("Host", f"{difficulty}-host"), ("Guest", f"{difficulty}-guest")),
+                difficulty=difficulty,
+            )
+            for credential in credentials:
+                await self.authority.execute(created.room_code, Ready(credential))
+            quiet = await self.authority.execute(created.room_code, Start(credentials[0], now_ms=10_000))
+            deadline = quiet.snapshot.turn_deadline_at
+            bell = await self.authority.execute(created.room_code, AdvanceTurn(now_ms=deadline))
+            self.assertEqual(quiet.snapshot.bell_fruit, None)
+            self.assertEqual(bell.snapshot.bell_fruit, "banana")
+            paces[difficulty] = (deadline - 10_000, bell.snapshot.turn_deadline_at - deadline)
+
+        self.assertEqual(paces, {"easy": (900, 1_800), "normal": (700, 1_500), "hard": (550, 1_200)})
+
     async def test_full_face_up_count_drives_collection_and_neutral_seats_never_score(self) -> None:
         authority, credentials, started = await self._started_room(8, 2)
-        await authority.execute(started.room_code, AdvanceTurn(now_ms=1_000 + TURN_DURATION_MS))
+        await authority.execute(started.room_code, AdvanceTurn(now_ms=started.snapshot.turn_deadline_at))
         result = await authority.execute(started.room_code, Bell(credentials[1], now_ms=1_701))
 
         self.assertEqual(len(result.snapshot.scoreboard), 2)
