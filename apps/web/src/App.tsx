@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useAudioEngine } from "./audio/useAudioEngine.js";
 import { projectRoomSnapshot } from "./multiplayer/projection.js";
 import { useRoomEntry } from "./multiplayer/room-entry.js";
@@ -30,7 +30,6 @@ import type {
   PlayerState,
   RoundSummary,
   ScoreBreakdown,
-  SeatLayout,
 } from "./game/types.js";
 
 type Screen = "home" | "play" | "result";
@@ -64,6 +63,12 @@ const BOSS_TAUNTS = {
 
 const COPY = {
   zh: {
+    kicker: "恰好五个 · 反应训练",
+    timeLabel: "剩余",
+    scoreLabel: "得分",
+    you: "你",
+    seatShort: "座位 {seat}",
+    visibleTotals: "桌面水果合计",
     heroRule: "顺时针翻牌，只看桌面最上层，出现刚好 5 个同类水果就抢铃",
     startIntro: "单人训练：调好设置直接开打，边练手速边磨判断力。",
     start: "开始练习",
@@ -144,6 +149,12 @@ const COPY = {
     forfeitMatch: "认输并退出本局",
   },
   en: {
+    kicker: "Exact-five reaction trainer",
+    timeLabel: "Time",
+    scoreLabel: "Score",
+    you: "You",
+    seatShort: "Seat {seat}",
+    visibleTotals: "Visible fruit totals",
     heroRule: "Flip cards clockwise, count only the top visible cards, ring when one fruit totals exactly 5",
     startIntro: "Solo training: tune the table, then sharpen your reflexes and judgment.",
     start: "Start Practice",
@@ -262,16 +273,28 @@ function modeLabel(difficulty: Difficulty, language: GameSettings["language"]): 
   return language === "en" ? mode.labelEn : mode.label;
 }
 
-function FruitCardFace({ card, compact }: { card: Card | null; compact: boolean }) {
+type CardFace = Pick<Card, "fruit" | "count">;
+
+interface TableSeatView {
+  key: number;
+  label: string;
+  isYou: boolean;
+  currentTurn: boolean;
+  active: boolean;
+  card: CardFace | null;
+  revealSequence: number | null;
+}
+
+function FruitCardFace({ card }: { card: CardFace | null }) {
   const fruit = card ? FRUITS.find((item) => item.key === card.fruit) : null;
-  const positions = card ? PIP_LAYOUTS[card.count as keyof typeof PIP_LAYOUTS] : [];
+  const positions = card ? PIP_LAYOUTS[card.count as keyof typeof PIP_LAYOUTS] ?? [] : [];
 
   return (
     <div className="play-card-face">
       {card && (
-        <div className={`play-card-pips count-${card.count} ${compact ? "compact" : ""}`}>
+        <div className={`play-card-pips count-${card.count}`}>
           {positions.map((slot, index) => (
-            <span key={`${card.id}-${slot}-${index}`} className={`pip slot-${slot}`}>
+            <span key={`${slot}-${index}`} className={`pip slot-${slot}`}>
               {fruit?.icon}
             </span>
           ))}
@@ -281,51 +304,82 @@ function FruitCardFace({ card, compact }: { card: Card | null; compact: boolean 
   );
 }
 
-function TableSeat({
-  player,
-  seat,
-  active,
-  currentTurn,
-  language,
-  compact,
-  revealSequence,
-  position,
-}: {
-  player: PlayerState;
-  seat: SeatLayout;
-  active: boolean;
-  currentTurn: boolean;
-  language: GameSettings["language"];
-  compact: boolean;
-  revealSequence: number | null;
-  position: number;
-}) {
-  const topCard = getTopCard(player);
-  const hasCard = Boolean(topCard);
+function BellIcon() {
+  return (
+    <svg className="bell-icon" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+      <circle cx="32" cy="12" r="4" />
+      <path d="M32 18c-11 0-20 8.6-20 20v4h40v-4c0-11.4-9-20-20-20Z" />
+      <rect x="6" y="45" width="52" height="7" rx="3.5" />
+    </svg>
+  );
+}
 
+function TableSeat({ seat, angle }: { seat: TableSeatView; angle: number }) {
   const innerClass = [
     "card-3d-inner",
-    hasCard && "face-up",
-    revealSequence !== null && "just-flipped",
+    seat.card && "face-up",
+    seat.revealSequence !== null && "just-flipped",
   ].filter(Boolean).join(" ");
+  const seatClass = ["table-seat", seat.currentTurn && "current-turn", seat.isYou && "is-you"]
+    .filter(Boolean).join(" ");
 
   return (
     <article
-      className={currentTurn ? "table-seat current-turn" : "table-seat"}
-      style={{ "--seat-angle": `${position}deg` } as CSSProperties}
+      className={seatClass}
+      style={{ "--seat-angle": `${angle}deg` } as CSSProperties}
+      aria-current={seat.currentTurn ? "true" : undefined}
     >
-      <div className="seat-header">
-        <span className="seat-label">{language === "en" ? player.labelEn : player.labelZh}</span>
-      </div>
-      <div className={["table-card-shell", active && "active", currentTurn && "current"].filter(Boolean).join(" ")}>
+      <span className="seat-label">{seat.label}</span>
+      <div className={["table-card-shell", seat.active && "active", seat.currentTurn && "current"].filter(Boolean).join(" ")}>
         <div className="card-3d-container">
-          <div key={revealSequence ?? "settled"} className={innerClass} data-reveal-sequence={revealSequence ?? undefined}>
+          <div key={seat.revealSequence ?? "settled"} className={innerClass} data-reveal-sequence={seat.revealSequence ?? undefined}>
             <div className="card-3d-back"><div className="card-back" /></div>
-            <div className="card-3d-front"><FruitCardFace card={topCard} compact={compact} /></div>
+            <div className="card-3d-front"><FruitCardFace card={seat.card} /></div>
           </div>
         </div>
       </div>
     </article>
+  );
+}
+
+function GameTable({
+  seats,
+  viewerIndex,
+  bellReady,
+  bellPressed,
+  bellLabel,
+  bellDisabled = false,
+  onBell,
+  children,
+}: {
+  seats: TableSeatView[];
+  viewerIndex: number;
+  bellReady: boolean;
+  bellPressed: boolean;
+  bellLabel: string;
+  bellDisabled?: boolean;
+  onBell: () => void;
+  children?: ReactNode;
+}) {
+  return (
+    <div className={`table-scene seats-${seats.length}`}>
+      <div className="table-felt">
+        {children}
+        {seats.map((seat, index) => (
+          <TableSeat key={seat.key} seat={seat} angle={90 + ((index - viewerIndex) * 360) / seats.length} />
+        ))}
+        <div className={bellReady ? "center-bell is-ready" : "center-bell"}>
+          <button
+            className={bellPressed ? "bell-button pressed" : "bell-button"}
+            onClick={onBell}
+            disabled={bellDisabled}
+            aria-label={bellLabel}
+          >
+            <BellIcon />
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -363,13 +417,14 @@ export default function App() {
   const flipTimeoutRef = useRef<number | null>(null);
   const bellPressTimeoutRef = useRef<number | null>(null);
   const screenRegionRef = useRef<HTMLElement | null>(null);
+  const multiplayerSignalRef = useRef<{ sequence: number; correct: number; wrong: number; missed: number } | null>(null);
 
   const mode = MODES[settings.difficulty];
+  const isBossMode = "isBoss" in mode && mode.isBoss;
   const seatLayouts = getSeatLayouts(settings.tableSeatCount) ?? [];
   const userSeatId = seatLayouts.findIndex((seat) => seat.isUser);
   const copy = COPY[settings.language];
-  const compactCards = settings.tableSeatCount >= 5;
-  const { ensureUnlocked, playFeedback } = useAudioEngine(settings.soundEnabled);
+  const { playFeedback, previewSound } = useAudioEngine(settings.soundEnabled);
   const roomEntry = useRoomEntry();
   const roomProjection = roomEntry.session
     ? projectRoomSnapshot(roomEntry.session.snapshot)
@@ -464,6 +519,7 @@ export default function App() {
 
     const { player } = flipCardForPlayer(actor);
     playersForTurn[actorIndex] = player;
+    if (next === base) playFeedback("flip");
     applyBellAvailability(playersForTurn, Date.now());
     commitSnapshot({
       ...next,
@@ -495,8 +551,8 @@ export default function App() {
   }
 
   function startGame(): void {
-    ensureUnlocked();
     stopGameLoops();
+    playFeedback("tick");
     const freshPlayers = createPlayers(settings.tableSeatCount, FRUITS);
     const freshSnapshot: GameSnapshot = {
       ...INITIAL_GAME_SNAPSHOT,
@@ -527,8 +583,10 @@ export default function App() {
       tick -= 1;
       if (tick > 0) {
         setCountdown({ runId, value: tick as 2 | 1 });
+        playFeedback("tick");
         return;
       }
+      playFeedback("go");
       clearTimer(startupTimeoutRef, window.clearInterval);
       setCountdown(null);
       beginGameLoop(freshSnapshot);
@@ -549,6 +607,7 @@ export default function App() {
     setActiveBellFruit(result.bellState.fruitKey);
     commitSnapshot({ ...result.state, userSeatId: gameStateRef.current.userSeatId });
     triggerBellPress();
+    playFeedback("ring");
 
     if (result.kind === "correct") {
       updateFeedback("success", t("bellSuccess", { count: result.collectedCount }));
@@ -613,6 +672,30 @@ export default function App() {
 
   useEffect(() => () => stopGameLoops(), []);
 
+  const roomSnapshot = roomEntry.session?.snapshot;
+  useEffect(() => {
+    if (!roomSnapshot || roomSnapshot.phase !== "playing") {
+      multiplayerSignalRef.current = null;
+      return;
+    }
+    const current = roomSnapshot.scoreboard.reduce(
+      (sum, row) => ({
+        sequence: sum.sequence,
+        correct: sum.correct + row.correctHits,
+        wrong: sum.wrong + row.wrongHits,
+        missed: sum.missed + row.missedHits,
+      }),
+      { sequence: roomSnapshot.lastReveal?.sequence ?? 0, correct: 0, wrong: 0, missed: 0 },
+    );
+    const previous = multiplayerSignalRef.current;
+    multiplayerSignalRef.current = current;
+    if (!previous) return;
+    if (current.correct > previous.correct) playFeedback("success");
+    else if (current.wrong > previous.wrong) playFeedback("penalty");
+    else if (current.missed > previous.missed) playFeedback("warn");
+    else if (current.sequence !== previous.sequence) playFeedback("flip");
+  }, [roomSnapshot, playFeedback]);
+
   useEffect(() => {
     screenRegionRef.current?.focus();
   }, [screen]);
@@ -631,18 +714,26 @@ export default function App() {
   return (
     <main className="app-shell">
       <section className="app-panel">
-        <header className="hero">
-          <div><h1>Halligalli Arena</h1></div>
-          <p className="hero-rule">{t("heroRule")}</p>
+        <header className={screen === "home" ? "hero" : "hero is-compact"}>
+          <div>
+            <p className="hero-kicker">{t("kicker")}</p>
+            <h1>Halligalli Arena</h1>
+          </div>
+          {screen === "home" && <p className="hero-rule">{t("heroRule")}</p>}
         </header>
 
         {screen === "home" && (
           <section ref={screenRegionRef} tabIndex={-1} className="stack screen-enter home-enter">
             <div className="card intro">
-              <p>{t("startIntro")}</p>
-              <div className="button-row">
-                <button className="primary-button glow-button" onClick={startGame}>{t("start")}</button>
+              <div className="intro-copy">
+                <p>{t("startIntro")}</p>
+                <p className="setup-summary">
+                  <span>{settings.language === "en" ? `${settings.tableSeatCount} seats` : `${settings.tableSeatCount} 个座位`}</span>
+                  <span>{modeLabel(settings.difficulty, settings.language)}</span>
+                  <span>{settings.duration} {t("seconds")}</span>
+                </p>
               </div>
+              <button className="primary-button start-button" onClick={startGame}>{t("start")}</button>
             </div>
 
             <div className="grid two-up">
@@ -658,7 +749,7 @@ export default function App() {
                 <div className="control-group">
                   <span>{t("sound")}</span>
                   <div className="chip-row">
-                    <button className={settings.soundEnabled ? "chip active" : "chip"} aria-pressed={settings.soundEnabled} onClick={() => updateSetting("soundEnabled", true)}>{t("soundOn")}</button>
+                    <button className={settings.soundEnabled ? "chip active" : "chip"} aria-pressed={settings.soundEnabled} onClick={() => { updateSetting("soundEnabled", true); previewSound(); }}>{t("soundOn")}</button>
                     <button className={!settings.soundEnabled ? "chip active" : "chip"} aria-pressed={!settings.soundEnabled} onClick={() => updateSetting("soundEnabled", false)}>{t("soundOff")}</button>
                   </div>
                 </div>
@@ -699,7 +790,10 @@ export default function App() {
                 <p className="deck-note">{t("deckHint")}</p>
                 <div className="boss-card">
                   <img className="boss-portrait" src="/yang-boss.png" alt={t("bossTitle")} />
-                  <p>{t("bossHint")}</p>
+                  <div>
+                    <strong>{t("bossTitle")}</strong>
+                    <p>{t("bossHint")}</p>
+                  </div>
                 </div>
               </section>
             </div>
@@ -807,44 +901,29 @@ export default function App() {
                   {roomProjection.snapshot.phase === "playing" && (
                     <div className="multiplayer-match-state">
                       {activeRoomParticipant && <p>{t("turnOwner", { name: activeRoomParticipant.name })}</p>}
-                      <div
-                        className={[
-                          "multiplayer-cards",
-                          roomProjection.seats.length === 2 ? "multiplayer-cards-2" : "",
-                        ].filter(Boolean).join(" ")}
-                        aria-label={t("multiplayer")}
-                      >
-                        {roomProjection.seats.map((seat) => {
-                          const card = seat.card;
-                          const fruit = card
-                            ? FRUITS.find((item) => item.key === card.fruit)
-                            : null;
-                          return (
-                            <article
-                              key={seat.seatIndex}
-                              className={[
-                                "multiplayer-card",
-                                card ? "" : "empty",
-                                seat.currentTurn ? "current-turn" : "",
-                              ].filter(Boolean).join(" ")}
-                              aria-current={seat.currentTurn ? "true" : undefined}
-                              style={{ "--seat-angle": `${90 + ((seat.seatIndex - roomProjection.snapshot.viewerSeatIndex) * 360) / roomProjection.seats.length}deg` } as CSSProperties}
-                            >
-                              <span className="multiplayer-seat-heading">
-                                {t("seatLabel", { seat: seat.seatNumber })} · {seat.occupied ? seat.name : (settings.language === "en" ? "Neutral" : "中立")}
-                              </span>
-                              <strong>{card ? `${fruit?.icon ?? ""} ×${card.count}` : "—"}</strong>
-                            </article>
-                          );
-                        })}
-                      </div>
-                      <button
-                        className="primary-button"
-                        disabled={!roomEntry.connected || !roomProjection.canRing}
-                        onClick={roomEntry.ringBell}
-                      >
-                        {t("ringMultiplayerBell")}
-                      </button>
+                      <GameTable
+                        seats={roomProjection.seats.map((seat) => ({
+                          key: seat.seatIndex,
+                          label: seat.occupied ? seat.name : t("seatShort", { seat: seat.seatNumber }),
+                          isYou: seat.seatIndex === roomProjection.snapshot.viewerSeatIndex,
+                          currentTurn: seat.currentTurn,
+                          active: false,
+                          card: seat.card ?? null,
+                          revealSequence: roomProjection.snapshot.lastReveal?.seatIndex === seat.seatIndex
+                            ? roomProjection.snapshot.lastReveal.sequence
+                            : null,
+                        }))}
+                        viewerIndex={roomProjection.snapshot.viewerSeatIndex}
+                        bellReady={false}
+                        bellPressed={bellPressed}
+                        bellLabel={t("ringMultiplayerBell")}
+                        bellDisabled={!roomEntry.connected || !roomProjection.canRing}
+                        onBell={() => {
+                          roomEntry.ringBell();
+                          triggerBellPress();
+                          playFeedback("ring");
+                        }}
+                      />
                       <button className="ghost-button" disabled={!roomEntry.connected} onClick={roomEntry.forfeit}>
                         {t("forfeitMatch")}
                       </button>
@@ -910,42 +989,62 @@ export default function App() {
         )}
 
         {screen === "play" && (
-          <section ref={screenRegionRef} tabIndex={-1} className="stack screen-enter">
+          <section ref={screenRegionRef} tabIndex={-1} className="play-screen screen-enter">
             {countdown && <div className="countdown-overlay" role="status" aria-live="assertive" aria-atomic="true"><span key={`${countdown.runId}-${countdown.value}`} className="countdown-number" data-countdown-run={countdown.runId} data-countdown-value={countdown.value}>{countdown.value}</span></div>}
-            <div className="play-topbar minimal">
-              <span className="pill">{t("timeLeft", { seconds: secondsLeft })}</span>
-              <button className="ghost-button" disabled={Boolean(countdown)} onClick={finishGame}>{t("endGame")}</button>
-            </div>
-            <div className={`table-scene players-${settings.tableSeatCount}`}>
-              {feedback.message && (
-                <div
-                  className={`game-feedback ${feedback.type}`}
-                  role="status"
-                  aria-live={feedback.type === "error" ? "assertive" : "polite"}
-                  aria-atomic="true"
-                >
-                  <span className="game-feedback-label">{t("gameUpdate")}</span>
-                  <span className="game-feedback-message">{feedback.message}</span>
-                </div>
-              )}
-              <div className="table-felt">
-                <div className="boss-presence"><img className="boss-presence-avatar" src="/yang-boss.png" alt="" /><span>{t("bossWatching")}</span></div>
-                {bossTaunt && <div className="boss-taunt" aria-live="polite" aria-atomic="true">{bossTaunt}</div>}
-                {seatLayouts.map((seat, index) => {
-                  const player = players[index];
-                  if (!player) return null;
-                  const topCard = getTopCard(player);
-                  const active = Boolean(activeBellFruit && topCard?.fruit === activeBellFruit && totals[activeBellFruit] === 5);
-                  const position = 90 + ((index - userSeatId) * 360) / seatLayouts.length;
-                  return <TableSeat key={player.id} player={player} seat={seat} active={active} currentTurn={gameStateRef.current.actingPlayer === index} language={settings.language} compact={compactCards} revealSequence={latestReveal?.seatIndex === index ? latestReveal.sequence : null} position={position} />;
-                })}
-                <div className={activeBellFruit ? "center-bell is-ready" : "center-bell"}>
-                  <button className={bellPressed ? "bell-button pressed" : "bell-button"} onClick={handleBell} aria-label={activeBellFruit ? t("bellReady", { fruit: fruitLabel(activeBellFruit, settings.language) }) : t("bellWait")} aria-pressed={bellPressed}>铃</button>
-                </div>
+            <div className="play-hud" style={{ "--progress": secondsLeft / Math.max(1, settings.duration) } as CSSProperties}>
+              <div className="hud-stat">
+                <span className="hud-label">{t("timeLabel")}</span>
+                <strong className="hud-value" aria-label={t("timeLeft", { seconds: secondsLeft })}>{secondsLeft}<small>{t("seconds")}</small></strong>
               </div>
+              <div className="hud-stat">
+                <span className="hud-label">{t("scoreLabel")}</span>
+                <strong className="hud-value">{score}</strong>
+              </div>
+              <div className={isBossMode ? "boss-presence is-boss" : "boss-presence"}>
+                <img className="boss-presence-avatar" src="/yang-boss.png" alt="" />
+                <span>{isBossMode ? t("bossWatching") : modeLabel(settings.difficulty, settings.language)}</span>
+              </div>
+              <button className="ghost-button hud-end" disabled={Boolean(countdown)} onClick={finishGame}>{t("endGame")}</button>
+              <span className="hud-progress" aria-hidden="true" />
             </div>
-            <div className="totals-grid compact" aria-label={t("rules")}>
-              {FRUITS.map((fruit) => <div key={fruit.key} className={totals[fruit.key] === 5 ? "total-item total-match" : "total-item"}><span>{fruit.icon} {settings.language === "en" ? fruit.labelEn : fruit.label}</span><strong>{totals[fruit.key]}</strong></div>)}
+            <div
+              className={`game-feedback ${feedback.type}`}
+              role="status"
+              aria-live={feedback.type === "error" ? "assertive" : "polite"}
+              aria-atomic="true"
+            >
+              <span className="game-feedback-label">{t("gameUpdate")}</span>
+              <span className="game-feedback-message">{feedback.message || t("startRound")}</span>
+            </div>
+            <GameTable
+              seats={players.map((player, index) => {
+                const topCard = getTopCard(player);
+                return {
+                  key: player.id,
+                  label: player.isHuman ? t("you") : t("seatShort", { seat: index + 1 }),
+                  isYou: player.isHuman,
+                  currentTurn: gameStateRef.current.actingPlayer === index,
+                  active: Boolean(activeBellFruit && topCard?.fruit === activeBellFruit && totals[activeBellFruit] === 5),
+                  card: topCard,
+                  revealSequence: latestReveal?.seatIndex === index ? latestReveal.sequence : null,
+                };
+              })}
+              viewerIndex={userSeatId}
+              bellReady={Boolean(activeBellFruit)}
+              bellPressed={bellPressed}
+              bellLabel={activeBellFruit ? t("bellReady", { fruit: fruitLabel(activeBellFruit, settings.language) }) : t("bellWait")}
+              onBell={handleBell}
+            >
+              {bossTaunt && <div className="boss-taunt" aria-live="polite" aria-atomic="true">{bossTaunt}</div>}
+            </GameTable>
+            <div className="totals-strip" aria-label={t("visibleTotals")}>
+              {FRUITS.map((fruit) => (
+                <div key={fruit.key} className={totals[fruit.key] === 5 ? "total-item total-match" : "total-item"}>
+                  <span className="total-icon" aria-hidden="true">{fruit.icon}</span>
+                  <span className="total-name">{settings.language === "en" ? fruit.labelEn : fruit.label}</span>
+                  <strong>{totals[fruit.key]}</strong>
+                </div>
+              ))}
             </div>
           </section>
         )}
