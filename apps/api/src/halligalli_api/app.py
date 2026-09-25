@@ -112,13 +112,18 @@ class RoomSocketHub:
         for websocket, member in members:
             try:
                 snapshot = await authority.snapshot(room_code, Viewer(credential=member.credential))
-                if snapshot.revision <= member.revision:
-                    continue
-                member.revision = snapshot.revision
+            except AuthorityError:
+                self.detach(room_code, websocket)
+                continue
+            if snapshot.revision <= member.revision:
+                continue
+            member.revision = snapshot.revision
+            try:
                 await websocket.send_json(
                     {"type": "snapshot", "snapshot": snapshot.model_dump(by_alias=True)},
                 )
-            except (AuthorityError, RuntimeError):
+            except Exception:
+                # A peer that can no longer receive is gone; it must not break the publisher.
                 self.detach(room_code, websocket)
 
 
