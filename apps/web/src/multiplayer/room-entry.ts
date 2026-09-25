@@ -33,6 +33,22 @@ function websocketOrigin(): string {
   return `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
 }
 
+/** A failure the page reports by `code`; the English `message` is kept for logs only. */
+class RoomRequestError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message);
+  }
+}
+
+function errorCode(reason: unknown, fallback: string): string {
+  if (reason instanceof RoomRequestError) {
+    console.warn(`Room request failed: ${reason.code}: ${reason.message}`);
+    return reason.code;
+  }
+  console.warn("Room request failed", reason);
+  return fallback;
+}
+
 async function readEntry(
   path: string,
   payload: EntryRequest | CreateRoomRequest,
@@ -47,8 +63,8 @@ async function readEntry(
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
-    const problem = (await response.json()) as ProblemDetails;
-    throw new Error(problem.title || "Room entry failed");
+    const problem = (await response.json().catch(() => null)) as ProblemDetails | null;
+    throw new RoomRequestError(problem?.code ?? "entry_failed", problem?.title ?? "Room entry failed");
   }
   return response.json() as Promise<EntryResult>;
 }
@@ -57,14 +73,14 @@ async function readSnapshot(session: RoomSession): Promise<RoomSnapshot> {
   const response = await fetch(`/api/v1/rooms/${encodeURIComponent(session.roomCode)}`, {
     headers: { Authorization: `Bearer ${session.credential}` },
   });
-  if (!response.ok) throw new Error("Room snapshot is unavailable");
+  if (!response.ok) throw new RoomRequestError("snapshot_unavailable", "Room snapshot is unavailable");
   return response.json() as Promise<RoomSnapshot>;
 }
 
 function watchRoom(
   session: RoomSession,
   onSnapshot: (snapshot: RoomSnapshot) => void,
-  onError: (title: string) => void,
+  onError: (code: string, title: string) => void,
 ): WebSocket {
   const socket = new WebSocket(
     `${websocketOrigin()}/ws/v1/rooms/${encodeURIComponent(session.roomCode)}`,
@@ -75,7 +91,7 @@ function watchRoom(
   socket.addEventListener("message", (event) => {
     const frame = parseServerFrame(event.data);
     if (frame?.type === "snapshot") onSnapshot(frame.snapshot);
-    else if (frame?.type === "error") onError(frame.title);
+    else if (frame?.type === "error") onError(frame.code, frame.title);
   });
   return socket;
 }
@@ -117,9 +133,10 @@ export function useRoomEntry() {
           ...previous,
           snapshot: replacement,
         } : previous);
-      })().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Room snapshot is unavailable"));
-    }, (title) => {
-      if (generationRef.current === generation) setError(title);
+      })().catch((reason: unknown) => setError(errorCode(reason, "snapshot_unavailable")));
+    }, (code, title) => {
+      console.warn(`Room command rejected: ${code}: ${title}`);
+      if (generationRef.current === generation) setError(code);
     });
     socketRef.current = socket;
     socket.addEventListener("open", () => {
@@ -150,7 +167,7 @@ export function useRoomEntry() {
   function sendCommand(type: "ready" | "start" | "bell" | "leave" | "forfeit" | "continue" | "post_match_leave"): void {
     const socket = socketRef.current;
     if (socket?.readyState !== WebSocket.OPEN) {
-      setError("Room connection is unavailable");
+      setError("connection_unavailable");
       return;
     }
     setError("");
@@ -182,7 +199,7 @@ export function useRoomEntry() {
       setSession(nextSession);
     } catch (reason) {
       if (generationRef.current === generation) {
-        setError(reason instanceof Error ? reason.message : "Room entry failed");
+        setError(errorCode(reason, "entry_failed"));
       }
     } finally {
       if (generationRef.current === generation) setPending(false);

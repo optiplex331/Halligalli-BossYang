@@ -121,6 +121,15 @@ const COPY = {
     continueMatch: "继续下一局",
     leaveRoom: "离开房间",
     forfeitMatch: "认输并退出本局",
+    errorRoomNotFound: "房间不存在或已过期。",
+    errorRoomFull: "房间已满。",
+    errorRoomNotJoinable: "对局已开始，暂时无法加入。",
+    errorHostRequired: "只有房主可以开始对局。",
+    errorPlayersNotReady: "所有玩家准备后才能开始。",
+    errorCommandUnavailable: "当前阶段无法执行这个操作。",
+    errorInvalidRequest: "请求无效，请检查房间设置。",
+    errorConnectionUnavailable: "房间连接暂不可用，正在重连。",
+    errorGeneric: "操作没有成功，请稍后再试。",
     forfeitEvent: "有玩家认输，已退出本局。",
     forfeitedTag: "已认输",
     playerPlaceholder: "玩家",
@@ -213,6 +222,15 @@ const COPY = {
     continueMatch: "Continue to next match",
     leaveRoom: "Leave room",
     forfeitMatch: "Forfeit this match",
+    errorRoomNotFound: "The room does not exist or has expired.",
+    errorRoomFull: "The room is full.",
+    errorRoomNotJoinable: "The match has started; the room cannot be joined now.",
+    errorHostRequired: "Only the host can start the match.",
+    errorPlayersNotReady: "Every player must be ready before the match starts.",
+    errorCommandUnavailable: "That action is not available right now.",
+    errorInvalidRequest: "The request is invalid. Check the room settings.",
+    errorConnectionUnavailable: "The room connection is unavailable; reconnecting.",
+    errorGeneric: "That did not work. Please try again.",
     forfeitEvent: "A player forfeited and left this match.",
     forfeitedTag: "Forfeited",
     playerPlaceholder: "Player",
@@ -232,6 +250,28 @@ const NOTICE_TONES: Record<SoloRoundNotice["kind"], FeedbackType> = {
   correct: "success",
   wrong: "error",
 };
+
+const ROOM_ERROR_COPY: Record<string, CopyKey> = {
+  room_not_found: "errorRoomNotFound",
+  room_full: "errorRoomFull",
+  room_not_joinable: "errorRoomNotJoinable",
+  match_already_started: "errorRoomNotJoinable",
+  host_required: "errorHostRequired",
+  players_not_ready: "errorPlayersNotReady",
+  already_ready: "errorCommandUnavailable",
+  match_not_running: "errorCommandUnavailable",
+  post_match_not_active: "errorCommandUnavailable",
+  forfeit_not_allowed: "errorCommandUnavailable",
+  leave_not_allowed: "errorCommandUnavailable",
+  participant_departed: "errorCommandUnavailable",
+  invalid_request: "errorInvalidRequest",
+  invalid_room_configuration: "errorInvalidRequest",
+  connection_unavailable: "errorConnectionUnavailable",
+};
+
+function roomErrorCopyKey(code: string): CopyKey {
+  return ROOM_ERROR_COPY[code] ?? "errorGeneric";
+}
 
 function fruitLabel(fruitKey: FruitKey | null, language: GameSettings["language"]): string {
   const fruit = FRUITS.find((item) => item.key === fruitKey);
@@ -638,7 +678,7 @@ export default function App() {
                   {t("joinRoom")}
                 </button>
               </div>}
-              {roomEntry.error && <p className="room-entry-error" role="alert">{roomEntry.error}</p>}
+              {roomEntry.error && <p className="room-entry-error" role="alert">{t(roomErrorCopyKey(roomEntry.error))}</p>}
               {roomProjection && (
                 <div className="room-entry-snapshot" role="status" aria-live="polite">
                   <strong>{t("roomCode")}: {roomProjection.snapshot.roomCode}</strong>
