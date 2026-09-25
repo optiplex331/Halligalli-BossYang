@@ -18,6 +18,8 @@ interface FixtureCase {
   kind?: string;
   tableSeatCount?: number;
   humanSeatIndexes?: number[];
+  tableCards?: number;
+  handCards?: number;
 }
 
 const fixture = JSON.parse(readFileSync(
@@ -143,5 +145,49 @@ describe("v1 Shared Behavior Contract", () => {
     expect(result.summary.score).toBe(current.expected.score);
     expect(result.summary.missedHits).toBe(current.expected.missedHits);
     expect(result.pendingResolution.snapshot.scoreBreakdown.missedPenalty).toBe(current.expected.missedPenalty);
+  });
+
+  it("caps Single-Player card penalties by the human's hand", () => {
+    const current = fixtureCase("wrong-bell-card-penalty-policy");
+    const expected = current.expected.singlePlayer as Record<string, number>;
+    const players = [0, 1, 2, 3].map((id) => player(id));
+    for (let index = 0; index < (current.tableCards ?? 0); index += 1) {
+      const fruit = FRUITS[index % FRUITS.length]!.key;
+      players[index % players.length]!.faceUpPile.push({ id: `table-${index}`, fruit, count: 1 });
+    }
+    players[0]!.drawPile = Array.from({ length: current.handCards ?? 0 }, (_, index) => ({
+      id: `hand-${index}`,
+      fruit: "grape" as const,
+      count: 1,
+    }));
+
+    const result = resolveSinglePlayerBell({
+      state: {
+        players,
+        currentTurn: 0,
+        actingPlayer: 0,
+        score: current.startingScore ?? 0,
+        correctHits: 0,
+        wrongHits: 0,
+        missedHits: 0,
+        reactionTimes: [],
+        scoreBreakdown: { ...INITIAL_BREAKDOWN, correctBase: current.startingScore ?? 0 },
+        difficulty: "normal",
+        durationSec: 60,
+        tableSeatCount: 4,
+        maxStreak: 0,
+        streak: 0,
+      },
+      bellState: { available: false, fruitKey: null, startedAt: 0, handled: true },
+      userSeatId: 0,
+      mode: MODES.normal,
+      now: 1_000,
+    });
+    if (result.kind !== "wrong") throw new Error("Expected a wrong bell");
+    expect(result.penaltyCount).toBe(expected.penaltyCount);
+    expect(result.state.scoreBreakdown).toMatchObject({
+      wrongPenalty: expected.wrongPenalty,
+      cardPenalty: expected.cardPenalty,
+    });
   });
 });
