@@ -97,8 +97,11 @@ class SharedCorrectBellFixtureTest(RedisAsyncTestCase):
         self.assertEqual(wrong_score.score_breakdown.wrong_penalty, wrong_expected["wrongPenalty"])
         self.assertEqual(wrong_score.score_breakdown.card_penalty, wrong_expected["cardPenalty"])
 
-        await authority.execute(created.room_code, AdvanceTurn(now_ms=1_700))
-        missed_result = await authority.execute(created.room_code, AdvanceTurn(now_ms=2_400))
+        bell_window = await authority.execute(created.room_code, AdvanceTurn(now_ms=wrong_result.snapshot.turn_deadline_at))
+        missed_result = await authority.execute(
+            created.room_code,
+            AdvanceTurn(now_ms=bell_window.snapshot.turn_deadline_at),
+        )
         missed_score = missed_result.snapshot.scoreboard[0]
         missed_expected = missed["expected"]
         self.assertEqual(missed_result.snapshot.last_event, "missed_bell")
