@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import random
 import secrets
 import time
 from dataclasses import asdict, dataclass, field
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Sequence
 from typing import Literal, Protocol, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -13,11 +15,30 @@ from pydantic import BaseModel, ConfigDict, Field
 from .observability import elapsed_since
 
 
+_logger = logging.getLogger("halligalli.authority")
+
+
 ROOM_TTL_SECONDS = 60 * 60
+DUE_INDEX_KEY = "halligalli:rooms:due"
+ACTIVE_ROOMS_KEY = "halligalli:rooms:active"
+COMMAND_HISTORY_LIMIT = 128
 POST_MATCH_DURATION_MS = 30_000
 ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-TURN_DURATION_MS = 700
 SCORE_BONUS_WINDOW_MS = 1_500
+Difficulty: TypeAlias = Literal["easy", "normal", "hard"]
+
+
+@dataclass(frozen=True)
+class MatchPace:
+    turn_interval_ms: int
+    bell_window_ms: int
+
+
+MATCH_PACE: dict[Difficulty, MatchPace] = {
+    "easy": MatchPace(turn_interval_ms=900, bell_window_ms=1_800),
+    "normal": MatchPace(turn_interval_ms=700, bell_window_ms=1_500),
+    "hard": MatchPace(turn_interval_ms=550, bell_window_ms=1_200),
+}
 MIN_TABLE_SEATS = 4
 MAX_TABLE_SEATS = 8
 MIN_HUMAN_PARTICIPANTS = 2
@@ -25,34 +46,72 @@ FRUIT_ORDER = ("banana", "strawberry", "lemon", "grape")
 CARD_DISTRIBUTION = ((1, 3), (2, 5), (3, 5), (4, 3), (5, 2))
 
 CardValue: TypeAlias = tuple[Literal["banana", "strawberry", "lemon", "grape"], int]
-OPENING_CARD_SEQUENCE: tuple[CardValue, ...] = (
-    ("banana", 2),
-    ("banana", 3),
-    ("strawberry", 1),
-    ("lemon", 1),
-    ("grape", 1),
-    ("strawberry", 1),
-)
+EARLY_BELL_REVEALS = 8
 
 
-def _card_sequence() -> tuple[CardValue, ...]:
-    sequence = list(OPENING_CARD_SEQUENCE)
-    remaining = {
-        (fruit, count): repetitions
-        for fruit in FRUIT_ORDER
-        for count, repetitions in CARD_DISTRIBUTION
-    }
-    for card in OPENING_CARD_SEQUENCE:
+def _legacy_card_order() -> tuple[CardValue, ...]:
+    opening: tuple[CardValue, ...] = (
+        ("banana", 2),
+        ("banana", 3),
+        ("strawberry", 1),
+        ("lemon", 1),
+        ("grape", 1),
+        ("strawberry", 1),
+    )
+    remaining = {(fruit, count): repetitions for fruit in FRUIT_ORDER for count, repetitions in CARD_DISTRIBUTION}
+    for card in opening:
         remaining[card] -= 1
-
-    for fruit in FRUIT_ORDER:
-        for count, _ in CARD_DISTRIBUTION:
-            sequence.extend((fruit, count) for _ in range(remaining[(fruit, count)]))
-
-    return tuple(sequence)
+    rest = [(fruit, count) for fruit in FRUIT_ORDER for count, _ in CARD_DISTRIBUTION for _ in range(remaining[(fruit, count)])]
+    return opening + tuple(rest)
 
 
-CARD_SEQUENCE = _card_sequence()
+# The fixed order every match used before seeded decks. Only matches written by that release still read it.
+LEGACY_CARD_ORDER = _legacy_card_order()
+
+
+def wall_clock_ms() -> int:
+    return time.time_ns() // 1_000_000
+
+
+class DeckSource(Protocol):
+    def new_seed(self) -> int: ...
+
+    def deal(self, seed: int, table_seat_count: int) -> Sequence[CardValue]: ...
+
+
+def _opens_early_bell(cards: Sequence[CardValue], table_seat_count: int) -> bool:
+    """Whether a table without prior bells shows an exact five within the first reveals."""
+    for revealed in range(1, min(EARLY_BELL_REVEALS, len(cards)) + 1):
+        visible = cards[max(0, revealed - table_seat_count):revealed]
+        totals = {fruit: 0 for fruit in FRUIT_ORDER}
+        for fruit, count in visible:
+            totals[fruit] += count
+        if 5 in totals.values():
+            return True
+    return False
+
+
+class StandardDeck:
+    """Shuffles the standard distribution from a seed, guaranteeing an early exact-five opportunity."""
+
+    def __init__(self, seed_source: Callable[[], int] | None = None) -> None:
+        self._seed_source = seed_source or (lambda: secrets.randbits(63))
+
+    def new_seed(self) -> int:
+        return self._seed_source()
+
+    def deal(self, seed: int, table_seat_count: int) -> tuple[CardValue, ...]:
+        rng = random.Random(seed)
+        cards: list[CardValue] = [
+            (fruit, count)
+            for fruit in FRUIT_ORDER
+            for count, repetitions in CARD_DISTRIBUTION
+            for _ in range(repetitions)
+        ]
+        while True:
+            rng.shuffle(cards)
+            if _opens_early_bell(cards, table_seat_count):
+                return tuple(cards)
 
 
 def _camel_case(value: str) -> str:
@@ -100,6 +159,8 @@ def sum_breakdown(breakdown: ScoreBreakdown) -> int:
 
 class ParticipantScore(ApiModel):
     seat_index: int
+    name: str
+    forfeited: bool = False
     score: int
     correct_hits: int
     wrong_hits: int
@@ -109,6 +170,7 @@ class ParticipantScore(ApiModel):
 
 class MatchResult(ApiModel):
     winner_seat_index: int
+    winner_name: str
     score: int
     participants: list[ParticipantScore]
 
@@ -116,8 +178,7 @@ class MatchResult(ApiModel):
 class RoomConfiguration(ApiModel):
     table_seat_count: int
     target_human_participant_count: int
-    difficulty: Literal["easy", "normal", "hard"]
-    duration_sec: int
+    difficulty: Difficulty
 
 
 class TableSeatSnapshot(ApiModel):
@@ -167,7 +228,7 @@ class RoomSnapshot(ApiModel):
     allowed_commands: list[Literal["ready", "start", "bell", "leave", "forfeit", "continue", "post_match_leave"]]
     bell_fruit: Literal["banana", "strawberry", "lemon", "grape"] | None = None
     scoreboard: list[ParticipantScore]
-    last_event: Literal["correct_bell", "wrong_bell", "missed_bell"] | None = None
+    last_event: Literal["correct_bell", "wrong_bell", "missed_bell", "forfeit"] | None = None
     result: MatchResult | None = None
     match_number: int = 0
     post_match_deadline_at: int | None = None
@@ -197,8 +258,7 @@ class CreateRoom:
     credential_verifier: str
     table_seat_count: int
     target_human_participant_count: int
-    difficulty: Literal["easy", "normal", "hard"]
-    duration_sec: int
+    difficulty: Difficulty
 
 
 @dataclass(frozen=True)
@@ -277,6 +337,10 @@ class MultiplayerAuthority(Protocol):
 
     async def snapshot(self, room_code: str, viewer: Viewer) -> RoomSnapshot: ...
 
+    def now_ms(self) -> int: ...
+
+    async def advance_due(self, now_ms: int | None = None) -> list[str]: ...
+
 
 class RedisRevisionSubscription:
     """A ready Redis pattern subscription for room snapshot invalidations."""
@@ -326,6 +390,7 @@ class _IdempotencyEntry:
 @dataclass
 class _CommandEntry:
     fingerprint: str
+    revision: int = 0
 
 
 @dataclass
@@ -338,10 +403,13 @@ class _Card:
 class _MatchResult:
     winner_seat_index: int
     score: int
+    winner_name: str = ""
 
 
 @dataclass
 class _ParticipantScore:
+    name: str = ""
+    forfeited: bool = False
     correct_hits: int = 0
     wrong_hits: int = 0
     missed_hits: int = 0
@@ -366,14 +434,48 @@ class _Match:
     top_cards: list[_Card | None]
     face_up_card_counts: list[int]
     frozen_human_seat_indexes: list[int]
+    seed: int = 0
+    deck: list[CardValue] = field(default_factory=list)
     reveal_sequence: int = 0
     next_card_index: int = 0
     bell_fruit: Literal["banana", "strawberry", "lemon", "grape"] | None = None
     bell_opened_at: int | None = None
     scores: dict[int, _ParticipantScore] = field(default_factory=dict)
-    last_event: Literal["correct_bell", "wrong_bell", "missed_bell"] | None = None
+    last_event: Literal["correct_bell", "wrong_bell", "missed_bell", "forfeit"] | None = None
     result: _MatchResult | None = None
     number: int = 0
+
+    @classmethod
+    def from_raw(cls, raw: dict, participants: list[_Participant]) -> _Match:
+        """Load match state, including matches written by the previous release (rolling deploys)."""
+        # The latest occupant of a seat is the one who played this match.
+        names = {participant.seat_index: participant.name for participant in participants}
+        scores = {
+            int(seat): _ParticipantScore(**{"name": names.get(int(seat), ""), **score})
+            for seat, score in raw["scores"].items()
+        }
+        result = raw["result"]
+        return cls(
+            current_turn=raw["current_turn"],
+            turn_deadline_at=raw["turn_deadline_at"],
+            top_cards=[_Card(**card) if card is not None else None for card in raw["top_cards"]],
+            face_up_card_counts=raw["face_up_card_counts"],
+            frozen_human_seat_indexes=raw["frozen_human_seat_indexes"],
+            seed=raw.get("seed", 0),
+            deck=[(fruit, count) for fruit, count in raw.get("deck", LEGACY_CARD_ORDER)],
+            reveal_sequence=raw["reveal_sequence"],
+            next_card_index=raw["next_card_index"],
+            bell_fruit=raw["bell_fruit"],
+            bell_opened_at=raw["bell_opened_at"],
+            scores=scores,
+            last_event=raw["last_event"],
+            result=(
+                _MatchResult(**{"winner_name": scores[result["winner_seat_index"]].name, **result})
+                if result is not None
+                else None
+            ),
+            number=raw["number"],
+        )
 
 
 @dataclass
@@ -382,8 +484,7 @@ class _Room:
     revision: int = 1
     table_seat_count: int = MIN_TABLE_SEATS
     target_human_participant_count: int = MIN_HUMAN_PARTICIPANTS
-    difficulty: Literal["easy", "normal", "hard"] = "normal"
-    duration_sec: int = 60
+    difficulty: Difficulty = "normal"
     phase: Literal["lobby", "playing", "post_match"] = "lobby"
     participants: list[_Participant] = field(default_factory=list)
     idempotency: dict[str, _IdempotencyEntry] = field(default_factory=dict)
@@ -399,15 +500,15 @@ class _Room:
     @classmethod
     def from_json(cls, value: str) -> _Room:
         raw = json.loads(value)
+        participants = [_Participant(**participant) for participant in raw["participants"]]
         return cls(
             code=raw["code"],
             revision=raw["revision"],
             table_seat_count=raw["table_seat_count"],
             target_human_participant_count=raw["target_human_participant_count"],
             difficulty=raw["difficulty"],
-            duration_sec=raw["duration_sec"],
             phase=raw["phase"],
-            participants=[_Participant(**participant) for participant in raw["participants"]],
+            participants=participants,
             idempotency={
                 key: _IdempotencyEntry(**entry)
                 for key, entry in raw["idempotency"].items()
@@ -416,33 +517,25 @@ class _Room:
             match_number=raw["match_number"],
             host_seat_index=raw["host_seat_index"],
             post_match_deadline_at=raw["post_match_deadline_at"],
-            match=(
-                _Match(
-                    current_turn=raw["match"]["current_turn"],
-                    turn_deadline_at=raw["match"]["turn_deadline_at"],
-                    top_cards=[
-                        _Card(**card) if card is not None else None
-                        for card in raw["match"]["top_cards"]
-                    ],
-                    face_up_card_counts=raw["match"]["face_up_card_counts"],
-                    frozen_human_seat_indexes=raw["match"]["frozen_human_seat_indexes"],
-                    reveal_sequence=raw["match"]["reveal_sequence"],
-                    next_card_index=raw["match"]["next_card_index"],
-                    bell_fruit=raw["match"]["bell_fruit"],
-                    bell_opened_at=raw["match"]["bell_opened_at"],
-                    scores={int(seat): _ParticipantScore(**score) for seat, score in raw["match"]["scores"].items()},
-                    last_event=raw["match"]["last_event"],
-                    result=(
-                        _MatchResult(**raw["match"]["result"])
-                        if raw["match"]["result"] is not None
-                        else None
-                    ),
-                    number=raw["match"]["number"],
-                )
-                if raw["match"] is not None
-                else None
-            ),
+            match=_Match.from_raw(raw["match"], participants) if raw["match"] is not None else None,
         )
+
+
+def _due_at(room: _Room) -> int | None:
+    if room.phase == "playing" and room.match is not None:
+        return room.match.turn_deadline_at
+    if room.phase == "post_match":
+        return room.post_match_deadline_at
+    return None
+
+
+def _due_command(room: _Room, now_ms: int) -> AdvanceTurn | AdvancePostMatch | None:
+    due_at = _due_at(room)
+    if due_at is None or now_ms < due_at:
+        return None
+    if room.phase == "playing":
+        return AdvanceTurn(now_ms=now_ms)
+    return AdvancePostMatch(now_ms=now_ms)
 
 
 def credential_verifier(credential: str) -> str:
@@ -475,6 +568,8 @@ def _scoreboard_for(match: _Match | None) -> list[ParticipantScore]:
     return [
         ParticipantScore(
             seat_index=seat_index,
+            name=score.name,
+            forfeited=score.forfeited,
             score=_score_for(score),
             correct_hits=score.correct_hits,
             wrong_hits=score.wrong_hits,
@@ -517,7 +612,6 @@ def _snapshot_for_verifier(room: _Room, verifier: str) -> RoomSnapshot:
                     table_seat_count=room.table_seat_count,
                     target_human_participant_count=room.target_human_participant_count,
                     difficulty=room.difficulty,
-                    duration_sec=room.duration_sec,
                 ),
                 viewer_seat_index=participant.seat_index,
                 participants=[
@@ -546,6 +640,7 @@ def _snapshot_for_verifier(room: _Room, verifier: str) -> RoomSnapshot:
                 result=(
                     MatchResult(
                         winner_seat_index=match.result.winner_seat_index,
+                        winner_name=match.result.winner_name,
                         score=match.result.score,
                         participants=_scoreboard_for(match),
                     )
@@ -581,10 +676,6 @@ def _active_participants(room: _Room) -> list[_Participant]:
     return [participant for participant in room.participants if participant.active]
 
 
-def _next_active_seat(room: _Room, current_seat: int) -> int:
-    return (current_seat + 1) % room.table_seat_count
-
-
 def _cache_or_conflict(room: _Room, command: AuthorityCommand) -> AuthorityResult | None:
     command_id = getattr(command, "command_id", None)
     if command_id is None:
@@ -598,7 +689,10 @@ def _cache_or_conflict(room: _Room, command: AuthorityCommand) -> AuthorityResul
         if verifier is None:
             verifier = _active_participants(room)[0].credential_verifier
         return _result_for_verifier(room, verifier)
-    room.commands[command_id] = _CommandEntry(fingerprint=fingerprint)
+    room.commands[command_id] = _CommandEntry(fingerprint=fingerprint, revision=room.revision)
+    if len(room.commands) > COMMAND_HISTORY_LIMIT:
+        oldest = min(room.commands, key=lambda key: room.commands[key].revision)
+        del room.commands[oldest]
     return None
 
 
@@ -636,23 +730,29 @@ def _award_correct(score: _ParticipantScore, *, collected_count: int, reaction_m
     score.streak += 1
 
 
-def _finish_match(room: _Room) -> None:
+def _deck_exhausted(match: _Match) -> bool:
+    return match.next_card_index >= len(match.deck)
+
+
+def _finish_match(room: _Room, now_ms: int) -> None:
     match = room.match
     if match is None:
         raise AuthorityError("match_not_running", 409, "Match is not running")
+    remaining = [seat for seat in match.frozen_human_seat_indexes if not match.scores[seat].forfeited]
     winner_seat_index = min(
-        match.frozen_human_seat_indexes,
+        remaining or match.frozen_human_seat_indexes,
         key=lambda seat_index: (-_score_for(match.scores[seat_index]), seat_index),
     )
     match.result = _MatchResult(
         winner_seat_index=winner_seat_index,
         score=_score_for(match.scores[winner_seat_index]),
+        winner_name=match.scores[winner_seat_index].name,
     )
     match.turn_deadline_at = None
     match.bell_fruit = None
     match.bell_opened_at = None
     room.phase = "post_match"
-    room.post_match_deadline_at = int(time.time_ns() // 1_000_000) + POST_MATCH_DURATION_MS
+    room.post_match_deadline_at = now_ms + POST_MATCH_DURATION_MS
     for participant in _active_participants(room):
         participant.continue_playing = None
 
@@ -661,21 +761,22 @@ def _flip_next(room: _Room, now_ms: int) -> None:
     match = room.match
     if match is None or not _active_participants(room):
         raise AuthorityError("match_not_running", 409, "Match is not running")
-    if match.next_card_index >= len(CARD_SEQUENCE):
+    if _deck_exhausted(match):
         raise AuthorityError("match_complete", 409, "Match has no more cards")
 
-    fruit, count = CARD_SEQUENCE[match.next_card_index]
+    fruit, count = match.deck[match.next_card_index]
     match.top_cards[match.current_turn] = _Card(fruit=fruit, count=count)
     match.face_up_card_counts[match.current_turn] += 1
     match.next_card_index += 1
     match.reveal_sequence += 1
-    match.current_turn = _next_active_seat(room, match.current_turn)
-    match.turn_deadline_at = now_ms + TURN_DURATION_MS
+    match.current_turn = (match.current_turn + 1) % room.table_seat_count
     match.bell_fruit = _bell_fruit(match.top_cards)
+    pace = MATCH_PACE[room.difficulty]
+    match.turn_deadline_at = now_ms + (pace.bell_window_ms if match.bell_fruit is not None else pace.turn_interval_ms)
     match.bell_opened_at = now_ms if match.bell_fruit is not None else None
 
 
-def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResult:
+def _apply_room_command(room: _Room, command: AuthorityCommand, deck: DeckSource) -> AuthorityResult:
     cached = _cache_or_conflict(room, command)
     if cached is not None:
         return cached
@@ -700,13 +801,16 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
             raise AuthorityError("players_not_ready", 409, "All participants must be ready")
 
         room.phase = "playing"
+        seed = deck.new_seed()
         room.match = _Match(
+            seed=seed,
+            deck=list(deck.deal(seed, room.table_seat_count)),
             current_turn=0,
             turn_deadline_at=None,
             top_cards=[None] * room.table_seat_count,
             face_up_card_counts=[0] * room.table_seat_count,
             frozen_human_seat_indexes=[item.seat_index for item in active],
-            scores={item.seat_index: _ParticipantScore() for item in active},
+            scores={item.seat_index: _ParticipantScore(name=item.name) for item in active},
             number=room.match_number + 1,
         )
         room.match_number += 1
@@ -726,12 +830,12 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
                 score.missed_hits += 1
                 score.streak = 0
             room.match.last_event = "missed_bell"
-            if room.match.next_card_index >= len(CARD_SEQUENCE):
-                _finish_match(room)
+            if _deck_exhausted(room.match):
+                _finish_match(room, command.now_ms)
             else:
                 _flip_next(room, command.now_ms)
-        elif room.match.next_card_index >= len(CARD_SEQUENCE):
-            _finish_match(room)
+        elif _deck_exhausted(room.match):
+            _finish_match(room, command.now_ms)
         else:
             _flip_next(room, command.now_ms)
         room.revision += 1
@@ -764,8 +868,8 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
         room.match.current_turn = participant.seat_index
         room.match.bell_fruit = None
         room.match.bell_opened_at = None
-        if room.match.next_card_index >= len(CARD_SEQUENCE):
-            _finish_match(room)
+        if _deck_exhausted(room.match):
+            _finish_match(room, command.now_ms)
         room.revision += 1
         return _result_for_verifier(room, command.credential_verifier)
 
@@ -785,9 +889,12 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
         if room.phase != "playing" or room.match is None:
             raise AuthorityError("forfeit_not_allowed", 409, "Forfeit is only available during a match")
         participant.active = False
+        participant.ready = False
         participant.continue_playing = False
-        room.match.last_event = "wrong_bell"
-        _finish_match(room)
+        room.match.scores[participant.seat_index].forfeited = True
+        room.match.last_event = "forfeit"
+        if len(_active_participants(room)) < MIN_HUMAN_PARTICIPANTS:
+            _finish_match(room, command.now_ms)
         room.revision += 1
         return _result_for_verifier(room, command.credential_verifier)
 
@@ -866,15 +973,34 @@ def _join_room(room: _Room, command: JoinRoom) -> EntryResult:
 class RedisMultiplayerAuthority:
     """Redis-backed runtime authority."""
 
-    def __init__(self, redis_client: object, telemetry: object | None = None) -> None:
+    def __init__(
+        self,
+        redis_client: object,
+        telemetry: object | None = None,
+        *,
+        clock: Callable[[], int] = wall_clock_ms,
+        deck: DeckSource | None = None,
+    ) -> None:
         self._redis = redis_client
         self._telemetry = telemetry
+        self._clock = clock
+        self._deck = deck or StandardDeck()
 
     @classmethod
-    def from_url(cls, url: str, telemetry: object | None = None) -> RedisMultiplayerAuthority:
+    def from_url(
+        cls,
+        url: str,
+        telemetry: object | None = None,
+        *,
+        clock: Callable[[], int] = wall_clock_ms,
+        deck: DeckSource | None = None,
+    ) -> RedisMultiplayerAuthority:
         from redis.asyncio import Redis
 
-        return cls(Redis.from_url(url, decode_responses=True), telemetry=telemetry)
+        return cls(Redis.from_url(url, decode_responses=True), telemetry=telemetry, clock=clock, deck=deck)
+
+    def now_ms(self) -> int:
+        return self._clock()
 
     def _record_redis(self, operation: str, outcome: str, started_at: float) -> None:
         record = getattr(self._telemetry, "record_redis", None)
@@ -894,14 +1020,26 @@ class RedisMultiplayerAuthority:
         await pubsub.psubscribe(RedisRevisionSubscription._pattern)
         return RedisRevisionSubscription(pubsub)
 
-    @staticmethod
-    def _ttl_seconds(room: _Room) -> int:
-        deadline = room.post_match_deadline_at
-        if room.phase == "playing" and room.match is not None:
-            deadline = room.match.turn_deadline_at
+    def _ttl_seconds(self, room: _Room) -> int:
+        deadline = _due_at(room)
         if deadline is None:
             return ROOM_TTL_SECONDS
-        return max(1, min(ROOM_TTL_SECONDS, (deadline - (time.time_ns() // 1_000_000)) // 1_000 + 60))
+        return max(1, min(ROOM_TTL_SECONDS, (deadline - self._clock()) // 1_000 + 60))
+
+    def _queue_room_write(self, pipeline: object, room: _Room, *, publish: bool = True) -> None:
+        """Queue the room state and its due-index entry inside the caller's transaction."""
+        room_key = self._room_key(room.code)
+        ttl_seconds = self._ttl_seconds(room)
+        pipeline.hset(room_key, mapping={"state": room.to_json()})
+        pipeline.expire(room_key, ttl_seconds)
+        pipeline.zadd(ACTIVE_ROOMS_KEY, {room.code: self._clock() + ttl_seconds * 1_000})
+        due_at = _due_at(room)
+        if due_at is None:
+            pipeline.zrem(DUE_INDEX_KEY, room.code)
+        else:
+            pipeline.zadd(DUE_INDEX_KEY, {room.code: due_at})
+        if publish:
+            pipeline.publish(self._channel(room.code), str(room.revision))
 
     @staticmethod
     def _entry_key(idempotency_key: str) -> str:
@@ -962,7 +1100,6 @@ class RedisMultiplayerAuthority:
                 table_seat_count=command.table_seat_count,
                 target_human_participant_count=command.target_human_participant_count,
                 difficulty=command.difficulty,
-                duration_sec=command.duration_sec,
             )
             room.participants.append(
                 _Participant(name=command.name, credential_verifier=command.credential_verifier, seat_index=0),
@@ -978,8 +1115,7 @@ class RedisMultiplayerAuthority:
                     if await pipeline.get(entry_key) or await pipeline.hget(room_key, "state"):
                         continue
                     pipeline.multi()
-                    pipeline.hset(room_key, mapping={"state": room.to_json()})
-                    pipeline.expire(room_key, self._ttl_seconds(room))
+                    self._queue_room_write(pipeline, room, publish=False)
                     pipeline.set(
                         entry_key,
                         json.dumps({"fingerprint": fingerprint, "room_code": room.code}),
@@ -1009,9 +1145,7 @@ class RedisMultiplayerAuthority:
                     if replayed:
                         return result
                     pipeline.multi()
-                    pipeline.hset(room_key, mapping={"state": room.to_json()})
-                    pipeline.expire(room_key, self._ttl_seconds(room))
-                    pipeline.publish(self._channel(room_code), str(room.revision))
+                    self._queue_room_write(pipeline, room)
                     await pipeline.execute()
                     return result
             except WatchError:
@@ -1032,16 +1166,74 @@ class RedisMultiplayerAuthority:
                     await pipeline.watch(room_key)
                     state = await pipeline.hget(room_key, "state")
                     room = _require_room(_Room.from_json(state) if state else None)
-                    result = _apply_room_command(room, command)
+                    result = _apply_room_command(room, command, self._deck)
                     pipeline.multi()
-                    pipeline.hset(room_key, mapping={"state": room.to_json()})
-                    pipeline.expire(room_key, self._ttl_seconds(room))
-                    pipeline.publish(self._channel(room_code), str(room.revision))
+                    self._queue_room_write(pipeline, room)
                     await pipeline.execute()
                     return result
             except WatchError:
                 continue
         raise AuthorityError("concurrent_update", 409, "Room changed while updating")
+
+    async def advance_due(self, now_ms: int | None = None) -> list[str]:
+        """Advance every room whose deadline has passed and return the codes that changed."""
+        now = self._clock() if now_ms is None else now_ms
+        due = await self._redis.zrangebyscore(DUE_INDEX_KEY, "-inf", now, withscores=True)
+        changed = []
+        for room_code, due_score in due:
+            try:
+                advanced = await self._advance_room_if_due(room_code, now)
+            except (AuthorityError, KeyError, TypeError, ValueError):
+                # A room that cannot advance must not stall every other room's deadline.
+                _logger.exception("Room %s cannot advance; dropping its due entry", room_code)
+                await self._drop_due_entry(room_code, due_score)
+                continue
+            if advanced:
+                changed.append(room_code)
+        return changed
+
+    async def _drop_due_entry(self, room_code: str, seen_score: float) -> None:
+        """Remove a due entry only if no room write has replaced it since it was read."""
+        from redis.exceptions import WatchError
+
+        try:
+            async with self._redis.pipeline(transaction=True) as pipeline:
+                await pipeline.watch(DUE_INDEX_KEY, self._room_key(room_code))
+                if await pipeline.zscore(DUE_INDEX_KEY, room_code) != seen_score:
+                    return
+                pipeline.multi()
+                pipeline.zrem(DUE_INDEX_KEY, room_code)
+                await pipeline.execute()
+        except WatchError:
+            _logger.info("Due entry for room %s changed; keeping it", room_code)
+
+    async def _advance_room_if_due(self, room_code: str, now_ms: int) -> bool:
+        from redis.exceptions import WatchError
+
+        room_key = self._room_key(room_code)
+        for _ in range(8):
+            try:
+                async with self._redis.pipeline(transaction=True) as pipeline:
+                    await pipeline.watch(room_key)
+                    state = await pipeline.hget(room_key, "state")
+                    if not state:
+                        # The room expired; a concurrent create of the same code would touch room_key and abort this.
+                        pipeline.multi()
+                        pipeline.zrem(DUE_INDEX_KEY, room_code)
+                        await pipeline.execute()
+                        return False
+                    room = _Room.from_json(state)
+                    command = _due_command(room, now_ms)
+                    if command is None:
+                        return False
+                    _apply_room_command(room, command, self._deck)
+                    pipeline.multi()
+                    self._queue_room_write(pipeline, room)
+                    await pipeline.execute()
+                    return True
+            except WatchError:
+                continue
+        return False
 
     async def _load_room(self, room_code: str) -> _Room:
         state = await self._redis.hget(self._room_key(room_code), "state")
@@ -1062,10 +1254,8 @@ class RedisMultiplayerAuthority:
         return result
 
     async def active_room_count(self) -> int:
-        count = 0
-        async for _ in self._redis.scan_iter(match="halligalli:room:*"):
-            count += 1
-        return count
+        await self._redis.zremrangebyscore(ACTIVE_ROOMS_KEY, "-inf", self._clock())
+        return await self._redis.zcard(ACTIVE_ROOMS_KEY)
 
     async def readiness(self) -> bool:
         try:

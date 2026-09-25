@@ -78,8 +78,12 @@ export interface components {
              * @enum {string}
              */
             difficulty: "easy" | "normal" | "hard";
-            /** Durationsec */
-            durationSec: number;
+            /**
+             * Durationsec
+             * @deprecated
+             * @description Ignored. Accepted for one release so pages loaded before its removal can still create rooms.
+             */
+            durationSec?: number | null;
             /** Name */
             name: string;
             /** Tableseatcount */
@@ -106,6 +110,8 @@ export interface components {
             participants: components["schemas"]["ParticipantScore"][];
             /** Score */
             score: number;
+            /** Winnername */
+            winnerName: string;
             /** Winnerseatindex */
             winnerSeatIndex: number;
         };
@@ -113,8 +119,15 @@ export interface components {
         ParticipantScore: {
             /** Correcthits */
             correctHits: number;
+            /**
+             * Forfeited
+             * @default false
+             */
+            forfeited: boolean;
             /** Missedhits */
             missedHits: number;
+            /** Name */
+            name: string;
             /** Score */
             score: number;
             scoreBreakdown: components["schemas"]["ScoreBreakdown"];
@@ -165,8 +178,6 @@ export interface components {
              * @enum {string}
              */
             difficulty: "easy" | "normal" | "hard";
-            /** Durationsec */
-            durationSec: number;
             /** Tableseatcount */
             tableSeatCount: number;
             /** Targethumanparticipantcount */
@@ -182,7 +193,7 @@ export interface components {
             /** Currentturnseatindex */
             currentTurnSeatIndex?: number | null;
             /** Lastevent */
-            lastEvent?: ("correct_bell" | "wrong_bell" | "missed_bell") | null;
+            lastEvent?: ("correct_bell" | "wrong_bell" | "missed_bell" | "forfeit") | null;
             lastReveal?: components["schemas"]["RevealSnapshot"] | null;
             /**
              * Matchnumber

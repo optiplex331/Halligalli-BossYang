@@ -16,7 +16,7 @@ class ObservabilityTest(RedisTestCase):
             created = client.post(
                 "/api/v1/rooms",
                 headers={"Idempotency-Key": "c97c807c-4c73-4ea0-bfc7-2a8bd4d68cce"},
-                json={"name": "Host", "credentialVerifier": hash_credential(credential), "tableSeatCount": 4, "targetHumanParticipantCount": 2, "difficulty": "normal", "durationSec": 60},
+                json={"name": "Host", "credentialVerifier": hash_credential(credential), "tableSeatCount": 4, "targetHumanParticipantCount": 2, "difficulty": "normal"},
             )
             metrics = client.get("/internal/metrics")
             identity = client.get("/internal/identity")

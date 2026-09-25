@@ -26,6 +26,7 @@
         "type": "object"
       },
       "CreateRoomRequest": {
+        "additionalProperties": false,
         "properties": {
           "credentialVerifier": {
             "pattern": "^[a-f0-9]{64}$",
@@ -42,9 +43,17 @@
             "type": "string"
           },
           "durationSec": {
-            "minimum": 1.0,
-            "title": "Durationsec",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "deprecated": true,
+            "description": "Ignored. Accepted for one release so pages loaded before its removal can still create rooms.",
+            "title": "Durationsec"
           },
           "name": {
             "maxLength": 24,
@@ -70,8 +79,7 @@
           "credentialVerifier",
           "tableSeatCount",
           "targetHumanParticipantCount",
-          "difficulty",
-          "durationSec"
+          "difficulty"
         ],
         "title": "CreateRoomRequest",
         "type": "object"
@@ -128,6 +136,10 @@
             "title": "Score",
             "type": "integer"
           },
+          "winnerName": {
+            "title": "Winnername",
+            "type": "string"
+          },
           "winnerSeatIndex": {
             "title": "Winnerseatindex",
             "type": "integer"
@@ -135,6 +147,7 @@
         },
         "required": [
           "winnerSeatIndex",
+          "winnerName",
           "score",
           "participants"
         ],
@@ -147,9 +160,18 @@
             "title": "Correcthits",
             "type": "integer"
           },
+          "forfeited": {
+            "default": false,
+            "title": "Forfeited",
+            "type": "boolean"
+          },
           "missedHits": {
             "title": "Missedhits",
             "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
           },
           "score": {
             "title": "Score",
@@ -169,6 +191,7 @@
         },
         "required": [
           "seatIndex",
+          "name",
           "score",
           "correctHits",
           "wrongHits",
@@ -263,10 +286,6 @@
             "title": "Difficulty",
             "type": "string"
           },
-          "durationSec": {
-            "title": "Durationsec",
-            "type": "integer"
-          },
           "tableSeatCount": {
             "title": "Tableseatcount",
             "type": "integer"
@@ -279,8 +298,7 @@
         "required": [
           "tableSeatCount",
           "targetHumanParticipantCount",
-          "difficulty",
-          "durationSec"
+          "difficulty"
         ],
         "title": "RoomConfiguration",
         "type": "object"
@@ -340,7 +358,8 @@
                 "enum": [
                   "correct_bell",
                   "wrong_bell",
-                  "missed_bell"
+                  "missed_bell",
+                  "forfeit"
                 ],
                 "type": "string"
               },
