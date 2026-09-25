@@ -19,7 +19,7 @@ scoring ledger, and stable Seat Indexes.
 ## DevOps
 
 The project publishes paired Web/API releases and promotes them independently
-to Container Apps and AKS. See [DEVOPS.md](DEVOPS.md) for the two-minute
+to Container Apps, AKS, or K3s. See [DEVOPS.md](DEVOPS.md) for the two-minute
 architecture and delivery overview.
 
 ## Local development
