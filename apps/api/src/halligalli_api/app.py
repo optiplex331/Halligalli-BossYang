@@ -148,9 +148,8 @@ def _viewer_from_authorization(authorization: str | None) -> Viewer:
     return Viewer(credential=credential)
 
 
-def _room_command(payload: WebSocketRoomCommand, credential: str):
+def _room_command(payload: WebSocketRoomCommand, credential: str, now_ms: int):
     verifier = credential_verifier(credential)
-    now_ms = time.time_ns() // 1_000_000
     if payload.type == "ready":
         return Ready(verifier, payload.command_id)
     if payload.type == "start":
@@ -173,12 +172,12 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
 
     def schedule_turn(room_code: str, deadline_at: int) -> None:
         async def advance_when_due() -> None:
-            delay_seconds = max(0, deadline_at - (time.time_ns() // 1_000_000)) / 1_000
+            delay_seconds = max(0, deadline_at - (selected_authority.now_ms())) / 1_000
             await asyncio.sleep(delay_seconds)
             try:
                 result = await selected_authority.execute(
                     room_code,
-                    AdvanceTurn(now_ms=time.time_ns() // 1_000_000),
+                    AdvanceTurn(now_ms=selected_authority.now_ms()),
                 )
             except AuthorityError:
                 return
@@ -194,12 +193,12 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
 
     def schedule_post_match(room_code: str, deadline_at: int) -> None:
         async def close_when_due() -> None:
-            delay_seconds = max(0, deadline_at - (time.time_ns() // 1_000_000)) / 1_000
+            delay_seconds = max(0, deadline_at - (selected_authority.now_ms())) / 1_000
             await asyncio.sleep(delay_seconds)
             try:
                 await selected_authority.execute(
                     room_code,
-                    AdvancePostMatch(now_ms=time.time_ns() // 1_000_000, command_id=f"deadline:{deadline_at}"),
+                    AdvancePostMatch(now_ms=selected_authority.now_ms(), command_id=f"deadline:{deadline_at}"),
                 )
             except AuthorityError:
                 return
@@ -434,7 +433,7 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
                     command_payload = WebSocketRoomCommand.model_validate(await websocket.receive_json())
                     result = await app.state.authority.execute(
                         canonical_room_code,
-                        _room_command(command_payload, payload.credential),
+                        _room_command(command_payload, payload.credential, app.state.authority.now_ms()),
                     )
                     await hub.publish(canonical_room_code, app.state.authority)
                     if command_payload.type == "start" and result.snapshot.turn_deadline_at is not None:

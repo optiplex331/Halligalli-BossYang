@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 import secrets
 import time
 from dataclasses import asdict, dataclass, field
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Sequence
 from typing import Literal, Protocol, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -25,34 +26,52 @@ FRUIT_ORDER = ("banana", "strawberry", "lemon", "grape")
 CARD_DISTRIBUTION = ((1, 3), (2, 5), (3, 5), (4, 3), (5, 2))
 
 CardValue: TypeAlias = tuple[Literal["banana", "strawberry", "lemon", "grape"], int]
-OPENING_CARD_SEQUENCE: tuple[CardValue, ...] = (
-    ("banana", 2),
-    ("banana", 3),
-    ("strawberry", 1),
-    ("lemon", 1),
-    ("grape", 1),
-    ("strawberry", 1),
-)
+EARLY_BELL_REVEALS = 8
 
 
-def _card_sequence() -> tuple[CardValue, ...]:
-    sequence = list(OPENING_CARD_SEQUENCE)
-    remaining = {
-        (fruit, count): repetitions
-        for fruit in FRUIT_ORDER
-        for count, repetitions in CARD_DISTRIBUTION
-    }
-    for card in OPENING_CARD_SEQUENCE:
-        remaining[card] -= 1
-
-    for fruit in FRUIT_ORDER:
-        for count, _ in CARD_DISTRIBUTION:
-            sequence.extend((fruit, count) for _ in range(remaining[(fruit, count)]))
-
-    return tuple(sequence)
+def wall_clock_ms() -> int:
+    return time.time_ns() // 1_000_000
 
 
-CARD_SEQUENCE = _card_sequence()
+class DeckSource(Protocol):
+    def new_seed(self) -> int: ...
+
+    def deal(self, seed: int, table_seat_count: int) -> Sequence[CardValue]: ...
+
+
+def _opens_early_bell(cards: Sequence[CardValue], table_seat_count: int) -> bool:
+    """Whether a table without prior bells shows an exact five within the first reveals."""
+    for revealed in range(1, min(EARLY_BELL_REVEALS, len(cards)) + 1):
+        visible = cards[max(0, revealed - table_seat_count):revealed]
+        totals = {fruit: 0 for fruit in FRUIT_ORDER}
+        for fruit, count in visible:
+            totals[fruit] += count
+        if 5 in totals.values():
+            return True
+    return False
+
+
+class StandardDeck:
+    """Shuffles the standard distribution from a seed, guaranteeing an early exact-five opportunity."""
+
+    def __init__(self, seed_source: Callable[[], int] | None = None) -> None:
+        self._seed_source = seed_source or (lambda: secrets.randbits(63))
+
+    def new_seed(self) -> int:
+        return self._seed_source()
+
+    def deal(self, seed: int, table_seat_count: int) -> tuple[CardValue, ...]:
+        rng = random.Random(seed)
+        cards: list[CardValue] = [
+            (fruit, count)
+            for fruit in FRUIT_ORDER
+            for count, repetitions in CARD_DISTRIBUTION
+            for _ in range(repetitions)
+        ]
+        while True:
+            rng.shuffle(cards)
+            if _opens_early_bell(cards, table_seat_count):
+                return tuple(cards)
 
 
 def _camel_case(value: str) -> str:
@@ -277,6 +296,8 @@ class MultiplayerAuthority(Protocol):
 
     async def snapshot(self, room_code: str, viewer: Viewer) -> RoomSnapshot: ...
 
+    def now_ms(self) -> int: ...
+
 
 class RedisRevisionSubscription:
     """A ready Redis pattern subscription for room snapshot invalidations."""
@@ -366,6 +387,8 @@ class _Match:
     top_cards: list[_Card | None]
     face_up_card_counts: list[int]
     frozen_human_seat_indexes: list[int]
+    seed: int = 0
+    deck: list[tuple[str, int]] = field(default_factory=list)
     reveal_sequence: int = 0
     next_card_index: int = 0
     bell_fruit: Literal["banana", "strawberry", "lemon", "grape"] | None = None
@@ -426,6 +449,8 @@ class _Room:
                     ],
                     face_up_card_counts=raw["match"]["face_up_card_counts"],
                     frozen_human_seat_indexes=raw["match"]["frozen_human_seat_indexes"],
+                    seed=raw["match"]["seed"],
+                    deck=[(fruit, count) for fruit, count in raw["match"]["deck"]],
                     reveal_sequence=raw["match"]["reveal_sequence"],
                     next_card_index=raw["match"]["next_card_index"],
                     bell_fruit=raw["match"]["bell_fruit"],
@@ -581,10 +606,6 @@ def _active_participants(room: _Room) -> list[_Participant]:
     return [participant for participant in room.participants if participant.active]
 
 
-def _next_active_seat(room: _Room, current_seat: int) -> int:
-    return (current_seat + 1) % room.table_seat_count
-
-
 def _cache_or_conflict(room: _Room, command: AuthorityCommand) -> AuthorityResult | None:
     command_id = getattr(command, "command_id", None)
     if command_id is None:
@@ -636,7 +657,11 @@ def _award_correct(score: _ParticipantScore, *, collected_count: int, reaction_m
     score.streak += 1
 
 
-def _finish_match(room: _Room) -> None:
+def _deck_exhausted(match: _Match) -> bool:
+    return match.next_card_index >= len(match.deck)
+
+
+def _finish_match(room: _Room, now_ms: int) -> None:
     match = room.match
     if match is None:
         raise AuthorityError("match_not_running", 409, "Match is not running")
@@ -652,7 +677,7 @@ def _finish_match(room: _Room) -> None:
     match.bell_fruit = None
     match.bell_opened_at = None
     room.phase = "post_match"
-    room.post_match_deadline_at = int(time.time_ns() // 1_000_000) + POST_MATCH_DURATION_MS
+    room.post_match_deadline_at = now_ms + POST_MATCH_DURATION_MS
     for participant in _active_participants(room):
         participant.continue_playing = None
 
@@ -661,21 +686,21 @@ def _flip_next(room: _Room, now_ms: int) -> None:
     match = room.match
     if match is None or not _active_participants(room):
         raise AuthorityError("match_not_running", 409, "Match is not running")
-    if match.next_card_index >= len(CARD_SEQUENCE):
+    if _deck_exhausted(match):
         raise AuthorityError("match_complete", 409, "Match has no more cards")
 
-    fruit, count = CARD_SEQUENCE[match.next_card_index]
+    fruit, count = match.deck[match.next_card_index]
     match.top_cards[match.current_turn] = _Card(fruit=fruit, count=count)
     match.face_up_card_counts[match.current_turn] += 1
     match.next_card_index += 1
     match.reveal_sequence += 1
-    match.current_turn = _next_active_seat(room, match.current_turn)
+    match.current_turn = (match.current_turn + 1) % room.table_seat_count
     match.turn_deadline_at = now_ms + TURN_DURATION_MS
     match.bell_fruit = _bell_fruit(match.top_cards)
     match.bell_opened_at = now_ms if match.bell_fruit is not None else None
 
 
-def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResult:
+def _apply_room_command(room: _Room, command: AuthorityCommand, deck: DeckSource) -> AuthorityResult:
     cached = _cache_or_conflict(room, command)
     if cached is not None:
         return cached
@@ -700,7 +725,10 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
             raise AuthorityError("players_not_ready", 409, "All participants must be ready")
 
         room.phase = "playing"
+        seed = deck.new_seed()
         room.match = _Match(
+            seed=seed,
+            deck=list(deck.deal(seed, room.table_seat_count)),
             current_turn=0,
             turn_deadline_at=None,
             top_cards=[None] * room.table_seat_count,
@@ -726,12 +754,12 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
                 score.missed_hits += 1
                 score.streak = 0
             room.match.last_event = "missed_bell"
-            if room.match.next_card_index >= len(CARD_SEQUENCE):
-                _finish_match(room)
+            if _deck_exhausted(room.match):
+                _finish_match(room, command.now_ms)
             else:
                 _flip_next(room, command.now_ms)
-        elif room.match.next_card_index >= len(CARD_SEQUENCE):
-            _finish_match(room)
+        elif _deck_exhausted(room.match):
+            _finish_match(room, command.now_ms)
         else:
             _flip_next(room, command.now_ms)
         room.revision += 1
@@ -764,8 +792,8 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
         room.match.current_turn = participant.seat_index
         room.match.bell_fruit = None
         room.match.bell_opened_at = None
-        if room.match.next_card_index >= len(CARD_SEQUENCE):
-            _finish_match(room)
+        if _deck_exhausted(room.match):
+            _finish_match(room, command.now_ms)
         room.revision += 1
         return _result_for_verifier(room, command.credential_verifier)
 
@@ -787,7 +815,7 @@ def _apply_room_command(room: _Room, command: AuthorityCommand) -> AuthorityResu
         participant.active = False
         participant.continue_playing = False
         room.match.last_event = "wrong_bell"
-        _finish_match(room)
+        _finish_match(room, command.now_ms)
         room.revision += 1
         return _result_for_verifier(room, command.credential_verifier)
 
@@ -866,15 +894,34 @@ def _join_room(room: _Room, command: JoinRoom) -> EntryResult:
 class RedisMultiplayerAuthority:
     """Redis-backed runtime authority."""
 
-    def __init__(self, redis_client: object, telemetry: object | None = None) -> None:
+    def __init__(
+        self,
+        redis_client: object,
+        telemetry: object | None = None,
+        *,
+        clock: Callable[[], int] = wall_clock_ms,
+        deck: DeckSource | None = None,
+    ) -> None:
         self._redis = redis_client
         self._telemetry = telemetry
+        self._clock = clock
+        self._deck = deck or StandardDeck()
 
     @classmethod
-    def from_url(cls, url: str, telemetry: object | None = None) -> RedisMultiplayerAuthority:
+    def from_url(
+        cls,
+        url: str,
+        telemetry: object | None = None,
+        *,
+        clock: Callable[[], int] = wall_clock_ms,
+        deck: DeckSource | None = None,
+    ) -> RedisMultiplayerAuthority:
         from redis.asyncio import Redis
 
-        return cls(Redis.from_url(url, decode_responses=True), telemetry=telemetry)
+        return cls(Redis.from_url(url, decode_responses=True), telemetry=telemetry, clock=clock, deck=deck)
+
+    def now_ms(self) -> int:
+        return self._clock()
 
     def _record_redis(self, operation: str, outcome: str, started_at: float) -> None:
         record = getattr(self._telemetry, "record_redis", None)
@@ -894,14 +941,13 @@ class RedisMultiplayerAuthority:
         await pubsub.psubscribe(RedisRevisionSubscription._pattern)
         return RedisRevisionSubscription(pubsub)
 
-    @staticmethod
-    def _ttl_seconds(room: _Room) -> int:
+    def _ttl_seconds(self, room: _Room) -> int:
         deadline = room.post_match_deadline_at
         if room.phase == "playing" and room.match is not None:
             deadline = room.match.turn_deadline_at
         if deadline is None:
             return ROOM_TTL_SECONDS
-        return max(1, min(ROOM_TTL_SECONDS, (deadline - (time.time_ns() // 1_000_000)) // 1_000 + 60))
+        return max(1, min(ROOM_TTL_SECONDS, (deadline - self._clock()) // 1_000 + 60))
 
     @staticmethod
     def _entry_key(idempotency_key: str) -> str:
@@ -1032,7 +1078,7 @@ class RedisMultiplayerAuthority:
                     await pipeline.watch(room_key)
                     state = await pipeline.hget(room_key, "state")
                     room = _require_room(_Room.from_json(state) if state else None)
-                    result = _apply_room_command(room, command)
+                    result = _apply_room_command(room, command, self._deck)
                     pipeline.multi()
                     pipeline.hset(room_key, mapping={"state": room.to_json()})
                     pipeline.expire(room_key, self._ttl_seconds(room))
