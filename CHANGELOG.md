@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.0](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.8.3...v0.9.0) (2026-09-25)
+
+
+### Features
+
+* **api:** harden multiplayer authority deadlines, decks, pace, and forfeit ([#110](https://github.com/optiplex331/Halligalli-BossYang/issues/110)) ([218773b](https://github.com/optiplex331/Halligalli-BossYang/commit/218773bf1230766eaf4f616a22640d515fd11f6c))
+
+
+### Bug Fixes
+
+* **build:** align API builder and runtime libc ([4a29459](https://github.com/optiplex331/Halligalli-BossYang/commit/4a29459625788795717fb2b00dea393ce780ce5d))
+* **web:** rebuild mobile table layout and restore game audio ([#106](https://github.com/optiplex331/Halligalli-BossYang/issues/106)) ([c95b0c3](https://github.com/optiplex331/Halligalli-BossYang/commit/c95b0c389d787b19efd5d5fde6d9c26f2b344a5b))
+
 ## [0.8.3](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.8.2...v0.8.3) (2026-07-18)
 
 
