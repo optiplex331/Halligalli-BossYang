@@ -54,6 +54,8 @@ async function expectFeedbackClearOfPlayContent(page: Page): Promise<void> {
 
 test("all Table Seat cards remain complete across responsive table layouts", async ({ page }) => {
   test.setTimeout(120_000);
+  // Forced clicks skip the stability check, so settle the entrance animation first.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.clock.install();
   for (const width of VIEWPORT_WIDTHS) {
     await page.setViewportSize({ width, height: 1000 });
