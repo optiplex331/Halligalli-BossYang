@@ -4,6 +4,7 @@ import { useAudioEngine } from "./audio/useAudioEngine.js";
 import { projectRoomSnapshot } from "./multiplayer/projection.js";
 import { useRoomEntry } from "./multiplayer/room-entry.js";
 import { FRUITS, MODES } from "./game/catalog.js";
+import { DEFAULT_SETTINGS } from "./game/constants.js";
 import { loadSettings, removeLegacyProgress, saveSettings } from "./game/persistence.js";
 import { getTopCard, visibleTotals } from "./game/rules.js";
 import type { Card, Difficulty, FruitKey, GameSettings } from "./game/types.js";
@@ -111,7 +112,7 @@ const COPY = {
     ringMultiplayerBell: "抢铃",
     waitingForReady: "等待至少两位玩家全部准备",
     turnOwner: "当前翻牌：{name}",
-    matchResult: "座位 {seat} 获胜，获得 {score} 分",
+    matchResult: "{name} 获胜，获得 {score} 分",
     scoreboardTitle: "多人得分明细",
     seatLabel: "座位 {seat}",
     correctBellEvent: "抢铃成功，得分已由服务器确认。",
@@ -120,6 +121,22 @@ const COPY = {
     continueMatch: "继续下一局",
     leaveRoom: "离开房间",
     forfeitMatch: "认输并退出本局",
+    errorRoomNotFound: "房间不存在或已过期。",
+    errorRoomFull: "房间已满。",
+    errorRoomNotJoinable: "对局已开始，暂时无法加入。",
+    errorHostRequired: "只有房主可以开始对局。",
+    errorPlayersNotReady: "所有玩家准备后才能开始。",
+    errorCommandUnavailable: "当前阶段无法执行这个操作。",
+    errorInvalidRequest: "请求无效，请检查房间设置。",
+    errorConnectionUnavailable: "房间连接暂不可用，正在重连。",
+    errorGeneric: "操作没有成功，请稍后再试。",
+    forfeitEvent: "有玩家认输，已退出本局。",
+    forfeitedTag: "已认输",
+    playerPlaceholder: "玩家",
+    roomSeats: "桌面座位",
+    humanPlayers: "真人玩家",
+    createRoomFor: "创建 {seats} 座位 / {humans} 真人房间",
+    neutralSeat: "中立座位",
   },
   en: {
     kicker: "Exact-five reaction trainer",
@@ -196,7 +213,7 @@ const COPY = {
     ringMultiplayerBell: "Ring bell",
     waitingForReady: "Waiting for at least two ready players",
     turnOwner: "Current turn: {name}",
-    matchResult: "Seat {seat} wins {score} points",
+    matchResult: "{name} wins with {score} points",
     scoreboardTitle: "Multiplayer score breakdown",
     seatLabel: "Seat {seat}",
     correctBellEvent: "Successful ring. The server confirmed the score.",
@@ -205,6 +222,22 @@ const COPY = {
     continueMatch: "Continue to next match",
     leaveRoom: "Leave room",
     forfeitMatch: "Forfeit this match",
+    errorRoomNotFound: "The room does not exist or has expired.",
+    errorRoomFull: "The room is full.",
+    errorRoomNotJoinable: "The match has started; the room cannot be joined now.",
+    errorHostRequired: "Only the host can start the match.",
+    errorPlayersNotReady: "Every player must be ready before the match starts.",
+    errorCommandUnavailable: "That action is not available right now.",
+    errorInvalidRequest: "The request is invalid. Check the room settings.",
+    errorConnectionUnavailable: "The room connection is unavailable; reconnecting.",
+    errorGeneric: "That did not work. Please try again.",
+    forfeitEvent: "A player forfeited and left this match.",
+    forfeitedTag: "Forfeited",
+    playerPlaceholder: "Player",
+    roomSeats: "Table Seats",
+    humanPlayers: "Human players",
+    createRoomFor: "Create {seats}-seat room for {humans}",
+    neutralSeat: "Neutral Seat",
   },
 } as const;
 
@@ -217,6 +250,28 @@ const NOTICE_TONES: Record<SoloRoundNotice["kind"], FeedbackType> = {
   correct: "success",
   wrong: "error",
 };
+
+const ROOM_ERROR_COPY: Record<string, CopyKey> = {
+  room_not_found: "errorRoomNotFound",
+  room_full: "errorRoomFull",
+  room_not_joinable: "errorRoomNotJoinable",
+  match_already_started: "errorRoomNotJoinable",
+  host_required: "errorHostRequired",
+  players_not_ready: "errorPlayersNotReady",
+  already_ready: "errorCommandUnavailable",
+  match_not_running: "errorCommandUnavailable",
+  post_match_not_active: "errorCommandUnavailable",
+  forfeit_not_allowed: "errorCommandUnavailable",
+  leave_not_allowed: "errorCommandUnavailable",
+  participant_departed: "errorCommandUnavailable",
+  invalid_request: "errorInvalidRequest",
+  invalid_room_configuration: "errorInvalidRequest",
+  connection_unavailable: "errorConnectionUnavailable",
+};
+
+function roomErrorCopyKey(code: string): CopyKey {
+  return ROOM_ERROR_COPY[code] ?? "errorGeneric";
+}
 
 function fruitLabel(fruitKey: FruitKey | null, language: GameSettings["language"]): string {
   const fruit = FRUITS.find((item) => item.key === fruitKey);
@@ -343,7 +398,9 @@ export default function App() {
   const [showHome, setShowHome] = useState(true);
   const [roomName, setRoomName] = useState("");
   const [joinCode, setJoinCode] = useState("");
+  const [roomSeatCount, setRoomSeatCount] = useState(settings.tableSeatCount);
   const [roomHumanTarget, setRoomHumanTarget] = useState(2);
+  const [roomDifficulty, setRoomDifficulty] = useState<Difficulty>(DEFAULT_SETTINGS.difficulty);
 
   const screenRegionRef = useRef<HTMLElement | null>(null);
   const multiplayerSignalRef = useRef<{ sequence: number; correct: number; wrong: number; missed: number } | null>(null);
@@ -568,36 +625,41 @@ export default function App() {
                     value={roomName}
                     maxLength={24}
                     onChange={(event) => setRoomName(event.target.value)}
-                    placeholder={settings.language === "en" ? "Player" : "玩家"}
+                    placeholder={t("playerPlaceholder")}
                   />
                 </label>
                 <label>
-                  <span>{settings.language === "en" ? "Table Seats" : "桌面座位"}</span>
-                  <select value={settings.tableSeatCount} onChange={(event) => {
+                  <span>{t("roomSeats")}</span>
+                  <select value={roomSeatCount} onChange={(event) => {
                     const count = Number(event.target.value);
-                    updateSetting("tableSeatCount", count);
+                    setRoomSeatCount(count);
                     setRoomHumanTarget((current) => Math.min(current, count));
                   }}>
                     {[4, 5, 6, 7, 8].map((count) => <option key={count} value={count}>{count}</option>)}
                   </select>
                 </label>
                 <label>
-                  <span>{settings.language === "en" ? "Human players" : "真人玩家"}</span>
+                  <span>{t("humanPlayers")}</span>
                   <select value={roomHumanTarget} onChange={(event) => setRoomHumanTarget(Number(event.target.value))}>
-                    {Array.from({ length: settings.tableSeatCount - 1 }, (_, index) => index + 2).map((count) => <option key={count} value={count}>{count}</option>)}
+                    {Array.from({ length: roomSeatCount - 1 }, (_, index) => index + 2).map((count) => <option key={count} value={count}>{count}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>{t("difficulty")}</span>
+                  <select value={roomDifficulty} onChange={(event) => setRoomDifficulty(event.target.value as Difficulty)}>
+                    {(Object.keys(MODES) as Difficulty[]).map((difficulty) => <option key={difficulty} value={difficulty}>{modeLabel(difficulty, settings.language)}</option>)}
                   </select>
                 </label>
                 <button
                   className="primary-button"
                   disabled={roomEntry.pending}
                   onClick={() => void roomEntry.createRoom(roomName, {
-                    tableSeatCount: settings.tableSeatCount,
+                    tableSeatCount: roomSeatCount,
                     targetHumanParticipantCount: roomHumanTarget,
-                    difficulty: settings.difficulty,
-                    durationSec: settings.duration,
+                    difficulty: roomDifficulty,
                   })}
                 >
-                  {settings.language === "en" ? `Create ${settings.tableSeatCount}-seat room for ${roomHumanTarget}` : `创建 ${settings.tableSeatCount} 座位 / ${roomHumanTarget} 真人房间`}
+                  {t("createRoomFor", { seats: roomSeatCount, humans: roomHumanTarget })}
                 </button>
                 <label>
                   <span>{t("roomCode")}</span>
@@ -616,7 +678,7 @@ export default function App() {
                   {t("joinRoom")}
                 </button>
               </div>}
-              {roomEntry.error && <p className="room-entry-error" role="alert">{roomEntry.error}</p>}
+              {roomEntry.error && <p className="room-entry-error" role="alert">{t(roomErrorCopyKey(roomEntry.error))}</p>}
               {roomProjection && (
                 <div className="room-entry-snapshot" role="status" aria-live="polite">
                   <strong>{t("roomCode")}: {roomProjection.snapshot.roomCode}</strong>
@@ -627,7 +689,7 @@ export default function App() {
                   <ul className="room-participants">
                     {roomProjection.seats.map((seat) => (
                       <li key={seat.seatIndex}>
-                        {t("seatLabel", { seat: seat.seatNumber })} · {seat.occupied ? seat.name : (settings.language === "en" ? "Neutral Seat" : "中立座位")}{seat.ready ? " ✓" : ""}
+                        {t("seatLabel", { seat: seat.seatNumber })} · {seat.occupied ? seat.name : t("neutralSeat")}{seat.ready ? " ✓" : ""}
                       </li>
                     ))}
                   </ul>
@@ -682,7 +744,7 @@ export default function App() {
                           playFeedback("ring");
                         }}
                       />
-                      <button className="ghost-button" disabled={!roomEntry.connected} onClick={roomEntry.forfeit}>
+                      <button className="ghost-button" disabled={!roomEntry.connected || !roomProjection.snapshot.allowedCommands.includes("forfeit")} onClick={roomEntry.forfeit}>
                         {t("forfeitMatch")}
                       </button>
                     </div>
@@ -696,43 +758,41 @@ export default function App() {
                   {roomProjection.snapshot.lastEvent === "missed_bell" && (
                     <p className="multiplayer-event">{t("missedBellEvent")}</p>
                   )}
+                  {roomProjection.snapshot.lastEvent === "forfeit" && (
+                    <p className="multiplayer-event">{t("forfeitEvent")}</p>
+                  )}
                   {roomProjection.snapshot.scoreboard.length > 0 && (
                     <section className="multiplayer-scoreboard" aria-label={t("scoreboardTitle")}>
                       <h3>{t("scoreboardTitle")}</h3>
-                      {roomProjection.snapshot.scoreboard.map((score) => {
-                        const participant = roomProjection.snapshot.participants.find(
-                          (item) => item.seatIndex === score.seatIndex,
-                        );
-                        return (
-                          <article className="multiplayer-score-row" key={score.seatIndex}>
-                            <div className="multiplayer-score-heading">
-                              <strong>{participant?.name ?? t("seatLabel", { seat: score.seatIndex + 1 })}</strong>
-                              <span>{score.score} {t("scoreUnit")}</span>
-                            </div>
-                            <p>
-                              {t("correctHits")} {score.correctHits} · {t("wrongHits")} {score.wrongHits} · {t("missedHits")} {score.missedHits}
-                            </p>
-                            <div className="multiplayer-score-breakdown">
-                              <span>{t("scoreCorrectBase")} +{score.scoreBreakdown.correctBase}</span>
-                              <span>{t("scoreCollectionBonus")} +{score.scoreBreakdown.collectionBonus}</span>
-                              <span>{t("scoreSpeedBonus")} +{score.scoreBreakdown.speedBonus}</span>
-                              <span>{t("scoreStreakBonus")} +{score.scoreBreakdown.streakBonus}</span>
-                              <span>{t("scoreWrongPenalty")} −{score.scoreBreakdown.wrongPenalty}</span>
-                              <span>{t("scoreMissedPenalty")} −{score.scoreBreakdown.missedPenalty}</span>
-                              <span>{t("scoreCardPenalty")} −{score.scoreBreakdown.cardPenalty}</span>
-                            </div>
-                          </article>
-                        );
-                      })}
+                      {roomProjection.snapshot.scoreboard.map((score) => (
+                        <article className="multiplayer-score-row" key={score.seatIndex}>
+                          <div className="multiplayer-score-heading">
+                            <strong>{score.name}{score.forfeited ? ` · ${t("forfeitedTag")}` : ""}</strong>
+                            <span>{score.score} {t("scoreUnit")}</span>
+                          </div>
+                          <p>
+                            {t("correctHits")} {score.correctHits} · {t("wrongHits")} {score.wrongHits} · {t("missedHits")} {score.missedHits}
+                          </p>
+                          <div className="multiplayer-score-breakdown">
+                            <span>{t("scoreCorrectBase")} +{score.scoreBreakdown.correctBase}</span>
+                            <span>{t("scoreCollectionBonus")} +{score.scoreBreakdown.collectionBonus}</span>
+                            <span>{t("scoreSpeedBonus")} +{score.scoreBreakdown.speedBonus}</span>
+                            <span>{t("scoreStreakBonus")} +{score.scoreBreakdown.streakBonus}</span>
+                            <span>{t("scoreWrongPenalty")} −{score.scoreBreakdown.wrongPenalty}</span>
+                            <span>{t("scoreMissedPenalty")} −{score.scoreBreakdown.missedPenalty}</span>
+                            <span>{t("scoreCardPenalty")} −{score.scoreBreakdown.cardPenalty}</span>
+                          </div>
+                        </article>
+                      ))}
                     </section>
                   )}
                   {roomProjection.snapshot.phase === "post_match" && roomProjection.snapshot.result && (
                     <>
                       <p>{t("matchResult", {
-                        seat: roomProjection.snapshot.result.winnerSeatIndex + 1,
+                        name: roomProjection.snapshot.result.winnerName,
                         score: roomProjection.snapshot.result.score,
                       })}</p>
-                      <button className="primary-button" disabled={!roomEntry.connected} onClick={roomEntry.continueMatch}>
+                      <button className="primary-button" disabled={!roomEntry.connected || !roomProjection.snapshot.allowedCommands.includes("continue")} onClick={roomEntry.continueMatch}>
                         {t("continueMatch")}
                       </button>
                       <button className="ghost-button" disabled={!roomEntry.connected} onClick={roomEntry.leaveAfterMatch}>

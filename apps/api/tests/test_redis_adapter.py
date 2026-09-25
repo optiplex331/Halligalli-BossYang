@@ -7,7 +7,7 @@ from halligalli_api.authority import (
     Ready,
     RedisMultiplayerAuthority,
 )
-from redis_test_case import RedisAsyncTestCase, hash_credential
+from redis_test_case import FixedDeck, RedisAsyncTestCase, hash_credential
 
 
 class RedisAdapterTest(RedisAsyncTestCase):
@@ -18,8 +18,8 @@ class RedisAdapterTest(RedisAsyncTestCase):
             (("Host", "host-credential"), ("Guest", "guest-credential")),
         )
         host, guest = credentials
-        left = RedisMultiplayerAuthority(self.redis)
-        right = RedisMultiplayerAuthority(self.redis)
+        left = RedisMultiplayerAuthority(self.redis, deck=FixedDeck())
+        right = RedisMultiplayerAuthority(self.redis, deck=FixedDeck())
         first, second = await asyncio.gather(
             left.execute(created.room_code, Ready(host, "ready-host")),
             right.execute(created.room_code, Ready(guest, "ready-guest")),

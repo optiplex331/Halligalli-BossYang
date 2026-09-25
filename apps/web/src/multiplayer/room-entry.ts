@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { components } from "./rest.generated.js";
+import { parseServerFrame, reconnectDelayMs } from "./socket-protocol.js";
 
 type EntryRequest = components["schemas"]["EntryRequest"];
 type CreateRoomRequest = components["schemas"]["CreateRoomRequest"];
@@ -32,6 +33,22 @@ function websocketOrigin(): string {
   return `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
 }
 
+/** A failure the page reports by `code`; the English `message` is kept for logs only. */
+class RoomRequestError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message);
+  }
+}
+
+function errorCode(reason: unknown, fallback: string): string {
+  if (reason instanceof RoomRequestError) {
+    console.warn(`Room request failed: ${reason.code}: ${reason.message}`);
+    return reason.code;
+  }
+  console.warn("Room request failed", reason);
+  return fallback;
+}
+
 async function readEntry(
   path: string,
   payload: EntryRequest | CreateRoomRequest,
@@ -46,8 +63,8 @@ async function readEntry(
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
-    const problem = (await response.json()) as ProblemDetails;
-    throw new Error(problem.title || "Room entry failed");
+    const problem = (await response.json().catch(() => null)) as ProblemDetails | null;
+    throw new RoomRequestError(problem?.code ?? "entry_failed", problem?.title ?? "Room entry failed");
   }
   return response.json() as Promise<EntryResult>;
 }
@@ -56,11 +73,15 @@ async function readSnapshot(session: RoomSession): Promise<RoomSnapshot> {
   const response = await fetch(`/api/v1/rooms/${encodeURIComponent(session.roomCode)}`, {
     headers: { Authorization: `Bearer ${session.credential}` },
   });
-  if (!response.ok) throw new Error("Room snapshot is unavailable");
+  if (!response.ok) throw new RoomRequestError("snapshot_unavailable", "Room snapshot is unavailable");
   return response.json() as Promise<RoomSnapshot>;
 }
 
-function watchRoom(session: RoomSession, onSnapshot: (snapshot: RoomSnapshot) => void): WebSocket {
+function watchRoom(
+  session: RoomSession,
+  onSnapshot: (snapshot: RoomSnapshot) => void,
+  onError: (code: string, title: string) => void,
+): WebSocket {
   const socket = new WebSocket(
     `${websocketOrigin()}/ws/v1/rooms/${encodeURIComponent(session.roomCode)}`,
   );
@@ -68,10 +89,9 @@ function watchRoom(session: RoomSession, onSnapshot: (snapshot: RoomSnapshot) =>
     socket.send(JSON.stringify({ type: "authenticate", credential: session.credential }));
   });
   socket.addEventListener("message", (event) => {
-    const payload = JSON.parse(String(event.data)) as { type?: unknown; snapshot?: RoomSnapshot };
-    if (payload.type === "snapshot" && payload.snapshot) {
-      onSnapshot(payload.snapshot);
-    }
+    const frame = parseServerFrame(event.data);
+    if (frame?.type === "snapshot") onSnapshot(frame.snapshot);
+    else if (frame?.type === "error") onError(frame.code, frame.title);
   });
   return socket;
 }
@@ -87,6 +107,7 @@ export function useRoomEntry() {
   const generationRef = useRef(0);
   const enteringRef = useRef(false);
   const intentionalCloseRef = useRef(new WeakSet<WebSocket>());
+  const reconnectAttemptRef = useRef(0);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -101,6 +122,7 @@ export function useRoomEntry() {
     const generation = generationRef.current;
     let retryTimer: number | null = null;
     const socket = watchRoom(session, (snapshot) => {
+      reconnectAttemptRef.current = 0;
       void (async () => {
         const current = generationRef.current === generation && socketRef.current === socket ? sessionRef.current : null;
         if (!current || snapshot.revision <= current.snapshot.revision) return;
@@ -111,7 +133,10 @@ export function useRoomEntry() {
           ...previous,
           snapshot: replacement,
         } : previous);
-      })().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Room snapshot is unavailable"));
+      })().catch((reason: unknown) => setError(errorCode(reason, "snapshot_unavailable")));
+    }, (code, title) => {
+      console.warn(`Room command rejected: ${code}: ${title}`);
+      if (generationRef.current === generation) setError(code);
     });
     socketRef.current = socket;
     socket.addEventListener("open", () => {
@@ -122,9 +147,11 @@ export function useRoomEntry() {
       if (generationRef.current !== generation) return;
       setConnected(false);
       if (!intentionalCloseRef.current.has(socket)) {
+        const delay = reconnectDelayMs(reconnectAttemptRef.current);
+        reconnectAttemptRef.current += 1;
         retryTimer = window.setTimeout(() => {
           if (generationRef.current === generation) setRetryNonce((value) => value + 1);
-        }, 400);
+        }, delay);
       }
     });
     return () => {
@@ -140,15 +167,17 @@ export function useRoomEntry() {
   function sendCommand(type: "ready" | "start" | "bell" | "leave" | "forfeit" | "continue" | "post_match_leave"): void {
     const socket = socketRef.current;
     if (socket?.readyState !== WebSocket.OPEN) {
-      setError("Room connection is unavailable");
+      setError("connection_unavailable");
       return;
     }
+    setError("");
     socket.send(JSON.stringify({ type, commandId: globalThis.crypto.randomUUID() }));
   }
 
   async function enter(path: string, payload: EntryRequest | CreateRoomRequest): Promise<void> {
     if (enteringRef.current || sessionRef.current) return;
     enteringRef.current = true;
+    reconnectAttemptRef.current = 0;
     generationRef.current += 1;
     const generation = generationRef.current;
     setPending(true);
@@ -170,7 +199,7 @@ export function useRoomEntry() {
       setSession(nextSession);
     } catch (reason) {
       if (generationRef.current === generation) {
-        setError(reason instanceof Error ? reason.message : "Room entry failed");
+        setError(errorCode(reason, "entry_failed"));
       }
     } finally {
       if (generationRef.current === generation) setPending(false);
