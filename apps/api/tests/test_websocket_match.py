@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from halligalli_api.app import create_app
 from redis_test_case import RedisTestCase, hash_credential
@@ -69,3 +70,46 @@ class WebSocketMatchTest(RedisTestCase):
 
         self.assertEqual(rejected.status_code, 422)
         self.assertEqual(rejected.json()["code"], "invalid_request")
+
+    def _room(self, client: TestClient, host_credential: str, guest_credential: str) -> str:
+        created = client.post(
+            "/api/v1/rooms",
+            headers={"Idempotency-Key": "5f0f3f39-54d8-4f4f-9a53-5d3c8d0b62a1"},
+            json={"name": "Host", "credentialVerifier": hash_credential(host_credential), "tableSeatCount": 4, "targetHumanParticipantCount": 2, "difficulty": "normal"},
+        )
+        room_code = created.json()["roomCode"]
+        client.post(
+            f"/api/v1/rooms/{room_code}/participants",
+            headers={"Idempotency-Key": "1d8f1a8e-0a8c-4a5e-8d0e-6a4f4b0f7c11"},
+            json={"name": "Guest", "credentialVerifier": hash_credential(guest_credential)},
+        )
+        return room_code
+
+    def test_a_rejected_command_answers_with_an_error_frame_and_keeps_the_socket_open(self) -> None:
+        with TestClient(create_app(authority=self.authority)) as client:
+            room_code = self._room(client, "host", "guest")
+            with client.websocket_connect(f"/ws/v1/rooms/{room_code}") as guest_socket:
+                guest_socket.send_json({"type": "authenticate", "credential": "guest"})
+                guest_socket.receive_json()
+
+                guest_socket.send_json({"type": "start"})
+                rejected = guest_socket.receive_json()
+                guest_socket.send_json({"type": "dance"})
+                invalid = guest_socket.receive_json()
+                guest_socket.send_json({"type": "ready"})
+                accepted = guest_socket.receive_json()
+
+        self.assertEqual(rejected, {"type": "error", "code": "host_required", "title": "Only the host can start the match"})
+        self.assertEqual((invalid["type"], invalid["code"]), ("error", "invalid_request"))
+        self.assertEqual(accepted["type"], "snapshot")
+        self.assertTrue(accepted["snapshot"]["participants"][1]["ready"])
+
+    def test_a_bad_credential_closes_the_socket(self) -> None:
+        with TestClient(create_app(authority=self.authority)) as client:
+            room_code = self._room(client, "host", "guest")
+            with client.websocket_connect(f"/ws/v1/rooms/{room_code}") as socket:
+                socket.send_json({"type": "authenticate", "credential": "stranger"})
+                with self.assertRaises(WebSocketDisconnect) as closed:
+                    socket.receive_json()
+
+        self.assertEqual(closed.exception.code, 1008)

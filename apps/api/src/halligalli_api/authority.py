@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import random
 import secrets
 import time
@@ -14,8 +15,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from .observability import elapsed_since
 
 
+_logger = logging.getLogger("halligalli.authority")
+
+
 ROOM_TTL_SECONDS = 60 * 60
 DUE_INDEX_KEY = "halligalli:rooms:due"
+ACTIVE_ROOMS_KEY = "halligalli:rooms:active"
+COMMAND_HISTORY_LIMIT = 128
 POST_MATCH_DURATION_MS = 30_000
 ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 SCORE_BONUS_WINDOW_MS = 1_500
@@ -354,6 +360,7 @@ class _IdempotencyEntry:
 @dataclass
 class _CommandEntry:
     fingerprint: str
+    revision: int = 0
 
 
 @dataclass
@@ -640,7 +647,10 @@ def _cache_or_conflict(room: _Room, command: AuthorityCommand) -> AuthorityResul
         if verifier is None:
             verifier = _active_participants(room)[0].credential_verifier
         return _result_for_verifier(room, verifier)
-    room.commands[command_id] = _CommandEntry(fingerprint=fingerprint)
+    room.commands[command_id] = _CommandEntry(fingerprint=fingerprint, revision=room.revision)
+    if len(room.commands) > COMMAND_HISTORY_LIMIT:
+        oldest = min(room.commands, key=lambda key: room.commands[key].revision)
+        del room.commands[oldest]
     return None
 
 
@@ -972,8 +982,10 @@ class RedisMultiplayerAuthority:
     def _queue_room_write(self, pipeline: object, room: _Room, *, publish: bool = True) -> None:
         """Queue the room state and its due-index entry inside the caller's transaction."""
         room_key = self._room_key(room.code)
+        ttl_seconds = self._ttl_seconds(room)
         pipeline.hset(room_key, mapping={"state": room.to_json()})
-        pipeline.expire(room_key, self._ttl_seconds(room))
+        pipeline.expire(room_key, ttl_seconds)
+        pipeline.zadd(ACTIVE_ROOMS_KEY, {room.code: self._clock() + ttl_seconds * 1_000})
         due_at = _due_at(room)
         if due_at is None:
             pipeline.zrem(DUE_INDEX_KEY, room.code)
@@ -1122,7 +1134,14 @@ class RedisMultiplayerAuthority:
         due_codes = await self._redis.zrangebyscore(DUE_INDEX_KEY, "-inf", now)
         changed = []
         for room_code in due_codes:
-            if await self._advance_room_if_due(room_code, now):
+            try:
+                advanced = await self._advance_room_if_due(room_code, now)
+            except (AuthorityError, KeyError, TypeError, ValueError):
+                # A room that cannot advance must not stall every other room's deadline.
+                _logger.exception("Dropping room %s from the due index", room_code)
+                await self._redis.zrem(DUE_INDEX_KEY, room_code)
+                continue
+            if advanced:
                 changed.append(room_code)
         return changed
 
@@ -1170,10 +1189,8 @@ class RedisMultiplayerAuthority:
         return result
 
     async def active_room_count(self) -> int:
-        count = 0
-        async for _ in self._redis.scan_iter(match="halligalli:room:*"):
-            count += 1
-        return count
+        await self._redis.zremrangebyscore(ACTIVE_ROOMS_KEY, "-inf", self._clock())
+        return await self._redis.zcard(ACTIVE_ROOMS_KEY)
 
     async def readiness(self) -> bool:
         try:

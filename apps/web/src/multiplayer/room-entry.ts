@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { components } from "./rest.generated.js";
+import { parseServerFrame, reconnectDelayMs } from "./socket-protocol.js";
 
 type EntryRequest = components["schemas"]["EntryRequest"];
 type CreateRoomRequest = components["schemas"]["CreateRoomRequest"];
@@ -60,7 +61,11 @@ async function readSnapshot(session: RoomSession): Promise<RoomSnapshot> {
   return response.json() as Promise<RoomSnapshot>;
 }
 
-function watchRoom(session: RoomSession, onSnapshot: (snapshot: RoomSnapshot) => void): WebSocket {
+function watchRoom(
+  session: RoomSession,
+  onSnapshot: (snapshot: RoomSnapshot) => void,
+  onError: (title: string) => void,
+): WebSocket {
   const socket = new WebSocket(
     `${websocketOrigin()}/ws/v1/rooms/${encodeURIComponent(session.roomCode)}`,
   );
@@ -68,10 +73,9 @@ function watchRoom(session: RoomSession, onSnapshot: (snapshot: RoomSnapshot) =>
     socket.send(JSON.stringify({ type: "authenticate", credential: session.credential }));
   });
   socket.addEventListener("message", (event) => {
-    const payload = JSON.parse(String(event.data)) as { type?: unknown; snapshot?: RoomSnapshot };
-    if (payload.type === "snapshot" && payload.snapshot) {
-      onSnapshot(payload.snapshot);
-    }
+    const frame = parseServerFrame(event.data);
+    if (frame?.type === "snapshot") onSnapshot(frame.snapshot);
+    else if (frame?.type === "error") onError(frame.title);
   });
   return socket;
 }
@@ -87,6 +91,7 @@ export function useRoomEntry() {
   const generationRef = useRef(0);
   const enteringRef = useRef(false);
   const intentionalCloseRef = useRef(new WeakSet<WebSocket>());
+  const reconnectAttemptRef = useRef(0);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -101,6 +106,7 @@ export function useRoomEntry() {
     const generation = generationRef.current;
     let retryTimer: number | null = null;
     const socket = watchRoom(session, (snapshot) => {
+      reconnectAttemptRef.current = 0;
       void (async () => {
         const current = generationRef.current === generation && socketRef.current === socket ? sessionRef.current : null;
         if (!current || snapshot.revision <= current.snapshot.revision) return;
@@ -112,6 +118,8 @@ export function useRoomEntry() {
           snapshot: replacement,
         } : previous);
       })().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Room snapshot is unavailable"));
+    }, (title) => {
+      if (generationRef.current === generation) setError(title);
     });
     socketRef.current = socket;
     socket.addEventListener("open", () => {
@@ -122,9 +130,11 @@ export function useRoomEntry() {
       if (generationRef.current !== generation) return;
       setConnected(false);
       if (!intentionalCloseRef.current.has(socket)) {
+        const delay = reconnectDelayMs(reconnectAttemptRef.current);
+        reconnectAttemptRef.current += 1;
         retryTimer = window.setTimeout(() => {
           if (generationRef.current === generation) setRetryNonce((value) => value + 1);
-        }, 400);
+        }, delay);
       }
     });
     return () => {
@@ -143,12 +153,14 @@ export function useRoomEntry() {
       setError("Room connection is unavailable");
       return;
     }
+    setError("");
     socket.send(JSON.stringify({ type, commandId: globalThis.crypto.randomUUID() }));
   }
 
   async function enter(path: string, payload: EntryRequest | CreateRoomRequest): Promise<void> {
     if (enteringRef.current || sessionRef.current) return;
     enteringRef.current = true;
+    reconnectAttemptRef.current = 0;
     generationRef.current += 1;
     const generation = generationRef.current;
     setPending(true);

@@ -3,7 +3,9 @@ from __future__ import annotations
 import unittest
 
 from halligalli_api.authority import (
+    COMMAND_HISTORY_LIMIT,
     AdvancePostMatch,
+    Bell,
     ContinueMatch,
     Forfeit,
     JoinRoom,
@@ -63,3 +65,18 @@ class RoomLifecycleTest(RedisAsyncTestCase):
         await authority.execute(created.room_code, Ready(replacement, "ready-replacement"))
         next_match = await authority.execute(created.room_code, Start(credentials[0], 2_000, "start-two"))
         self.assertEqual(next_match.snapshot.match_number, 2)
+
+    async def test_command_history_keeps_only_a_recent_window(self) -> None:
+        authority = self.authority
+        created, credentials = await self.create_room("history", (("Host", "host"), ("Guest", "guest")))
+        for credential in credentials:
+            await authority.execute(created.room_code, Ready(credential))
+        await authority.execute(created.room_code, Start(credentials[0], 1_000))
+        for index in range(COMMAND_HISTORY_LIMIT + 5):
+            latest = await authority.execute(created.room_code, Bell(credentials[0], 1_001, f"bell-{index}"))
+
+        replayed = await authority.execute(created.room_code, Bell(credentials[0], 1_001, f"bell-{COMMAND_HISTORY_LIMIT + 4}"))
+        forgotten = await authority.execute(created.room_code, Bell(credentials[0], 1_001, "bell-0"))
+
+        self.assertEqual(replayed.snapshot.revision, latest.snapshot.revision)
+        self.assertEqual(forgotten.snapshot.revision, latest.snapshot.revision + 1)

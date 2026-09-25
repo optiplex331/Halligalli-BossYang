@@ -40,6 +40,8 @@ from .observability import Telemetry, elapsed_since
 
 
 _logger = logging.getLogger("halligalli.api")
+# Only a credential that no longer authenticates or a room that no longer exists ends the socket.
+_SOCKET_CLOSING_ERRORS = frozenset({"credential_invalid", "room_not_found"})
 _RELEASE_IDENTITY_PATH = Path(__file__).with_name("release-identity.json")
 
 
@@ -193,29 +195,27 @@ def create_app(
                 await hub.publish(room_code, selected_authority)
             await asyncio.sleep(due_interval_seconds)
 
+    async def forward_revisions(subscribed: asyncio.Event) -> None:
+        subscription = await selected_authority.subscribe_revisions()
+        subscribed.set()
+        try:
+            await forward_room_revisions(subscription.events(), hub, selected_authority)
+        finally:
+            await subscription.aclose()
+
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        subscription = None
-        revision_task: asyncio.Task[None] | None = None
-        due_task = asyncio.create_task(supervise("due deadline loop", advance_due_rooms))
+        tasks = [asyncio.create_task(supervise("due deadline loop", advance_due_rooms))]
         if isinstance(selected_authority, RedisMultiplayerAuthority):
-            subscription = await selected_authority.subscribe_revisions()
-            revision_task = asyncio.create_task(
-                forward_room_revisions(subscription.events(), hub, selected_authority),
-            )
+            subscribed = asyncio.Event()
+            tasks.append(asyncio.create_task(supervise("revision forwarder", lambda: forward_revisions(subscribed))))
+            await subscribed.wait()
         try:
             yield
         finally:
-            pending_tasks: tuple[asyncio.Task[None], ...] = (due_task,)
-            if revision_task is not None:
-                revision_task.cancel()
-                pending_tasks += (revision_task,)
-            for task in pending_tasks:
+            for task in tasks:
                 task.cancel()
-            if pending_tasks:
-                await asyncio.gather(*pending_tasks, return_exceptions=True)
-            if subscription is not None:
-                await subscription.aclose()
+            await asyncio.gather(*tasks, return_exceptions=True)
             close = getattr(selected_authority, "aclose", None)
             if close is not None:
                 await close()
@@ -412,26 +412,38 @@ def create_app(
         hub.attach(canonical_room_code, websocket, payload.credential, snapshot.revision)
         try:
             while True:
+                message = await websocket.receive_text()
                 with telemetry.span("websocket.command") as span:
                     trace_id = telemetry.trace_id(span)
                     started_at = time.perf_counter()
-                    command_payload = WebSocketRoomCommand.model_validate(await websocket.receive_json())
-                    await app.state.authority.execute(
-                        canonical_room_code,
-                        _room_command(command_payload, payload.credential, app.state.authority.now_ms()),
-                    )
+                    command_name = "command"
+                    try:
+                        command_payload = WebSocketRoomCommand.model_validate_json(message)
+                        command_name = command_payload.type
+                        await app.state.authority.execute(
+                            canonical_room_code,
+                            _room_command(command_payload, payload.credential, app.state.authority.now_ms()),
+                        )
+                    except AuthorityError as error:
+                        telemetry.record_websocket(trace_id=trace_id, room_code=canonical_room_code, command=command_name, outcome="client_error", elapsed_seconds=elapsed_since(started_at), span=span)
+                        if error.code in _SOCKET_CLOSING_ERRORS:
+                            await websocket.close(code=1008)
+                            return
+                        await websocket.send_json({"type": "error", "code": error.code, "title": error.title})
+                        continue
+                    except ValueError:
+                        telemetry.record_websocket(trace_id=trace_id, room_code=canonical_room_code, command=command_name, outcome="client_error", elapsed_seconds=elapsed_since(started_at), span=span)
+                        await websocket.send_json({"type": "error", "code": "invalid_request", "title": "Command is invalid"})
+                        continue
                     await hub.publish(canonical_room_code, app.state.authority)
                     telemetry.record_websocket(
                         trace_id=trace_id,
                         room_code=canonical_room_code,
-                        command=command_payload.type,
+                        command=command_name,
                         outcome="success",
                         elapsed_seconds=elapsed_since(started_at),
                         span=span,
                     )
-        except (AuthorityError, ValueError):
-            telemetry.record_websocket(trace_id="", room_code=canonical_room_code, command="command", outcome="client_error", elapsed_seconds=0)
-            await websocket.close(code=1008)
         except WebSocketDisconnect:
             pass
         finally:
