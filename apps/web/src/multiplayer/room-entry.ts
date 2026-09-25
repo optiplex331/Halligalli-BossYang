@@ -15,8 +15,6 @@ interface RoomSession {
   snapshot: RoomSnapshot;
 }
 
-export type RoomSessionState = "no_room" | "entering" | "connecting" | "lobby" | "playing" | "post_match" | "leaving";
-
 function createCredential(): string {
   const bytes = globalThis.crypto.getRandomValues(new Uint8Array(32));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -89,7 +87,6 @@ export function useRoomEntry() {
   const generationRef = useRef(0);
   const enteringRef = useRef(false);
   const intentionalCloseRef = useRef(new WeakSet<WebSocket>());
-  const [state, setState] = useState<RoomSessionState>("no_room");
 
   useEffect(() => {
     sessionRef.current = session;
@@ -102,7 +99,6 @@ export function useRoomEntry() {
       return;
     }
     const generation = generationRef.current;
-    setState("connecting");
     let retryTimer: number | null = null;
     const socket = watchRoom(session, (snapshot) => {
       void (async () => {
@@ -115,14 +111,12 @@ export function useRoomEntry() {
           ...previous,
           snapshot: replacement,
         } : previous);
-        setState(replacement.phase);
       })().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Room snapshot is unavailable"));
     });
     socketRef.current = socket;
     socket.addEventListener("open", () => {
       if (generationRef.current !== generation) return;
       setConnected(true);
-      setState(session.snapshot.phase);
     });
     socket.addEventListener("close", () => {
       if (generationRef.current !== generation) return;
@@ -143,11 +137,6 @@ export function useRoomEntry() {
     };
   }, [session?.credential, session?.roomCode, retryNonce]);
 
-  useEffect(() => {
-    if (!session || state === "leaving" || state === "connecting") return;
-    setState(session.snapshot.phase);
-  }, [session?.snapshot.phase, state]);
-
   function sendCommand(type: "ready" | "start" | "bell" | "leave" | "forfeit" | "continue" | "post_match_leave"): void {
     const socket = socketRef.current;
     if (socket?.readyState !== WebSocket.OPEN) {
@@ -162,7 +151,6 @@ export function useRoomEntry() {
     enteringRef.current = true;
     generationRef.current += 1;
     const generation = generationRef.current;
-    setState("entering");
     setPending(true);
     setError("");
     try {
@@ -183,7 +171,6 @@ export function useRoomEntry() {
     } catch (reason) {
       if (generationRef.current === generation) {
         setError(reason instanceof Error ? reason.message : "Room entry failed");
-        setState("no_room");
       }
     } finally {
       if (generationRef.current === generation) setPending(false);
@@ -192,8 +179,7 @@ export function useRoomEntry() {
   }
 
   function leaveRoom(): void {
-    if (!sessionRef.current || state === "leaving") return;
-    setState("leaving");
+    if (!sessionRef.current) return;
     sendCommand("leave");
     const socket = socketRef.current;
     if (socket) intentionalCloseRef.current.add(socket);
@@ -201,7 +187,6 @@ export function useRoomEntry() {
     sessionRef.current = null;
     setSession(null);
     setConnected(false);
-    setState("no_room");
   }
 
   return {
@@ -209,7 +194,6 @@ export function useRoomEntry() {
     error,
     pending,
     connected,
-    state,
     createRoom: (name: string, configuration: Omit<CreateRoomRequest, "name" | "credentialVerifier">) =>
       enter("/api/v1/rooms", { name, credentialVerifier: "", ...configuration }),
     joinRoom: (roomCode: string, name: string) =>

@@ -21,6 +21,9 @@ FIXTURE = json.loads(
 )
 
 
+# Card penalties intentionally differ by mode: the Multiplayer Authority assesses
+# the full ceil(tableCards / 2) target as score only, while Single-Player moves real
+# cards and caps the count by the human's hand. See "wrong-bell-card-penalty-policy".
 def fixture_case(case_id: str) -> dict[str, object]:
     return next(case for case in FIXTURE["cases"] if case["id"] == case_id)
 

@@ -15,13 +15,6 @@ export interface Card {
   count: number;
 }
 
-export interface SeatLayout {
-  labelZh: string;
-  labelEn: string;
-  gridArea: string;
-  isUser?: true;
-}
-
 export interface PlayerState {
   id: number;
   isHuman: boolean;
