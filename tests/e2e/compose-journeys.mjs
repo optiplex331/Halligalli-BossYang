@@ -111,22 +111,29 @@ async function run() {
   assert.equal(started.configuration.targetHumanParticipantCount, 3);
   assert.equal(started.seats.length, 4);
   assert.equal(started.scoreboard.length, 3);
-  const requestedForfeit = await sequential.clients[2].command("forfeit");
+  const firstForfeit = await sequential.clients[2].command("forfeit");
+  assert.equal(firstForfeit.phase, "playing", "match continues while two Human Participants remain");
+  assert.equal(firstForfeit.lastEvent, "forfeit");
+  const requestedForfeit = await sequential.clients[1].command("forfeit");
   const postMatch = requestedForfeit.phase === "post_match"
     ? requestedForfeit
-    : await sequential.clients[2].waitFor((snapshot) => snapshot.phase === "post_match");
+    : await sequential.clients[1].waitFor((snapshot) => snapshot.phase === "post_match");
   assert.equal(postMatch.phase, "post_match");
+  assert.equal(postMatch.result.winnerName, "Next 1");
   await sequential.clients[0].command("continue");
-  await sequential.clients[1].command("continue");
   console.log("waiting for post-match decision window");
   await new Promise((resolve) => setTimeout(resolve, 31_000));
   const lobby = await sequential.clients[0].waitFor((snapshot) => snapshot.phase === "lobby");
   assert.equal(lobby.phase, "lobby");
-  const replacementCredential = `Next replacement-${randomUUID()}`;
-  await enter(`/api/v1/rooms/${sequential.roomCode}/participants`, "Next replacement", replacementCredential);
-  const replacement = await connect(sequential.roomCode, replacementCredential);
-  const secondMatch = await readyAndStart([...sequential.clients.slice(0, 2), replacement]);
+  const replacements = [];
+  for (const label of ["Next replacement A", "Next replacement B"]) {
+    const replacementCredential = `${label}-${randomUUID()}`;
+    await enter(`/api/v1/rooms/${sequential.roomCode}/participants`, label, replacementCredential);
+    replacements.push(await connect(sequential.roomCode, replacementCredential));
+  }
+  const secondMatch = await readyAndStart([sequential.clients[0], ...replacements]);
   assert.equal(secondMatch.matchNumber, 2);
+  replacements.forEach((replacement) => replacement.close());
   replacement.close();
   sequential.clients.forEach((client) => client.close());
 }

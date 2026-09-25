@@ -132,6 +132,8 @@ def sum_breakdown(breakdown: ScoreBreakdown) -> int:
 
 class ParticipantScore(ApiModel):
     seat_index: int
+    name: str
+    forfeited: bool = False
     score: int
     correct_hits: int
     wrong_hits: int
@@ -141,6 +143,7 @@ class ParticipantScore(ApiModel):
 
 class MatchResult(ApiModel):
     winner_seat_index: int
+    winner_name: str
     score: int
     participants: list[ParticipantScore]
 
@@ -198,7 +201,7 @@ class RoomSnapshot(ApiModel):
     allowed_commands: list[Literal["ready", "start", "bell", "leave", "forfeit", "continue", "post_match_leave"]]
     bell_fruit: Literal["banana", "strawberry", "lemon", "grape"] | None = None
     scoreboard: list[ParticipantScore]
-    last_event: Literal["correct_bell", "wrong_bell", "missed_bell"] | None = None
+    last_event: Literal["correct_bell", "wrong_bell", "missed_bell", "forfeit"] | None = None
     result: MatchResult | None = None
     match_number: int = 0
     post_match_deadline_at: int | None = None
@@ -377,6 +380,8 @@ class _MatchResult:
 
 @dataclass
 class _ParticipantScore:
+    name: str = ""
+    forfeited: bool = False
     correct_hits: int = 0
     wrong_hits: int = 0
     missed_hits: int = 0
@@ -408,7 +413,7 @@ class _Match:
     bell_fruit: Literal["banana", "strawberry", "lemon", "grape"] | None = None
     bell_opened_at: int | None = None
     scores: dict[int, _ParticipantScore] = field(default_factory=dict)
-    last_event: Literal["correct_bell", "wrong_bell", "missed_bell"] | None = None
+    last_event: Literal["correct_bell", "wrong_bell", "missed_bell", "forfeit"] | None = None
     result: _MatchResult | None = None
     number: int = 0
 
@@ -529,6 +534,8 @@ def _scoreboard_for(match: _Match | None) -> list[ParticipantScore]:
     return [
         ParticipantScore(
             seat_index=seat_index,
+            name=score.name,
+            forfeited=score.forfeited,
             score=_score_for(score),
             correct_hits=score.correct_hits,
             wrong_hits=score.wrong_hits,
@@ -599,6 +606,7 @@ def _snapshot_for_verifier(room: _Room, verifier: str) -> RoomSnapshot:
                 result=(
                     MatchResult(
                         winner_seat_index=match.result.winner_seat_index,
+                        winner_name=match.scores[match.result.winner_seat_index].name,
                         score=match.result.score,
                         participants=_scoreboard_for(match),
                     )
@@ -696,8 +704,9 @@ def _finish_match(room: _Room, now_ms: int) -> None:
     match = room.match
     if match is None:
         raise AuthorityError("match_not_running", 409, "Match is not running")
+    remaining = [seat for seat in match.frozen_human_seat_indexes if not match.scores[seat].forfeited]
     winner_seat_index = min(
-        match.frozen_human_seat_indexes,
+        remaining or match.frozen_human_seat_indexes,
         key=lambda seat_index: (-_score_for(match.scores[seat_index]), seat_index),
     )
     match.result = _MatchResult(
@@ -766,7 +775,7 @@ def _apply_room_command(room: _Room, command: AuthorityCommand, deck: DeckSource
             top_cards=[None] * room.table_seat_count,
             face_up_card_counts=[0] * room.table_seat_count,
             frozen_human_seat_indexes=[item.seat_index for item in active],
-            scores={item.seat_index: _ParticipantScore() for item in active},
+            scores={item.seat_index: _ParticipantScore(name=item.name) for item in active},
             number=room.match_number + 1,
         )
         room.match_number += 1
@@ -845,9 +854,12 @@ def _apply_room_command(room: _Room, command: AuthorityCommand, deck: DeckSource
         if room.phase != "playing" or room.match is None:
             raise AuthorityError("forfeit_not_allowed", 409, "Forfeit is only available during a match")
         participant.active = False
+        participant.ready = False
         participant.continue_playing = False
-        room.match.last_event = "wrong_bell"
-        _finish_match(room, command.now_ms)
+        room.match.scores[participant.seat_index].forfeited = True
+        room.match.last_event = "forfeit"
+        if len(_active_participants(room)) < MIN_HUMAN_PARTICIPANTS:
+            _finish_match(room, command.now_ms)
         room.revision += 1
         return _result_for_verifier(room, command.credential_verifier)
 

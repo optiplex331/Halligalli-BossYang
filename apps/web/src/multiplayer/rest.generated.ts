@@ -104,6 +104,8 @@ export interface components {
             participants: components["schemas"]["ParticipantScore"][];
             /** Score */
             score: number;
+            /** Winnername */
+            winnerName: string;
             /** Winnerseatindex */
             winnerSeatIndex: number;
         };
@@ -111,8 +113,15 @@ export interface components {
         ParticipantScore: {
             /** Correcthits */
             correctHits: number;
+            /**
+             * Forfeited
+             * @default false
+             */
+            forfeited: boolean;
             /** Missedhits */
             missedHits: number;
+            /** Name */
+            name: string;
             /** Score */
             score: number;
             scoreBreakdown: components["schemas"]["ScoreBreakdown"];
@@ -178,7 +187,7 @@ export interface components {
             /** Currentturnseatindex */
             currentTurnSeatIndex?: number | null;
             /** Lastevent */
-            lastEvent?: ("correct_bell" | "wrong_bell" | "missed_bell") | null;
+            lastEvent?: ("correct_bell" | "wrong_bell" | "missed_bell" | "forfeit") | null;
             lastReveal?: components["schemas"]["RevealSnapshot"] | null;
             /**
              * Matchnumber

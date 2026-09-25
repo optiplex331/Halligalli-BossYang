@@ -123,6 +123,10 @@
             "title": "Score",
             "type": "integer"
           },
+          "winnerName": {
+            "title": "Winnername",
+            "type": "string"
+          },
           "winnerSeatIndex": {
             "title": "Winnerseatindex",
             "type": "integer"
@@ -130,6 +134,7 @@
         },
         "required": [
           "winnerSeatIndex",
+          "winnerName",
           "score",
           "participants"
         ],
@@ -142,9 +147,18 @@
             "title": "Correcthits",
             "type": "integer"
           },
+          "forfeited": {
+            "default": false,
+            "title": "Forfeited",
+            "type": "boolean"
+          },
           "missedHits": {
             "title": "Missedhits",
             "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
           },
           "score": {
             "title": "Score",
@@ -164,6 +178,7 @@
         },
         "required": [
           "seatIndex",
+          "name",
           "score",
           "correctHits",
           "wrongHits",
@@ -330,7 +345,8 @@
                 "enum": [
                   "correct_bell",
                   "wrong_bell",
-                  "missed_bell"
+                  "missed_bell",
+                  "forfeit"
                 ],
                 "type": "string"
               },
