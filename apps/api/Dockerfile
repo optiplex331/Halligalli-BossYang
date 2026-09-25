@@ -22,7 +22,8 @@ ENV PATH=/app/.venv/bin:$PATH \
 COPY --from=build /app/.venv /app/.venv
 COPY --from=build /app/src /app/src
 
-RUN groupadd --gid 10001 halligalli \
+RUN /usr/local/bin/python -m pip uninstall --yes --no-cache-dir pip \
+  && groupadd --gid 10001 halligalli \
   && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin halligalli
 
 USER 10001:10001
