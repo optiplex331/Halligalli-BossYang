@@ -86,6 +86,7 @@ class RedisAsyncTestCase(unittest.IsolatedAsyncioTestCase):
         *,
         table_seats: int = 4,
         target_humans: int | None = None,
+        difficulty: str = "normal",
     ) -> tuple[AuthorityResult, list[str]]:
         credentials = [hash_credential(credential) for _, credential in participants]
         created = await self.authority.execute(
@@ -96,8 +97,7 @@ class RedisAsyncTestCase(unittest.IsolatedAsyncioTestCase):
                 credentials[0],
                 table_seats,
                 target_humans if target_humans is not None else len(participants),
-                "normal",
-                60,
+                difficulty,
             ),
         )
         for index, ((name, _), credential) in enumerate(

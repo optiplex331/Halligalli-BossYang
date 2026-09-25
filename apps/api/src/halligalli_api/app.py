@@ -16,7 +16,7 @@ from uuid import UUID
 from fastapi import FastAPI, Header, Request, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from .authority import (
     ApiModel,
@@ -60,10 +60,11 @@ class EntryRequest(ApiModel):
 
 
 class CreateRoomRequest(EntryRequest):
+    model_config = ConfigDict(extra="forbid")
+
     table_seat_count: int = Field(ge=4, le=8)
     target_human_participant_count: int = Field(ge=2)
     difficulty: Literal["easy", "normal", "hard"]
-    duration_sec: int = Field(ge=1)
 
 
 class ProblemDetails(ApiModel):
@@ -334,7 +335,6 @@ def create_app(
                 table_seat_count=request.table_seat_count,
                 target_human_participant_count=request.target_human_participant_count,
                 difficulty=request.difficulty,
-                duration_sec=request.duration_sec,
             ),
         )
 

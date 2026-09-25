@@ -18,8 +18,14 @@ ROOM_TTL_SECONDS = 60 * 60
 DUE_INDEX_KEY = "halligalli:rooms:due"
 POST_MATCH_DURATION_MS = 30_000
 ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-TURN_DURATION_MS = 700
 SCORE_BONUS_WINDOW_MS = 1_500
+Difficulty: TypeAlias = Literal["easy", "normal", "hard"]
+# Difficulty -> (turn interval ms, Bell Window ms).
+MATCH_PACE: dict[str, tuple[int, int]] = {
+    "easy": (900, 1_800),
+    "normal": (700, 1_500),
+    "hard": (550, 1_200),
+}
 MIN_TABLE_SEATS = 4
 MAX_TABLE_SEATS = 8
 MIN_HUMAN_PARTICIPANTS = 2
@@ -136,8 +142,7 @@ class MatchResult(ApiModel):
 class RoomConfiguration(ApiModel):
     table_seat_count: int
     target_human_participant_count: int
-    difficulty: Literal["easy", "normal", "hard"]
-    duration_sec: int
+    difficulty: Difficulty
 
 
 class TableSeatSnapshot(ApiModel):
@@ -217,8 +222,7 @@ class CreateRoom:
     credential_verifier: str
     table_seat_count: int
     target_human_participant_count: int
-    difficulty: Literal["easy", "normal", "hard"]
-    duration_sec: int
+    difficulty: Difficulty
 
 
 @dataclass(frozen=True)
@@ -408,8 +412,7 @@ class _Room:
     revision: int = 1
     table_seat_count: int = MIN_TABLE_SEATS
     target_human_participant_count: int = MIN_HUMAN_PARTICIPANTS
-    difficulty: Literal["easy", "normal", "hard"] = "normal"
-    duration_sec: int = 60
+    difficulty: Difficulty = "normal"
     phase: Literal["lobby", "playing", "post_match"] = "lobby"
     participants: list[_Participant] = field(default_factory=list)
     idempotency: dict[str, _IdempotencyEntry] = field(default_factory=dict)
@@ -431,7 +434,6 @@ class _Room:
             table_seat_count=raw["table_seat_count"],
             target_human_participant_count=raw["target_human_participant_count"],
             difficulty=raw["difficulty"],
-            duration_sec=raw["duration_sec"],
             phase=raw["phase"],
             participants=[_Participant(**participant) for participant in raw["participants"]],
             idempotency={
@@ -562,7 +564,6 @@ def _snapshot_for_verifier(room: _Room, verifier: str) -> RoomSnapshot:
                     table_seat_count=room.table_seat_count,
                     target_human_participant_count=room.target_human_participant_count,
                     difficulty=room.difficulty,
-                    duration_sec=room.duration_sec,
                 ),
                 viewer_seat_index=participant.seat_index,
                 participants=[
@@ -715,8 +716,9 @@ def _flip_next(room: _Room, now_ms: int) -> None:
     match.next_card_index += 1
     match.reveal_sequence += 1
     match.current_turn = (match.current_turn + 1) % room.table_seat_count
-    match.turn_deadline_at = now_ms + TURN_DURATION_MS
     match.bell_fruit = _bell_fruit(match.top_cards)
+    turn_interval_ms, bell_window_ms = MATCH_PACE[room.difficulty]
+    match.turn_deadline_at = now_ms + (bell_window_ms if match.bell_fruit is not None else turn_interval_ms)
     match.bell_opened_at = now_ms if match.bell_fruit is not None else None
 
 
@@ -1039,7 +1041,6 @@ class RedisMultiplayerAuthority:
                 table_seat_count=command.table_seat_count,
                 target_human_participant_count=command.target_human_participant_count,
                 difficulty=command.difficulty,
-                duration_sec=command.duration_sec,
             )
             room.participants.append(
                 _Participant(name=command.name, credential_verifier=command.credential_verifier, seat_index=0),

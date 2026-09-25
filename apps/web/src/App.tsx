@@ -344,6 +344,7 @@ export default function App() {
   const [roomName, setRoomName] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [roomHumanTarget, setRoomHumanTarget] = useState(2);
+  const [roomDifficulty, setRoomDifficulty] = useState<Difficulty>(DEFAULT_SETTINGS.difficulty);
 
   const screenRegionRef = useRef<HTMLElement | null>(null);
   const multiplayerSignalRef = useRef<{ sequence: number; correct: number; wrong: number; missed: number } | null>(null);
@@ -587,14 +588,19 @@ export default function App() {
                     {Array.from({ length: settings.tableSeatCount - 1 }, (_, index) => index + 2).map((count) => <option key={count} value={count}>{count}</option>)}
                   </select>
                 </label>
+                <label>
+                  <span>{t("difficulty")}</span>
+                  <select value={roomDifficulty} onChange={(event) => setRoomDifficulty(event.target.value as Difficulty)}>
+                    {(Object.keys(MODES) as Difficulty[]).map((difficulty) => <option key={difficulty} value={difficulty}>{modeLabel(difficulty, settings.language)}</option>)}
+                  </select>
+                </label>
                 <button
                   className="primary-button"
                   disabled={roomEntry.pending}
                   onClick={() => void roomEntry.createRoom(roomName, {
                     tableSeatCount: settings.tableSeatCount,
                     targetHumanParticipantCount: roomHumanTarget,
-                    difficulty: settings.difficulty,
-                    durationSec: settings.duration,
+                    difficulty: roomDifficulty,
                   })}
                 >
                   {settings.language === "en" ? `Create ${settings.tableSeatCount}-seat room for ${roomHumanTarget}` : `创建 ${settings.tableSeatCount} 座位 / ${roomHumanTarget} 真人房间`}

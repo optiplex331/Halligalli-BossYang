@@ -78,8 +78,6 @@ export interface components {
              * @enum {string}
              */
             difficulty: "easy" | "normal" | "hard";
-            /** Durationsec */
-            durationSec: number;
             /** Name */
             name: string;
             /** Tableseatcount */
@@ -165,8 +163,6 @@ export interface components {
              * @enum {string}
              */
             difficulty: "easy" | "normal" | "hard";
-            /** Durationsec */
-            durationSec: number;
             /** Tableseatcount */
             tableSeatCount: number;
             /** Targethumanparticipantcount */

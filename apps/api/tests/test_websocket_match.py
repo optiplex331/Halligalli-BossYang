@@ -18,7 +18,7 @@ class WebSocketMatchTest(RedisTestCase):
             created = client.post(
                 "/api/v1/rooms",
                 headers={"Idempotency-Key": "c97c807c-4c73-4ea0-bfc7-2a8bd4d68cce"},
-                json={"name": "Host", "credentialVerifier": hash_credential(host_credential), "tableSeatCount": 4, "targetHumanParticipantCount": 2, "difficulty": "normal", "durationSec": 60},
+                json={"name": "Host", "credentialVerifier": hash_credential(host_credential), "tableSeatCount": 4, "targetHumanParticipantCount": 2, "difficulty": "normal"},
             )
             room_code = created.json()["roomCode"]
             client.post(
@@ -58,3 +58,14 @@ class WebSocketMatchTest(RedisTestCase):
         self.assertEqual(continued["snapshot"]["phase"], "playing")
         self.assertIsNone(continued["snapshot"]["result"])
         self.assertEqual(continued["snapshot"]["scoreboard"][0]["score"], 207)
+
+    def test_room_creation_rejects_unknown_configuration_fields(self) -> None:
+        with TestClient(create_app(authority=self.authority)) as client:
+            rejected = client.post(
+                "/api/v1/rooms",
+                headers={"Idempotency-Key": "0b7f6a4e-8f0e-4a39-9d2e-0f4bd2c1f0aa"},
+                json={"name": "Host", "credentialVerifier": hash_credential("host"), "tableSeatCount": 4, "targetHumanParticipantCount": 2, "difficulty": "normal", "durationSec": 60},
+            )
+
+        self.assertEqual(rejected.status_code, 422)
+        self.assertEqual(rejected.json()["code"], "invalid_request")

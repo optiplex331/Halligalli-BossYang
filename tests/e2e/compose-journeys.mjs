@@ -79,7 +79,6 @@ async function roomWith(tableSeatCount, count, prefix) {
     tableSeatCount,
     targetHumanParticipantCount: count,
     difficulty: "normal",
-    durationSec: 60,
   });
   for (let index = 1; index < count; index += 1) {
     await enter(`/api/v1/rooms/${created.roomCode}/participants`, `${prefix} ${index + 1}`, credentials[index]);
