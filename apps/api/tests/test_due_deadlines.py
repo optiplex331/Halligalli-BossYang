@@ -77,3 +77,17 @@ class DueDeadlineTest(RedisAsyncTestCase):
 
         self.assertEqual(lobby.phase, "lobby")
         self.assertEqual(unchanged.revision, lobby.revision)
+
+    async def test_a_room_that_cannot_advance_is_logged_and_does_not_stall_other_rooms(self) -> None:
+        started, _ = await self._started("healthy")
+        await self.redis.hset("halligalli:room:{BAD1}", mapping={"state": '{"code":"BAD1"}'})
+        await self.redis.zadd("halligalli:rooms:due", {"BAD1": 1})
+        deadline = started.snapshot.turn_deadline_at
+
+        with self.assertLogs("halligalli.authority", level="ERROR") as logged:
+            changed = await self.authority.advance_due(deadline)
+        later = await self.authority.advance_due(deadline + 10_000)
+
+        self.assertEqual(changed, [started.room_code])
+        self.assertIn("BAD1", logged.output[0])
+        self.assertEqual(later, [started.room_code])

@@ -78,6 +78,12 @@ export interface components {
              * @enum {string}
              */
             difficulty: "easy" | "normal" | "hard";
+            /**
+             * Durationsec
+             * @deprecated
+             * @description Ignored. Accepted for one release so pages loaded before its removal can still create rooms.
+             */
+            durationSec?: number | null;
             /** Name */
             name: string;
             /** Tableseatcount */

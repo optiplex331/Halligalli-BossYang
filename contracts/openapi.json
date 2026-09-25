@@ -42,6 +42,19 @@
             "title": "Difficulty",
             "type": "string"
           },
+          "durationSec": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "deprecated": true,
+            "description": "Ignored. Accepted for one release so pages loaded before its removal can still create rooms.",
+            "title": "Durationsec"
+          },
           "name": {
             "maxLength": 24,
             "minLength": 1,

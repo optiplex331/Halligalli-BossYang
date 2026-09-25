@@ -6,7 +6,17 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from halligalli_api.app import create_app
+from halligalli_api.authority import RedisMultiplayerAuthority
 from redis_test_case import RedisTestCase, hash_credential
+
+
+class StartupTest(unittest.TestCase):
+    def test_startup_fails_instead_of_hanging_when_redis_is_unavailable(self) -> None:
+        unavailable = RedisMultiplayerAuthority.from_url("redis://127.0.0.1:1/0")
+
+        with self.assertRaises(Exception):
+            with TestClient(create_app(authority=unavailable)):
+                pass
 
 
 class WebSocketMatchTest(RedisTestCase):
@@ -65,7 +75,7 @@ class WebSocketMatchTest(RedisTestCase):
             rejected = client.post(
                 "/api/v1/rooms",
                 headers={"Idempotency-Key": "0b7f6a4e-8f0e-4a39-9d2e-0f4bd2c1f0aa"},
-                json={"name": "Host", "credentialVerifier": hash_credential("host"), "tableSeatCount": 4, "targetHumanParticipantCount": 2, "difficulty": "normal", "durationSec": 60},
+                json={"name": "Host", "credentialVerifier": hash_credential("host"), "tableSeatCount": 4, "targetHumanParticipantCount": 2, "difficulty": "normal", "tableColor": "green"},
             )
 
         self.assertEqual(rejected.status_code, 422)
@@ -113,3 +123,14 @@ class WebSocketMatchTest(RedisTestCase):
                     socket.receive_json()
 
         self.assertEqual(closed.exception.code, 1008)
+
+    def test_room_creation_ignores_the_deprecated_duration_field_for_open_old_tabs(self) -> None:
+        with TestClient(create_app(authority=self.authority)) as client:
+            created = client.post(
+                "/api/v1/rooms",
+                headers={"Idempotency-Key": "7a8e2c35-0b6f-4a53-9f4c-6d7e8f9a0b1c"},
+                json={"name": "Host", "credentialVerifier": hash_credential("host"), "tableSeatCount": 4, "targetHumanParticipantCount": 2, "difficulty": "normal", "durationSec": 60},
+            )
+
+        self.assertEqual(created.status_code, 201)
+        self.assertNotIn("durationSec", created.json()["snapshot"]["configuration"])
