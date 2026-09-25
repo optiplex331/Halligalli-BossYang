@@ -45,6 +45,16 @@ class FixedDeck:
         return FIXED_CARD_ORDER
 
 
+class ManualClock:
+    """A millisecond clock that only moves when a test moves it."""
+
+    def __init__(self, now_ms: int = 1_000) -> None:
+        self.now_ms = now_ms
+
+    def __call__(self) -> int:
+        return self.now_ms
+
+
 def hash_credential(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
@@ -105,4 +115,5 @@ class RedisAsyncTestCase(unittest.IsolatedAsyncioTestCase):
 class RedisTestCase(unittest.TestCase):
     def setUp(self) -> None:
         asyncio.run(_flush_redis())
-        self.authority = RedisMultiplayerAuthority.from_url(REDIS_URL, deck=FixedDeck())
+        self.clock = ManualClock()
+        self.authority = RedisMultiplayerAuthority.from_url(REDIS_URL, deck=FixedDeck(), clock=self.clock)

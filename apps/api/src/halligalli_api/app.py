@@ -3,9 +3,10 @@ from __future__ import annotations
 import os
 import asyncio
 import json
+import logging
 import time
 from contextlib import asynccontextmanager
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from inspect import isawaitable
 from pathlib import Path
@@ -19,8 +20,6 @@ from pydantic import Field
 
 from .authority import (
     ApiModel,
-    AdvanceTurn,
-    AdvancePostMatch,
     AuthorityError,
     Bell,
     CreateRoom,
@@ -40,6 +39,7 @@ from .authority import (
 from .observability import Telemetry, elapsed_since
 
 
+_logger = logging.getLogger("halligalli.api")
 _RELEASE_IDENTITY_PATH = Path(__file__).with_name("release-identity.json")
 
 
@@ -163,55 +163,40 @@ def _room_command(payload: WebSocketRoomCommand, credential: str, now_ms: int):
     return ContinueMatch(verifier, payload.type == "continue", payload.command_id)
 
 
-def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
+async def supervise(name: str, run: Callable[[], Awaitable[None]], *, restart_delay_seconds: float = 1.0) -> None:
+    """Keep a background loop alive, restarting it after unexpected failures."""
+    while True:
+        try:
+            await run()
+            return
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            _logger.exception("%s failed; restarting", name)
+            await asyncio.sleep(restart_delay_seconds)
+
+
+def create_app(
+    authority: MultiplayerAuthority | None = None,
+    *,
+    due_interval_seconds: float = 0.1,
+) -> FastAPI:
     build_identity = _load_release_identity()
     telemetry = Telemetry()
     selected_authority = authority or _runtime_authority(telemetry)
     hub = RoomSocketHub()
-    deadline_tasks: set[asyncio.Task[None]] = set()
 
-    def schedule_turn(room_code: str, deadline_at: int) -> None:
-        async def advance_when_due() -> None:
-            delay_seconds = max(0, deadline_at - (selected_authority.now_ms())) / 1_000
-            await asyncio.sleep(delay_seconds)
-            try:
-                result = await selected_authority.execute(
-                    room_code,
-                    AdvanceTurn(now_ms=selected_authority.now_ms()),
-                )
-            except AuthorityError:
-                return
-            await hub.publish(room_code, selected_authority)
-            if result.snapshot.phase == "playing" and result.snapshot.turn_deadline_at is not None:
-                schedule_turn(room_code, result.snapshot.turn_deadline_at)
-            elif result.snapshot.phase == "post_match" and result.snapshot.post_match_deadline_at is not None:
-                schedule_post_match(room_code, result.snapshot.post_match_deadline_at)
-
-        task = asyncio.create_task(advance_when_due())
-        deadline_tasks.add(task)
-        task.add_done_callback(deadline_tasks.discard)
-
-    def schedule_post_match(room_code: str, deadline_at: int) -> None:
-        async def close_when_due() -> None:
-            delay_seconds = max(0, deadline_at - (selected_authority.now_ms())) / 1_000
-            await asyncio.sleep(delay_seconds)
-            try:
-                await selected_authority.execute(
-                    room_code,
-                    AdvancePostMatch(now_ms=selected_authority.now_ms(), command_id=f"deadline:{deadline_at}"),
-                )
-            except AuthorityError:
-                return
-            await hub.publish(room_code, selected_authority)
-
-        task = asyncio.create_task(close_when_due())
-        deadline_tasks.add(task)
-        task.add_done_callback(deadline_tasks.discard)
+    async def advance_due_rooms() -> None:
+        while True:
+            for room_code in await selected_authority.advance_due():
+                await hub.publish(room_code, selected_authority)
+            await asyncio.sleep(due_interval_seconds)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         subscription = None
         revision_task: asyncio.Task[None] | None = None
+        due_task = asyncio.create_task(supervise("due deadline loop", advance_due_rooms))
         if isinstance(selected_authority, RedisMultiplayerAuthority):
             subscription = await selected_authority.subscribe_revisions()
             revision_task = asyncio.create_task(
@@ -220,7 +205,7 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
         try:
             yield
         finally:
-            pending_tasks = tuple(deadline_tasks)
+            pending_tasks: tuple[asyncio.Task[None], ...] = (due_task,)
             if revision_task is not None:
                 revision_task.cancel()
                 pending_tasks += (revision_task,)
@@ -431,15 +416,11 @@ def create_app(authority: MultiplayerAuthority | None = None) -> FastAPI:
                     trace_id = telemetry.trace_id(span)
                     started_at = time.perf_counter()
                     command_payload = WebSocketRoomCommand.model_validate(await websocket.receive_json())
-                    result = await app.state.authority.execute(
+                    await app.state.authority.execute(
                         canonical_room_code,
                         _room_command(command_payload, payload.credential, app.state.authority.now_ms()),
                     )
                     await hub.publish(canonical_room_code, app.state.authority)
-                    if command_payload.type == "start" and result.snapshot.turn_deadline_at is not None:
-                        schedule_turn(canonical_room_code, result.snapshot.turn_deadline_at)
-                    if result.snapshot.phase == "post_match" and result.snapshot.post_match_deadline_at is not None:
-                        schedule_post_match(canonical_room_code, result.snapshot.post_match_deadline_at)
                     telemetry.record_websocket(
                         trace_id=trace_id,
                         room_code=canonical_room_code,

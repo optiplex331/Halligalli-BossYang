@@ -9,7 +9,7 @@ from redis_test_case import RedisTestCase, hash_credential
 
 
 class WebSocketMatchTest(RedisTestCase):
-    def test_two_websocket_players_ready_start_and_receive_a_bell_result(self) -> None:
+    def test_due_loop_reveals_the_next_card_and_players_receive_a_bell_result(self) -> None:
         authority = self.authority
         host_credential = "host-credential"
         guest_credential = "guest-credential"
@@ -45,6 +45,7 @@ class WebSocketMatchTest(RedisTestCase):
                 host_socket.send_json({"type": "start"})
                 started = host_socket.receive_json()
                 guest_socket.receive_json()
+                self.clock.now_ms = started["snapshot"]["turnDeadlineAt"]
                 bell_window = host_socket.receive_json()
                 guest_socket.receive_json()
                 host_socket.send_json({"type": "bell"})

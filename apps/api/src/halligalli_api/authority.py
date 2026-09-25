@@ -15,6 +15,7 @@ from .observability import elapsed_since
 
 
 ROOM_TTL_SECONDS = 60 * 60
+DUE_INDEX_KEY = "halligalli:rooms:due"
 POST_MATCH_DURATION_MS = 30_000
 ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 TURN_DURATION_MS = 700
@@ -298,6 +299,8 @@ class MultiplayerAuthority(Protocol):
 
     def now_ms(self) -> int: ...
 
+    async def advance_due(self, now_ms: int | None = None) -> list[str]: ...
+
 
 class RedisRevisionSubscription:
     """A ready Redis pattern subscription for room snapshot invalidations."""
@@ -468,6 +471,23 @@ class _Room:
                 else None
             ),
         )
+
+
+def _due_at(room: _Room) -> int | None:
+    if room.phase == "playing" and room.match is not None:
+        return room.match.turn_deadline_at
+    if room.phase == "post_match":
+        return room.post_match_deadline_at
+    return None
+
+
+def _due_command(room: _Room, now_ms: int) -> AdvanceTurn | AdvancePostMatch | None:
+    due_at = _due_at(room)
+    if due_at is None or now_ms < due_at:
+        return None
+    if room.phase == "playing":
+        return AdvanceTurn(now_ms=now_ms)
+    return AdvancePostMatch(now_ms=now_ms)
 
 
 def credential_verifier(credential: str) -> str:
@@ -942,12 +962,23 @@ class RedisMultiplayerAuthority:
         return RedisRevisionSubscription(pubsub)
 
     def _ttl_seconds(self, room: _Room) -> int:
-        deadline = room.post_match_deadline_at
-        if room.phase == "playing" and room.match is not None:
-            deadline = room.match.turn_deadline_at
+        deadline = _due_at(room)
         if deadline is None:
             return ROOM_TTL_SECONDS
         return max(1, min(ROOM_TTL_SECONDS, (deadline - self._clock()) // 1_000 + 60))
+
+    def _queue_room_write(self, pipeline: object, room: _Room, *, publish: bool = True) -> None:
+        """Queue the room state and its due-index entry inside the caller's transaction."""
+        room_key = self._room_key(room.code)
+        pipeline.hset(room_key, mapping={"state": room.to_json()})
+        pipeline.expire(room_key, self._ttl_seconds(room))
+        due_at = _due_at(room)
+        if due_at is None:
+            pipeline.zrem(DUE_INDEX_KEY, room.code)
+        else:
+            pipeline.zadd(DUE_INDEX_KEY, {room.code: due_at})
+        if publish:
+            pipeline.publish(self._channel(room.code), str(room.revision))
 
     @staticmethod
     def _entry_key(idempotency_key: str) -> str:
@@ -1024,8 +1055,7 @@ class RedisMultiplayerAuthority:
                     if await pipeline.get(entry_key) or await pipeline.hget(room_key, "state"):
                         continue
                     pipeline.multi()
-                    pipeline.hset(room_key, mapping={"state": room.to_json()})
-                    pipeline.expire(room_key, self._ttl_seconds(room))
+                    self._queue_room_write(pipeline, room, publish=False)
                     pipeline.set(
                         entry_key,
                         json.dumps({"fingerprint": fingerprint, "room_code": room.code}),
@@ -1055,9 +1085,7 @@ class RedisMultiplayerAuthority:
                     if replayed:
                         return result
                     pipeline.multi()
-                    pipeline.hset(room_key, mapping={"state": room.to_json()})
-                    pipeline.expire(room_key, self._ttl_seconds(room))
-                    pipeline.publish(self._channel(room_code), str(room.revision))
+                    self._queue_room_write(pipeline, room)
                     await pipeline.execute()
                     return result
             except WatchError:
@@ -1080,14 +1108,47 @@ class RedisMultiplayerAuthority:
                     room = _require_room(_Room.from_json(state) if state else None)
                     result = _apply_room_command(room, command, self._deck)
                     pipeline.multi()
-                    pipeline.hset(room_key, mapping={"state": room.to_json()})
-                    pipeline.expire(room_key, self._ttl_seconds(room))
-                    pipeline.publish(self._channel(room_code), str(room.revision))
+                    self._queue_room_write(pipeline, room)
                     await pipeline.execute()
                     return result
             except WatchError:
                 continue
         raise AuthorityError("concurrent_update", 409, "Room changed while updating")
+
+    async def advance_due(self, now_ms: int | None = None) -> list[str]:
+        """Advance every room whose deadline has passed and return the codes that changed."""
+        now = self._clock() if now_ms is None else now_ms
+        due_codes = await self._redis.zrangebyscore(DUE_INDEX_KEY, "-inf", now)
+        changed = []
+        for room_code in due_codes:
+            if await self._advance_room_if_due(room_code, now):
+                changed.append(room_code)
+        return changed
+
+    async def _advance_room_if_due(self, room_code: str, now_ms: int) -> bool:
+        from redis.exceptions import WatchError
+
+        room_key = self._room_key(room_code)
+        for _ in range(8):
+            try:
+                async with self._redis.pipeline(transaction=True) as pipeline:
+                    await pipeline.watch(room_key)
+                    state = await pipeline.hget(room_key, "state")
+                    if not state:
+                        await self._redis.zrem(DUE_INDEX_KEY, room_code)
+                        return False
+                    room = _Room.from_json(state)
+                    command = _due_command(room, now_ms)
+                    if command is None:
+                        return False
+                    _apply_room_command(room, command, self._deck)
+                    pipeline.multi()
+                    self._queue_room_write(pipeline, room)
+                    await pipeline.execute()
+                    return True
+            except WatchError:
+                continue
+        return False
 
     async def _load_room(self, room_code: str) -> _Room:
         state = await self._redis.hget(self._room_key(room_code), "state")
