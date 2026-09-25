@@ -1,4 +1,4 @@
-import { INITIAL_BREAKDOWN } from "./constants.js";
+import { MISSED_BELL_PENALTY } from "./constants.js";
 import {
   clonePlayers,
   collectFaceUpCards,
@@ -40,7 +40,7 @@ export interface SinglePlayerMatchState extends RoundSnapshot {
   streak: number;
 }
 
-export type SinglePlayerBellResult =
+type SinglePlayerBellResult =
   | { kind: "correct"; collectedCount: number; reactionMs: number; state: SinglePlayerMatchState; bellState: BellState }
   | { kind: "wrong"; penaltyCount: number; state: SinglePlayerMatchState; bellState: BellState };
 
@@ -137,7 +137,7 @@ export function resolveSinglePlayerBell({
 }
 
 export function resolveSinglePlayerMissedBell(state: SinglePlayerMatchState): SinglePlayerMatchState {
-  const scoreBreakdown = applyScoringPenalty(state.scoreBreakdown, { missedPenalty: 30 });
+  const scoreBreakdown = applyScoringPenalty(state.scoreBreakdown, { missedPenalty: MISSED_BELL_PENALTY });
   return {
     ...state,
     score: sumBreakdown(scoreBreakdown),
@@ -161,38 +161,34 @@ export function finishSinglePlayerMatch(snapshot: RoundSnapshot, bellState: Bell
   };
 }
 
-interface GameLoopHandles {
+export interface GameLoopHandles {
   revealIntervalRef: TimerRef;
   countdownIntervalRef: TimerRef;
   feedbackTimeoutRef: TimerRef;
   bossTauntTimeoutRef: TimerRef;
   startupTimeoutRef: TimerRef;
+  revealFlashTimeoutRef?: TimerRef;
 }
 
 function clearIntervalRef(ref: TimerRef) {
   if (ref.current !== null) {
     window.clearInterval(ref.current);
+    ref.current = null;
   }
 }
 
-function clearTimeoutRef(ref: TimerRef) {
-  if (ref.current !== null) {
+export function clearTimeoutRef(ref: TimerRef | undefined) {
+  if (ref && ref.current !== null) {
     window.clearTimeout(ref.current);
+    ref.current = null;
   }
 }
 
 export function clearGameLoopHandles(handles: GameLoopHandles): void {
-  const {
-    revealIntervalRef,
-    countdownIntervalRef,
-    feedbackTimeoutRef,
-    bossTauntTimeoutRef,
-    startupTimeoutRef,
-  } = handles;
-
-  clearIntervalRef(revealIntervalRef);
-  clearIntervalRef(countdownIntervalRef);
-  clearTimeoutRef(feedbackTimeoutRef);
-  clearTimeoutRef(bossTauntTimeoutRef);
-  clearTimeoutRef(startupTimeoutRef);
+  clearIntervalRef(handles.revealIntervalRef);
+  clearIntervalRef(handles.countdownIntervalRef);
+  clearTimeoutRef(handles.feedbackTimeoutRef);
+  clearTimeoutRef(handles.bossTauntTimeoutRef);
+  clearTimeoutRef(handles.startupTimeoutRef);
+  clearTimeoutRef(handles.revealFlashTimeoutRef);
 }

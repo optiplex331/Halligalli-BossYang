@@ -1,7 +1,6 @@
 import type {
   FruitKey,
   GameSettings,
-  RoundSummary,
   ScoreBreakdown,
 } from "./types.js";
 
@@ -32,19 +31,6 @@ export const DEFAULT_SETTINGS: GameSettings = {
   soundEnabled: true,
 };
 
-export const INITIAL_SUMMARY: RoundSummary = {
-  score: 0,
-  correctHits: 0,
-  wrongHits: 0,
-  missedHits: 0,
-  accuracy: 0,
-  avgReactionMs: 0,
-  bestReactionMs: 0,
-  difficulty: DEFAULT_SETTINGS.difficulty,
-  durationSec: DEFAULT_SETTINGS.duration,
-  tableSeatCount: DEFAULT_SETTINGS.tableSeatCount,
-};
-
 export const INITIAL_BREAKDOWN: ScoreBreakdown = {
   correctBase: 0,
   collectionBonus: 0,
@@ -54,3 +40,5 @@ export const INITIAL_BREAKDOWN: ScoreBreakdown = {
   missedPenalty: 0,
   cardPenalty: 0,
 };
+
+export const MISSED_BELL_PENALTY = 30;

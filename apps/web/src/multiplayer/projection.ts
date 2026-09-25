@@ -1,17 +1,16 @@
 import type { RoomSnapshot } from "./room-entry.js";
 
-export interface RoomSeatProjection {
+interface RoomSeatProjection {
   seatIndex: number;
   seatNumber: number;
   name: string;
   ready: boolean;
   card: RoomSnapshot["seats"][number]["topCard"] | null;
-  faceUpCardCount: number;
   occupied: boolean;
   currentTurn: boolean;
 }
 
-export interface RoomProjection {
+interface RoomProjection {
   snapshot: RoomSnapshot;
   seats: RoomSeatProjection[];
   canReady: boolean;
@@ -32,7 +31,6 @@ export function projectRoomSnapshot(snapshot: RoomSnapshot): RoomProjection {
         ready: participant?.ready ?? false,
         occupied: Boolean(participant),
         card: seat.topCard ?? null,
-        faceUpCardCount: seat.faceUpCardCount,
         currentTurn: snapshot.currentTurnSeatIndex === seat.seatIndex,
       };
     }),

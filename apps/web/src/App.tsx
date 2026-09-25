@@ -4,41 +4,15 @@ import { useAudioEngine } from "./audio/useAudioEngine.js";
 import { projectRoomSnapshot } from "./multiplayer/projection.js";
 import { useRoomEntry } from "./multiplayer/room-entry.js";
 import { FRUITS, MODES } from "./game/catalog.js";
-import { DEFAULT_SETTINGS, INITIAL_BREAKDOWN } from "./game/constants.js";
-import {
-  finishSinglePlayerMatch,
-  resolveSinglePlayerBell,
-  resolveSinglePlayerMissedBell,
-} from "./game/lifecycle.js";
-import type { SinglePlayerMatchState } from "./game/lifecycle.js";
 import { loadSettings, removeLegacyProgress, saveSettings } from "./game/persistence.js";
-import {
-  clonePlayers,
-  createPlayers,
-  evaluateBellAvailability,
-  flipCardForPlayer,
-  getSeatLayouts,
-  getTopCard,
-  visibleTotals,
-} from "./game/rules.js";
-import type {
-  BellState,
-  Card,
-  Difficulty,
-  FruitKey,
-  GameSettings,
-  PlayerState,
-  RoundSummary,
-  ScoreBreakdown,
-} from "./game/types.js";
+import { getTopCard, visibleTotals } from "./game/rules.js";
+import type { Card, Difficulty, FruitKey, GameSettings } from "./game/types.js";
+import { useSoloRound } from "./solo/useSoloRound.js";
+import type { SoloRoundNotice } from "./solo/useSoloRound.js";
+import { useBellPress } from "./useBellPress.js";
 
 type Screen = "home" | "play" | "result";
 type FeedbackType = "idle" | "success" | "warn" | "error";
-type TimerRef = { current: number | null };
-
-interface GameSnapshot extends SinglePlayerMatchState {
-  userSeatId: number;
-}
 
 const PIP_LAYOUTS = {
   1: ["center"],
@@ -128,7 +102,6 @@ const COPY = {
     multiplayer: "多人房间",
     playerName: "玩家名",
     roomCode: "房间码",
-    createRoom: "创建房间（2–6 人）",
     joinRoom: "加入房间",
     roomStatus: "大厅：{current}/{max} 位玩家",
     entryHint: "凭证只保留在当前页面内；刷新后需要重新加入。",
@@ -214,7 +187,6 @@ const COPY = {
     multiplayer: "Multiplayer room",
     playerName: "Player name",
     roomCode: "Room code",
-    createRoom: "Create room (2–6 players)",
     joinRoom: "Join room",
     roomStatus: "Lobby: {current}/{max} players",
     entryHint: "The participant credential stays only in this page; rejoin after refresh.",
@@ -238,29 +210,12 @@ const COPY = {
 
 type CopyKey = keyof typeof COPY.en;
 
-const INITIAL_BELL_STATE: BellState = {
-  available: false,
-  fruitKey: null,
-  startedAt: 0,
-  handled: true,
-};
-
-const INITIAL_GAME_SNAPSHOT: GameSnapshot = {
-  players: [],
-  currentTurn: 0,
-  actingPlayer: 0,
-  score: 0,
-  correctHits: 0,
-  wrongHits: 0,
-  missedHits: 0,
-  reactionTimes: [],
-  scoreBreakdown: INITIAL_BREAKDOWN,
-  difficulty: DEFAULT_SETTINGS.difficulty,
-  durationSec: DEFAULT_SETTINGS.duration,
-  tableSeatCount: DEFAULT_SETTINGS.tableSeatCount,
-  userSeatId: 0,
-  maxStreak: 0,
-  streak: 0,
+const NOTICE_TONES: Record<SoloRoundNotice["kind"], FeedbackType> = {
+  start: "idle",
+  observe: "idle",
+  missed: "warn",
+  correct: "success",
+  wrong: "error",
 };
 
 function fruitLabel(fruitKey: FruitKey | null, language: GameSettings["language"]): string {
@@ -385,46 +340,21 @@ function GameTable({
 
 export default function App() {
   const [settings, setSettings] = useState<GameSettings>(loadSettings);
-  const [screen, setScreen] = useState<Screen>("home");
-  const [players, setPlayers] = useState<PlayerState[]>([]);
-  const [score, setScore] = useState(0);
-  const [correctHits, setCorrectHits] = useState(0);
-  const [wrongHits, setWrongHits] = useState(0);
-  const [missedHits, setMissedHits] = useState(0);
-  const [scoreBreakdown, setScoreBreakdown] = useState<ScoreBreakdown>(INITIAL_BREAKDOWN);
-  const [secondsLeft, setSecondsLeft] = useState(DEFAULT_SETTINGS.duration);
-  const [countdown, setCountdown] = useState<{ runId: number; value: 3 | 2 | 1 } | null>(null);
-  const [activeBellFruit, setActiveBellFruit] = useState<FruitKey | null>(null);
-  const [feedback, setFeedback] = useState({ type: "idle" as FeedbackType, message: "" });
-  const [bossTaunt, setBossTaunt] = useState("");
-  const [bellPressed, setBellPressed] = useState(false);
-  const [latestReveal, setLatestReveal] = useState<{ sequence: number; seatIndex: number } | null>(null);
-  const [resultSummary, setResultSummary] = useState<RoundSummary | null>(null);
+  const [showHome, setShowHome] = useState(true);
   const [roomName, setRoomName] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [roomHumanTarget, setRoomHumanTarget] = useState(2);
 
-  const gameStateRef = useRef<GameSnapshot>(INITIAL_GAME_SNAPSHOT);
-  const countdownRunRef = useRef(0);
-  const revealSequenceRef = useRef(0);
-  const gameRunningRef = useRef(false);
-  const bellStateRef = useRef<BellState>(INITIAL_BELL_STATE);
-  const revealIntervalRef = useRef<number | null>(null);
-  const countdownIntervalRef = useRef<number | null>(null);
-  const feedbackTimeoutRef = useRef<number | null>(null);
-  const bossTauntTimeoutRef = useRef<number | null>(null);
-  const startupTimeoutRef = useRef<number | null>(null);
-  const flipTimeoutRef = useRef<number | null>(null);
-  const bellPressTimeoutRef = useRef<number | null>(null);
   const screenRegionRef = useRef<HTMLElement | null>(null);
   const multiplayerSignalRef = useRef<{ sequence: number; correct: number; wrong: number; missed: number } | null>(null);
 
   const mode = MODES[settings.difficulty];
   const isBossMode = "isBoss" in mode && mode.isBoss;
-  const seatLayouts = getSeatLayouts(settings.tableSeatCount) ?? [];
-  const userSeatId = seatLayouts.findIndex((seat) => seat.isUser);
   const copy = COPY[settings.language];
   const { playFeedback, previewSound } = useAudioEngine(settings.soundEnabled);
+  const round = useSoloRound(playFeedback);
+  const screen: Screen = showHome ? "home" : round.state.phase === "finished" ? "result" : "play";
+  const [multiplayerBellPressed, pressMultiplayerBell] = useBellPress();
   const roomEntry = useRoomEntry();
   const roomProjection = roomEntry.session
     ? projectRoomSnapshot(roomEntry.session.snapshot)
@@ -441,205 +371,28 @@ export default function App() {
     return message;
   }
 
-  function commitSnapshot(next: GameSnapshot): void {
-    gameStateRef.current = next;
-    setPlayers(next.players);
-    setScore(next.score);
-    setCorrectHits(next.correctHits);
-    setWrongHits(next.wrongHits);
-    setMissedHits(next.missedHits);
-    setScoreBreakdown(next.scoreBreakdown);
-  }
-
-  function clearTimer(ref: TimerRef, clear: (timer: number) => void): void {
-    if (ref.current !== null) {
-      clear(ref.current);
-      ref.current = null;
-    }
-  }
-
-  function stopGameLoops(): void {
-    clearTimer(revealIntervalRef, window.clearInterval);
-    clearTimer(countdownIntervalRef, window.clearInterval);
-    clearTimer(feedbackTimeoutRef, window.clearTimeout);
-    clearTimer(bossTauntTimeoutRef, window.clearTimeout);
-    clearTimer(startupTimeoutRef, window.clearTimeout);
-    clearTimer(flipTimeoutRef, window.clearTimeout);
-    clearTimer(bellPressTimeoutRef, window.clearTimeout);
-  }
-
-  function updateFeedback(type: FeedbackType, message: string): void {
-    setFeedback({ type, message });
-    clearTimer(feedbackTimeoutRef, window.clearTimeout);
-    feedbackTimeoutRef.current = window.setTimeout(() => {
-      setFeedback({ type: "idle", message: t("idleObserve") });
-    }, 1_200);
-  }
-
-  function triggerBossTaunt(): void {
-    if (!("isBoss" in mode) || !mode.isBoss) return;
-
-    const choices = BOSS_TAUNTS[settings.language];
-    setBossTaunt(choices[Math.floor(Math.random() * choices.length)] ?? "");
-    clearTimer(bossTauntTimeoutRef, window.clearTimeout);
-    bossTauntTimeoutRef.current = window.setTimeout(() => setBossTaunt(""), 1_700);
-  }
-
-  function applyBellAvailability(nextPlayers: PlayerState[], now: number): void {
-    const evaluation = evaluateBellAvailability(nextPlayers);
-    bellStateRef.current = evaluation.available
-      ? { available: true, fruitKey: evaluation.fruitKey, startedAt: now, handled: false }
-      : INITIAL_BELL_STATE;
-    setActiveBellFruit(evaluation.fruitKey);
-  }
-
-  function triggerBellPress(): void {
-    setBellPressed(true);
-    clearTimer(bellPressTimeoutRef, window.clearTimeout);
-    bellPressTimeoutRef.current = window.setTimeout(() => setBellPressed(false), 250);
-  }
-
-  function advanceTurn(base = gameStateRef.current): void {
-    if (!gameRunningRef.current) return;
-
-    let next = base;
-    if (bellStateRef.current.available && !bellStateRef.current.handled) {
-      const missedFruit = bellStateRef.current.fruitKey;
-      const resolved = resolveSinglePlayerMissedBell(next);
-      next = { ...resolved, userSeatId: next.userSeatId };
-      updateFeedback("warn", t("missedBell", { fruit: fruitLabel(missedFruit, settings.language) }));
-      playFeedback("warn");
-      triggerBossTaunt();
-    }
-
-    const playersForTurn = clonePlayers(next.players);
-    const actorIndex = next.currentTurn;
-    const actor = playersForTurn[actorIndex];
-    if (!actor) return;
-
-    const { player } = flipCardForPlayer(actor);
-    playersForTurn[actorIndex] = player;
-    if (next === base) playFeedback("flip");
-    applyBellAvailability(playersForTurn, Date.now());
-    commitSnapshot({
-      ...next,
-      players: playersForTurn,
-      actingPlayer: actorIndex,
-      currentTurn: (actorIndex + 1) % playersForTurn.length,
-    });
-    revealSequenceRef.current += 1;
-    setLatestReveal({ sequence: revealSequenceRef.current, seatIndex: actorIndex });
-    clearTimer(flipTimeoutRef, window.clearTimeout);
-    flipTimeoutRef.current = window.setTimeout(() => setLatestReveal(null), 500);
-  }
-
-  function beginGameLoop(snapshot: GameSnapshot): void {
-    gameRunningRef.current = true;
-    updateFeedback("idle", t("startRound"));
-    advanceTurn(snapshot);
-
-    revealIntervalRef.current = window.setInterval(() => advanceTurn(), mode.revealMs);
-    countdownIntervalRef.current = window.setInterval(() => {
-      setSecondsLeft((current) => {
-        if (current <= 1) {
-          finishGame();
-          return 0;
-        }
-        return current - 1;
-      });
-    }, 1_000);
-  }
-
-  function startGame(): void {
-    stopGameLoops();
-    playFeedback("tick");
-    const freshPlayers = createPlayers(settings.tableSeatCount, FRUITS);
-    const freshSnapshot: GameSnapshot = {
-      ...INITIAL_GAME_SNAPSHOT,
-      players: freshPlayers,
+  function startRound(): void {
+    setShowHome(false);
+    round.start({
+      tableSeatCount: settings.tableSeatCount,
       difficulty: settings.difficulty,
       durationSec: settings.duration,
-      tableSeatCount: settings.tableSeatCount,
-      userSeatId,
-      scoreBreakdown: { ...INITIAL_BREAKDOWN },
-      reactionTimes: [],
-    };
-
-    gameRunningRef.current = false;
-    bellStateRef.current = INITIAL_BELL_STATE;
-    commitSnapshot(freshSnapshot);
-    setResultSummary(null);
-    setSecondsLeft(settings.duration);
-    setActiveBellFruit(null);
-    setBossTaunt("");
-    setFeedback({ type: "idle", message: "" });
-    setScreen("play");
-    countdownRunRef.current += 1;
-    const runId = countdownRunRef.current;
-    setCountdown({ runId, value: 3 });
-
-    let tick = 3;
-    startupTimeoutRef.current = window.setInterval(() => {
-      tick -= 1;
-      if (tick > 0) {
-        setCountdown({ runId, value: tick as 2 | 1 });
-        playFeedback("tick");
-        return;
-      }
-      playFeedback("go");
-      clearTimer(startupTimeoutRef, window.clearInterval);
-      setCountdown(null);
-      beginGameLoop(freshSnapshot);
-    }, 1_000);
-  }
-
-  function handleBell(): void {
-    if (!gameRunningRef.current || screen !== "play") return;
-
-    const result = resolveSinglePlayerBell({
-      state: gameStateRef.current,
-      bellState: bellStateRef.current,
-      userSeatId: gameStateRef.current.userSeatId,
-      mode,
-      now: Date.now(),
     });
-    bellStateRef.current = result.bellState;
-    setActiveBellFruit(result.bellState.fruitKey);
-    commitSnapshot({ ...result.state, userSeatId: gameStateRef.current.userSeatId });
-    triggerBellPress();
-    playFeedback("ring");
-
-    if (result.kind === "correct") {
-      updateFeedback("success", t("bellSuccess", { count: result.collectedCount }));
-      playFeedback("success");
-      return;
-    }
-
-    updateFeedback(
-      "error",
-      result.penaltyCount ? t("bellPenalty", { count: result.penaltyCount }) : t("bellPenaltyNone"),
-    );
-    playFeedback("penalty");
   }
 
-  function finishGame(): void {
-    if (!gameRunningRef.current) return;
-
-    gameRunningRef.current = false;
-    stopGameLoops();
-    const result = finishSinglePlayerMatch(gameStateRef.current, bellStateRef.current);
-    const resolvedSnapshot = result.pendingResolution.snapshot;
-    const nextSnapshot: GameSnapshot = {
-      ...gameStateRef.current,
-      ...resolvedSnapshot,
-      score: result.summary.score,
-      scoreBreakdown: resolvedSnapshot.scoreBreakdown,
-    };
-
-    bellStateRef.current = result.bellState;
-    commitSnapshot(nextSnapshot);
-    setResultSummary(result.summary);
-    setScreen("result");
+  function noticeMessage(notice: SoloRoundNotice): string {
+    switch (notice.kind) {
+      case "start":
+        return t("startRound");
+      case "observe":
+        return t("idleObserve");
+      case "missed":
+        return t("missedBell", { fruit: fruitLabel(notice.fruit, settings.language) });
+      case "correct":
+        return t("bellSuccess", { count: notice.collectedCount });
+      case "wrong":
+        return notice.penaltyCount ? t("bellPenalty", { count: notice.penaltyCount }) : t("bellPenaltyNone");
+    }
   }
 
   function updateSetting<Key extends keyof GameSettings>(key: Key, value: GameSettings[Key]): void {
@@ -662,15 +415,13 @@ export default function App() {
     function onKeyDown(event: KeyboardEvent): void {
       if (screen === "play" && event.code === "Space") {
         event.preventDefault();
-        handleBell();
+        round.ring();
       }
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [screen, settings.difficulty, settings.tableSeatCount]);
-
-  useEffect(() => () => stopGameLoops(), []);
+  }, [screen, round.ring]);
 
   const roomSnapshot = roomEntry.session?.snapshot;
   useEffect(() => {
@@ -700,6 +451,13 @@ export default function App() {
     screenRegionRef.current?.focus();
   }, [screen]);
 
+  const { countdown, secondsLeft, bellFruit: activeBellFruit, bellPressed, reveal: latestReveal, summary: resultSummary } = round.state;
+  const { players, score, scoreBreakdown, actingPlayer } = round.state.match;
+  const feedbackType = NOTICE_TONES[round.state.notice.kind];
+  const bossTauntChoices = BOSS_TAUNTS[settings.language];
+  const bossTaunt = round.state.bossTauntRoll === null
+    ? ""
+    : bossTauntChoices[Math.floor(round.state.bossTauntRoll * bossTauntChoices.length)] ?? "";
   const totals = visibleTotals(players);
   const breakdownRows = [
     ["correctBase", "scoreCorrectBase", true],
@@ -733,7 +491,7 @@ export default function App() {
                   <span>{settings.duration} {t("seconds")}</span>
                 </p>
               </div>
-              <button className="primary-button start-button" onClick={startGame}>{t("start")}</button>
+              <button className="primary-button start-button" onClick={startRound}>{t("start")}</button>
             </div>
 
             <div className="grid two-up">
@@ -915,12 +673,12 @@ export default function App() {
                         }))}
                         viewerIndex={roomProjection.snapshot.viewerSeatIndex}
                         bellReady={false}
-                        bellPressed={bellPressed}
+                        bellPressed={multiplayerBellPressed}
                         bellLabel={t("ringMultiplayerBell")}
                         bellDisabled={!roomEntry.connected || !roomProjection.canRing}
                         onBell={() => {
                           roomEntry.ringBell();
-                          triggerBellPress();
+                          pressMultiplayerBell();
                           playFeedback("ring");
                         }}
                       />
@@ -1004,17 +762,17 @@ export default function App() {
                 <img className="boss-presence-avatar" src="/yang-boss.png" alt="" />
                 <span>{isBossMode ? t("bossWatching") : modeLabel(settings.difficulty, settings.language)}</span>
               </div>
-              <button className="ghost-button hud-end" disabled={Boolean(countdown)} onClick={finishGame}>{t("endGame")}</button>
+              <button className="ghost-button hud-end" disabled={Boolean(countdown)} onClick={round.end}>{t("endGame")}</button>
               <span className="hud-progress" aria-hidden="true" />
             </div>
             <div
-              className={`game-feedback ${feedback.type}`}
+              className={`game-feedback ${feedbackType}`}
               role="status"
-              aria-live={feedback.type === "error" ? "assertive" : "polite"}
+              aria-live={feedbackType === "error" ? "assertive" : "polite"}
               aria-atomic="true"
             >
               <span className="game-feedback-label">{t("gameUpdate")}</span>
-              <span className="game-feedback-message">{feedback.message || t("startRound")}</span>
+              <span className="game-feedback-message">{noticeMessage(round.state.notice)}</span>
             </div>
             <GameTable
               seats={players.map((player, index) => {
@@ -1023,17 +781,17 @@ export default function App() {
                   key: player.id,
                   label: player.isHuman ? t("you") : t("seatShort", { seat: index + 1 }),
                   isYou: player.isHuman,
-                  currentTurn: gameStateRef.current.actingPlayer === index,
+                  currentTurn: actingPlayer === index,
                   active: Boolean(activeBellFruit && topCard?.fruit === activeBellFruit && totals[activeBellFruit] === 5),
                   card: topCard,
                   revealSequence: latestReveal?.seatIndex === index ? latestReveal.sequence : null,
                 };
               })}
-              viewerIndex={userSeatId}
+              viewerIndex={round.state.userSeatId}
               bellReady={Boolean(activeBellFruit)}
               bellPressed={bellPressed}
               bellLabel={activeBellFruit ? t("bellReady", { fruit: fruitLabel(activeBellFruit, settings.language) }) : t("bellWait")}
-              onBell={handleBell}
+              onBell={round.ring}
             >
               {bossTaunt && <div className="boss-taunt" aria-live="polite" aria-atomic="true">{bossTaunt}</div>}
             </GameTable>
@@ -1083,8 +841,8 @@ export default function App() {
               </div>
             </section>
             <div className="button-row">
-              <button className="primary-button" onClick={startGame}>{t("playAgain")}</button>
-              <button className="ghost-button" onClick={() => setScreen("home")}>{t("backHome")}</button>
+              <button className="primary-button" onClick={startRound}>{t("playAgain")}</button>
+              <button className="ghost-button" onClick={() => setShowHome(true)}>{t("backHome")}</button>
             </div>
           </section>
         )}

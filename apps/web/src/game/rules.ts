@@ -1,4 +1,4 @@
-import { COUNT_DISTRIBUTION, FRUIT_KEYS } from "./constants.js";
+import { COUNT_DISTRIBUTION, FRUIT_KEYS, MISSED_BELL_PENALTY } from "./constants.js";
 import type {
   BellEvaluation,
   BellState,
@@ -9,7 +9,6 @@ import type {
   RoundSnapshot,
   RoundSummary,
   ScoreBreakdown,
-  SeatLayout,
   VisibleTotals,
 } from "./types.js";
 
@@ -62,49 +61,16 @@ export function createDeck(fruits: readonly FruitDefinition[], cardCount = 72): 
   return shuffle(cards.slice(0, cardCount));
 }
 
-export function getSeatLayouts(tableSeatCount: number): SeatLayout[] | undefined {
-  const layouts: Record<number, SeatLayout[]> = {
-    4: [
-      { labelZh: "上家", labelEn: "Top", gridArea: "top" },
-      { labelZh: "右侧玩家", labelEn: "Right", gridArea: "right" },
-      { labelZh: "你", labelEn: "You", gridArea: "you", isUser: true },
-      { labelZh: "左侧玩家", labelEn: "Left", gridArea: "left" },
-    ],
-    5: [
-      { labelZh: "左上玩家", labelEn: "Upper Left", gridArea: "tl" },
-      { labelZh: "右上玩家", labelEn: "Upper Right", gridArea: "tr" },
-      { labelZh: "右侧玩家", labelEn: "Right", gridArea: "right" },
-      { labelZh: "你", labelEn: "You", gridArea: "you", isUser: true },
-      { labelZh: "左侧玩家", labelEn: "Left", gridArea: "left" },
-    ],
-    6: [
-      { labelZh: "左上玩家", labelEn: "Upper Left", gridArea: "tl" },
-      { labelZh: "上家", labelEn: "Top", gridArea: "top" },
-      { labelZh: "右上玩家", labelEn: "Upper Right", gridArea: "tr" },
-      { labelZh: "右侧玩家", labelEn: "Right", gridArea: "right" },
-      { labelZh: "你", labelEn: "You", gridArea: "you", isUser: true },
-      { labelZh: "左侧玩家", labelEn: "Left", gridArea: "left" },
-    ],
-    7: Array.from({ length: 7 }, (_, index) => ({
-      labelZh: index === 0 ? "你" : `中立座位 ${index + 1}`,
-      labelEn: index === 0 ? "You" : `Neutral Seat ${index + 1}`,
-      gridArea: `seat-${index}`,
-      ...(index === 0 ? { isUser: true as const } : {}),
-    })),
-    8: Array.from({ length: 8 }, (_, index) => ({
-      labelZh: index === 0 ? "你" : `中立座位 ${index + 1}`,
-      labelEn: index === 0 ? "You" : `Neutral Seat ${index + 1}`,
-      gridArea: `seat-${index}`,
-      ...(index === 0 ? { isUser: true as const } : {}),
-    })),
-  };
+const HUMAN_SEAT_INDEX: Readonly<Record<number, number>> = {
+  4: 2,
+  5: 3,
+  6: 4,
+  7: 0,
+  8: 0,
+};
 
-  return layouts[tableSeatCount];
-}
-
-export function isSupportedTableSeatCount(tableSeatCount: number): boolean {
-  const seats = getSeatLayouts(tableSeatCount);
-  return Number.isInteger(tableSeatCount) && Boolean(seats && seats.length === tableSeatCount);
+export function getHumanSeatIndex(tableSeatCount: number): number | undefined {
+  return Number.isInteger(tableSeatCount) ? HUMAN_SEAT_INDEX[tableSeatCount] : undefined;
 }
 
 export function createPlayers(tableSeatCount: number, fruits: readonly FruitDefinition[]): PlayerState[] {
@@ -113,18 +79,18 @@ export function createPlayers(tableSeatCount: number, fruits: readonly FruitDefi
   }
 
   const deck = createDeck(fruits);
-  const seats = getSeatLayouts(tableSeatCount);
-  if (!isSupportedTableSeatCount(tableSeatCount) || !seats) {
+  const humanSeatIndex = getHumanSeatIndex(tableSeatCount);
+  if (humanSeatIndex === undefined) {
     throw new Error(`Unsupported Table Seat count: ${tableSeatCount}`);
   }
 
   const players: PlayerState[] = Array.from({ length: tableSeatCount }, (_, index) => {
-    const seat = seats[index]!;
+    const isHuman = index === humanSeatIndex;
     return {
       id: index,
-      isHuman: Boolean(seat.isUser),
-      labelZh: seat.isUser ? "你" : `中立座位 ${index + 1}`,
-      labelEn: seat.isUser ? "You" : `Neutral Seat ${index + 1}`,
+      isHuman,
+      labelZh: isHuman ? "你" : `中立座位 ${index + 1}`,
+      labelEn: isHuman ? "You" : `Neutral Seat ${index + 1}`,
       drawPile: [],
       wonPile: [],
       faceUpPile: [],
@@ -283,7 +249,7 @@ export function sumBreakdown(breakdown: ScoreBreakdown): number {
   );
 }
 
-export interface AssessedPenalty {
+interface AssessedPenalty {
   wrongPenalty?: number;
   cardPenalty?: number;
   missedPenalty?: number;
@@ -326,7 +292,7 @@ export function reconcilePendingBellWindow(
       missedHits: snapshot.missedHits + 1,
       scoreBreakdown: applyScoringPenalty(
         snapshot.scoreBreakdown,
-        { missedPenalty: 30 },
+        { missedPenalty: MISSED_BELL_PENALTY },
       ),
     },
     missed: true,
