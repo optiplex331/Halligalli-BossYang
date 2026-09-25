@@ -4,6 +4,7 @@ import { useAudioEngine } from "./audio/useAudioEngine.js";
 import { projectRoomSnapshot } from "./multiplayer/projection.js";
 import { useRoomEntry } from "./multiplayer/room-entry.js";
 import { FRUITS, MODES } from "./game/catalog.js";
+import { DEFAULT_SETTINGS } from "./game/constants.js";
 import { loadSettings, removeLegacyProgress, saveSettings } from "./game/persistence.js";
 import { getTopCard, visibleTotals } from "./game/rules.js";
 import type { Card, Difficulty, FruitKey, GameSettings } from "./game/types.js";
