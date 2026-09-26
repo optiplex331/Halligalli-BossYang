@@ -1054,6 +1054,8 @@ class RedisMultiplayerAuthority:
         room_code: str | None,
         command: AuthorityCommand,
     ) -> AuthorityResult:
+        from redis.exceptions import OutOfMemoryError
+
         started_at = time.perf_counter()
         try:
             if isinstance(command, CreateRoom):
@@ -1067,6 +1069,10 @@ class RedisMultiplayerAuthority:
         except AuthorityError:
             self._record_redis("execute", "client_error", started_at)
             raise
+        except OutOfMemoryError as error:
+            # Redis reached `maxmemory` under `noeviction`; new work waits until rooms expire.
+            self._record_redis("execute", "server_error", started_at)
+            raise AuthorityError("capacity_exhausted", 503, "Server is at capacity; try again shortly") from error
         except Exception:
             self._record_redis("execute", "server_error", started_at)
             raise
@@ -1177,12 +1183,18 @@ class RedisMultiplayerAuthority:
 
     async def advance_due(self, now_ms: int | None = None) -> list[str]:
         """Advance every room whose deadline has passed and return the codes that changed."""
+        from redis.exceptions import OutOfMemoryError
+
         now = self._clock() if now_ms is None else now_ms
         due = await self._redis.zrangebyscore(DUE_INDEX_KEY, "-inf", now, withscores=True)
         changed = []
         for room_code, due_score in due:
             try:
                 advanced = await self._advance_room_if_due(room_code, now)
+            except OutOfMemoryError:
+                # A full Redis is temporary: keep the due entry so the next sweep retries this room.
+                _logger.warning("Redis is out of memory; room %s will retry on the next sweep", room_code)
+                continue
             except (AuthorityError, KeyError, TypeError, ValueError):
                 # A room that cannot advance must not stall every other room's deadline.
                 _logger.exception("Room %s cannot advance; dropping its due entry", room_code)
