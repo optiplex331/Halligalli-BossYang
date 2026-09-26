@@ -47,7 +47,7 @@ services:
 
   redis:
     image: redis:8.0.1-alpine
-    command: redis-server --save '' --appendonly no
+    command: redis-server --save '' --appendonly no --maxmemory 180mb --maxmemory-policy noeviction
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 2s

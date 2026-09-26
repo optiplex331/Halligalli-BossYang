@@ -3,16 +3,21 @@ from __future__ import annotations
 import asyncio
 
 from redis.asyncio import Redis
+from redis.exceptions import ResponseError
 
 from halligalli_api.authority import (
+    AuthorityError,
+    Bell,
     ContinueMatch,
+    CreateRoom,
     Forfeit,
+    MEMORY_ADMISSION_RATIO,
     Ready,
     RedisMultiplayerAuthority,
     Start,
     Viewer,
 )
-from redis_test_case import REDIS_URL, FixedDeck, RedisAsyncTestCase
+from redis_test_case import REDIS_URL, FixedDeck, RedisAsyncTestCase, hash_credential
 
 
 class DueDeadlineTest(RedisAsyncTestCase):
@@ -91,3 +96,49 @@ class DueDeadlineTest(RedisAsyncTestCase):
         self.assertEqual(changed, [started.room_code])
         self.assertIn("BAD1", logged.output[0])
         self.assertEqual(later, [started.room_code])
+
+    async def test_a_full_redis_rejects_new_work_as_temporary_and_the_due_loop_retries(self) -> None:
+        started, credentials = await self._started("full")
+        deadline = started.snapshot.turn_deadline_at
+        try:
+            original = (await self.redis.config_get("maxmemory"))["maxmemory"]
+            await self.redis.config_set("maxmemory", 1)
+        except ResponseError as error:
+            self.skipTest(f"test Redis does not allow CONFIG SET: {error}")
+        try:
+            for room_code, command in (
+                (None, CreateRoom("create-full-2", "Late", hash_credential("late"), 4, 2, "normal")),
+                (started.room_code, Bell(credentials[0], now_ms=deadline - 1, reveal_sequence=started.snapshot.last_reveal.sequence)),
+            ):
+                with self.assertRaises(AuthorityError) as raised:
+                    await self.authority.execute(room_code, command)
+                self.assertEqual((raised.exception.status_code, raised.exception.code), (503, "capacity_exhausted"))
+
+            with self.assertLogs("halligalli.authority", level="WARNING"):
+                self.assertEqual(await self.authority.advance_due(deadline), [])
+            self.assertIsNotNone(await self.redis.zscore("halligalli:rooms:due", started.room_code))
+        finally:
+            await self.redis.config_set("maxmemory", original)
+
+        self.assertEqual(await self.authority.advance_due(deadline), [started.room_code])
+
+    async def test_near_full_redis_refuses_new_rooms_while_running_rooms_keep_advancing(self) -> None:
+        started, _ = await self._started("near-full")
+        deadline = started.snapshot.turn_deadline_at
+        used = (await self.redis.info("memory"))["used_memory"]
+        try:
+            original = (await self.redis.config_get("maxmemory"))["maxmemory"]
+            # Above current use so writes still fit, but at the admission threshold.
+            await self.redis.config_set("maxmemory", int(used / MEMORY_ADMISSION_RATIO))
+        except ResponseError as error:
+            self.skipTest(f"test Redis does not allow CONFIG SET: {error}")
+        try:
+            with self.assertRaises(AuthorityError) as raised:
+                await (await self._fresh_authority()).execute(
+                    None,
+                    CreateRoom("create-near-full-2", "Late", hash_credential("late"), 4, 2, "normal"),
+                )
+            self.assertEqual((raised.exception.status_code, raised.exception.code), (503, "capacity_exhausted"))
+            self.assertEqual(await self.authority.advance_due(deadline), [started.room_code])
+        finally:
+            await self.redis.config_set("maxmemory", original)
