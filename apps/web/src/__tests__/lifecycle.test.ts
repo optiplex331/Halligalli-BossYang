@@ -5,6 +5,7 @@ import {
 } from "../game/lifecycle.js";
 import { INITIAL_BREAKDOWN } from "../game/constants.js";
 import type { BellState } from "../game/types.js";
+import { reconnectAfterClose, reconnectDelayMs } from "../multiplayer/socket-protocol.js";
 
 const originalWindow = globalThis.window;
 
@@ -59,5 +60,16 @@ describe("game lifecycle cleanup", () => {
     expect(result.pendingResolution).toMatchObject({ missed: true, missedFruit: "grape" });
     expect(result.summary).toMatchObject({ score: 90, missedHits: 1 });
   });
+});
 
+describe("room socket restart lifecycle", () => {
+  it("reconnects within half a second after a planned API restart without counting a failure", () => {
+    expect(reconnectAfterClose(1012, 5, () => 0)).toEqual({ delayMs: 0, nextAttempt: 0 });
+    expect(reconnectAfterClose(1012, 5, () => 1)).toEqual({ delayMs: 500, nextAttempt: 0 });
+    expect(reconnectAfterClose(1012, 0, () => 0.25).delayMs).not.toEqual(reconnectAfterClose(1012, 0, () => 0.75).delayMs);
+  });
+
+  it("keeps backing off after other closes", () => {
+    expect(reconnectAfterClose(1006, 3, () => 1)).toEqual({ delayMs: reconnectDelayMs(3, () => 1), nextAttempt: 4 });
+  });
 });
