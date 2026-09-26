@@ -22,6 +22,9 @@ ROOM_TTL_SECONDS = 60 * 60
 DUE_INDEX_KEY = "halligalli:rooms:due"
 ACTIVE_ROOMS_KEY = "halligalli:rooms:active"
 COMMAND_HISTORY_LIMIT = 128
+# New rooms are refused once Redis uses this share of `maxmemory`, leaving headroom for running rooms.
+MEMORY_ADMISSION_RATIO = 0.8
+MEMORY_SAMPLE_SECONDS = 1.0
 POST_MATCH_DURATION_MS = 30_000
 ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 SCORE_BONUS_WINDOW_MS = 1_500
@@ -249,6 +252,10 @@ class AuthorityError(Exception):
         self.code = code
         self.status_code = status_code
         self.title = title
+
+
+def _capacity_exhausted() -> AuthorityError:
+    return AuthorityError("capacity_exhausted", 503, "Server is at capacity; try again shortly")
 
 
 @dataclass(frozen=True)
@@ -985,6 +992,8 @@ class RedisMultiplayerAuthority:
         self._telemetry = telemetry
         self._clock = clock
         self._deck = deck or StandardDeck()
+        self._memory_sampled_at: float | None = None
+        self._memory_admits = True
 
     @classmethod
     def from_url(
@@ -1070,14 +1079,24 @@ class RedisMultiplayerAuthority:
             self._record_redis("execute", "client_error", started_at)
             raise
         except OutOfMemoryError as error:
-            # Redis reached `maxmemory` under `noeviction`; new work waits until rooms expire.
+            # Last line of defense: Redis reached `maxmemory` under `noeviction` despite admission control.
             self._record_redis("execute", "server_error", started_at)
-            raise AuthorityError("capacity_exhausted", 503, "Server is at capacity; try again shortly") from error
+            raise _capacity_exhausted() from error
         except Exception:
             self._record_redis("execute", "server_error", started_at)
             raise
         self._record_redis("execute", "success", started_at)
         return result
+
+    async def _admits_new_room(self) -> bool:
+        """Whether Redis memory leaves room for another room, sampled at most once per interval."""
+        now = time.monotonic()
+        if self._memory_sampled_at is None or now - self._memory_sampled_at >= MEMORY_SAMPLE_SECONDS:
+            memory = await self._redis.info("memory")
+            maxmemory = int(memory.get("maxmemory", 0))
+            self._memory_admits = maxmemory == 0 or int(memory["used_memory"]) < maxmemory * MEMORY_ADMISSION_RATIO
+            self._memory_sampled_at = now
+        return self._memory_admits
 
     async def _create(self, command: CreateRoom) -> EntryResult:
         from redis.exceptions import WatchError
@@ -1100,6 +1119,8 @@ class RedisMultiplayerAuthority:
                     room_code=room.code,
                     snapshot=_snapshot_for_verifier(room, command.credential_verifier),
                 )
+            if not await self._admits_new_room():
+                raise _capacity_exhausted()
 
             room = _Room(
                 code=self._new_room_code(),

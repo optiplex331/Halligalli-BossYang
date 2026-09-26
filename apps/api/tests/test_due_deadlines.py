@@ -11,6 +11,7 @@ from halligalli_api.authority import (
     ContinueMatch,
     CreateRoom,
     Forfeit,
+    MEMORY_ADMISSION_RATIO,
     Ready,
     RedisMultiplayerAuthority,
     Start,
@@ -120,3 +121,24 @@ class DueDeadlineTest(RedisAsyncTestCase):
             await self.redis.config_set("maxmemory", original)
 
         self.assertEqual(await self.authority.advance_due(deadline), [started.room_code])
+
+    async def test_near_full_redis_refuses_new_rooms_while_running_rooms_keep_advancing(self) -> None:
+        started, _ = await self._started("near-full")
+        deadline = started.snapshot.turn_deadline_at
+        used = (await self.redis.info("memory"))["used_memory"]
+        try:
+            original = (await self.redis.config_get("maxmemory"))["maxmemory"]
+            # Above current use so writes still fit, but at the admission threshold.
+            await self.redis.config_set("maxmemory", int(used / MEMORY_ADMISSION_RATIO))
+        except ResponseError as error:
+            self.skipTest(f"test Redis does not allow CONFIG SET: {error}")
+        try:
+            with self.assertRaises(AuthorityError) as raised:
+                await (await self._fresh_authority()).execute(
+                    None,
+                    CreateRoom("create-near-full-2", "Late", hash_credential("late"), 4, 2, "normal"),
+                )
+            self.assertEqual((raised.exception.status_code, raised.exception.code), (503, "capacity_exhausted"))
+            self.assertEqual(await self.authority.advance_due(deadline), [started.room_code])
+        finally:
+            await self.redis.config_set("maxmemory", original)
