@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.9.0...v0.9.1) (2026-09-26)
+
+
+### Bug Fixes
+
+* **web:** stabilize layout tests and honor reduced motion ([#112](https://github.com/optiplex331/Halligalli-BossYang/issues/112)) ([faf1e0e](https://github.com/optiplex331/Halligalli-BossYang/commit/faf1e0e4a2b5981d1f261e2e4b6dc36a33a865e3))
+
 ## [0.9.0](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.8.3...v0.9.0) (2026-09-25)
 
 
