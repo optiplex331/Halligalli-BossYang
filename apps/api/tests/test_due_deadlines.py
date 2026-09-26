@@ -108,7 +108,7 @@ class DueDeadlineTest(RedisAsyncTestCase):
         try:
             for room_code, command in (
                 (None, CreateRoom("create-full-2", "Late", hash_credential("late"), 4, 2, "normal")),
-                (started.room_code, Bell(credentials[0], now_ms=deadline - 1)),
+                (started.room_code, Bell(credentials[0], now_ms=deadline - 1, reveal_sequence=started.snapshot.last_reveal.sequence)),
             ):
                 with self.assertRaises(AuthorityError) as raised:
                     await self.authority.execute(room_code, command)
