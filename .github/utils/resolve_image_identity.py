@@ -1,20 +1,21 @@
-"""Resolve GHCR image identity and push policy for container builds."""
+"""Resolve GHCR image identity and push policy for container builds.
+
+Release Tags (vX.Y.Z) publish canonical paired images. Every other context
+builds non-publishing pr-<short-sha> images for scanning and smoke tests.
+"""
 
 import os
 import re
-import subprocess
 import sys
-from collections.abc import Callable, Sequence
 from typing import Mapping
 
 from release_utils import write_github_outputs
 
-RELEASE_TAG_PATTERN = "v[0-9]*.[0-9]*.[0-9]*"
 RELEASE_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
 
 
 class ImageIdentityError(Exception):
-    """Raised when GitHub context or git history cannot produce an image identity."""
+    """Raised when GitHub context cannot produce an image identity."""
 
 
 def normalize_image(repository: str) -> str:
@@ -25,110 +26,23 @@ def normalize_image(repository: str) -> str:
     return f"ghcr.io/{repository}".lower()
 
 
-def short_sha(commit_sha: str) -> str:
-    """Return the seven-character identity used for non-publishing PR builds."""
-
-    if len(commit_sha) < 7:
-        raise ImageIdentityError("Commit SHA must be at least 7 characters")
-    return commit_sha[:7]
-
-
-def parse_extended_version(describe: str) -> str:
-    """Convert git-describe output into the development image tag format."""
-
-    match = re.fullmatch(
-        r"v([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)-g([0-9a-fA-F]+)", describe
-    )
-    if not match:
-        raise ImageIdentityError(f"Unexpected git describe output: {describe}")
-
-    base, count, git_ref = match.groups()
-    return f"{base}-{int(count):04d}-g{git_ref}"
-
-
-def is_release_tag(ref_name: str) -> bool:
-    return RELEASE_TAG_RE.fullmatch(ref_name or "") is not None
-
-
-def is_master_push(event_name: str, ref_type: str, ref_name: str) -> bool:
-    """Master product-runtime pushes may publish Development GHCR Images."""
-
-    return event_name == "push" and ref_type == "branch" and ref_name == "master"
-
-
-def run_git(args: Sequence[str], allow_failure: bool = False) -> str:
-    """Run git and return trimmed stdout, optionally treating failure as empty."""
-
-    result = subprocess.run(
-        ["git", *args],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    if result.returncode == 0:
-        return result.stdout.strip()
-
-    if allow_failure:
-        return ""
-
-    message = result.stderr.strip() or result.stdout.strip() or "git command failed"
-    raise ImageIdentityError(message)
-
-
-def resolve_identity(
-    env: Mapping[str, str],
-    git: Callable[[Sequence[str], bool], str] = run_git,
-) -> dict[str, str]:
+def resolve_identity(env: Mapping[str, str]) -> dict[str, str]:
     """Resolve image tag, version, commit SHA, and publish decision."""
 
     image = normalize_image(env.get("GITHUB_REPOSITORY", ""))
-    ref_type = env.get("GITHUB_REF_TYPE", "")
-    ref_name = env.get("GITHUB_REF_NAME", "")
-    event_name = env.get("GITHUB_EVENT_NAME", "")
-    commit_sha = git(["rev-parse", "HEAD"], False)
-    should_push_image = False
+    commit_sha = env.get("GITHUB_SHA", "")
+    if len(commit_sha) < 7:
+        raise ImageIdentityError("GITHUB_SHA must be a commit SHA")
 
-    if ref_type == "tag":
-        if not is_release_tag(ref_name):
+    if env.get("GITHUB_REF_TYPE") == "tag":
+        ref_name = env.get("GITHUB_REF_NAME", "")
+        if not RELEASE_TAG_RE.fullmatch(ref_name):
             raise ImageIdentityError("Release tag must match vX.Y.Z")
-        # Release-tag builds are canonical paired GHCR artifacts.
         version = ref_name.removeprefix("v")
         should_push_image = True
-    elif is_master_push(event_name, ref_type, ref_name):
-        # If master is already at a release tag, do not duplicate it as a
-        # development image. Otherwise derive a first-parent development tag.
-        exact_tag = git(
-            [
-                "describe",
-                "--tags",
-                "--exact-match",
-                "--match",
-                RELEASE_TAG_PATTERN,
-                "HEAD",
-            ],
-            True,
-        )
-        if exact_tag:
-            version = exact_tag.removeprefix("v")
-        else:
-            describe = git(
-                [
-                    "describe",
-                    "--tags",
-                    "--first-parent",
-                    "--long",
-                    "--abbrev=7",
-                    "--match",
-                    RELEASE_TAG_PATTERN,
-                ]
-            )
-            version = parse_extended_version(describe)
-            should_push_image = True
     else:
-        # Pull request and other non-publishing contexts still get a stable tag
-        # for logs and local workflow plumbing.
-        version = f"pr-{short_sha(env.get('GITHUB_SHA', commit_sha))}"
+        version = f"pr-{commit_sha[:7]}"
+        should_push_image = False
 
     return {
         "version": version,

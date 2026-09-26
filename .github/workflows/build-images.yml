@@ -1,52 +1,72 @@
-name: Container
+name: Build images
+
+# Reusable Web/API image pipeline. Pull requests call it with push=false to
+# build, scan, smoke and generate CycloneDX SBOMs for the pair. Release Tags
+# call it with push=true to also publish both images and attest provenance plus
+# the CycloneDX SBOM for each pushed digest.
+# Jobs inherit the caller's permissions: ci.yml grants read-only access and
+# release.yml grants packages, id-token and attestations write.
 
 on:
-  pull_request:
-    branches:
-      - master
-  push:
-    branches:
-      - master
-    tags:
-      - "v*.*.*"
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      push:
+        description: Push images and record attestations. Only valid for Release Tags.
+        type: boolean
+        required: true
+    outputs:
+      version:
+        description: Release version without the v prefix.
+        value: ${{ jobs.images.outputs.version }}
+      commit_sha:
+        description: Commit the images were built from.
+        value: ${{ jobs.images.outputs.commit_sha }}
+      web_image:
+        description: Web image name without tag.
+        value: ${{ jobs.images.outputs.web_image }}
+      api_image:
+        description: API image name without tag.
+        value: ${{ jobs.images.outputs.api_image }}
+      web_digest:
+        description: Pushed Web image digest (push only).
+        value: ${{ jobs.images.outputs.web_digest }}
+      api_digest:
+        description: Pushed API image digest (push only).
+        value: ${{ jobs.images.outputs.api_digest }}
 
 jobs:
-  build-scan-publish:
-    name: Container build and scan
+  images:
+    name: Build, scan and smoke images
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: write
-      attestations: write
-      id-token: write
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      commit_sha: ${{ steps.release.outputs.commit_sha }}
+      web_image: ${{ steps.release.outputs.web_image }}
+      api_image: ${{ steps.release.outputs.api_image }}
+      web_digest: ${{ steps.push.outputs.web_digest }}
+      api_digest: ${{ steps.push.outputs.api_digest }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Resolve check routing
-        id: changes
-        uses: ./.github/actions/resolve-check-routing
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Skip container build and scan
-        if: steps.changes.outputs.container_build_required != 'true'
-        run: echo "Container work is not required for these changes."
-
-      - name: Set up Docker Buildx
-        if: steps.changes.outputs.container_build_required == 'true'
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Resolve image identity
-        if: steps.changes.outputs.container_build_required == 'true'
         id: release
         run: python3 .github/utils/resolve_image_identity.py
 
+      - name: Check push policy
+        env:
+          PUSH_REQUESTED: ${{ inputs.push }}
+          PUSH_ALLOWED: ${{ steps.release.outputs.should_push_image }}
+        run: |
+          if [[ "$PUSH_REQUESTED" == "true" && "$PUSH_ALLOWED" != "true" ]]; then
+            echo "Images may only be pushed from a vX.Y.Z Release Tag." >&2
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
       - name: Build Web image
-        if: steps.changes.outputs.container_build_required == 'true'
         run: >-
           docker build --file apps/web/Dockerfile
           --build-arg HALLIGALLI_RELEASE_VERSION="${{ steps.release.outputs.version }}"
@@ -56,7 +76,6 @@ jobs:
           --tag "${{ steps.release.outputs.web_image_tag }}" .
 
       - name: Build API image
-        if: steps.changes.outputs.container_build_required == 'true'
         run: >-
           docker build --file apps/api/Dockerfile
           --build-arg HALLIGALLI_RELEASE_VERSION="${{ steps.release.outputs.version }}"
@@ -66,7 +85,6 @@ jobs:
           --tag "${{ steps.release.outputs.api_image_tag }}" .
 
       - name: Scan Web image
-        if: steps.changes.outputs.container_build_required == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ steps.release.outputs.web_image_tag }}
@@ -77,7 +95,6 @@ jobs:
           severity: HIGH,CRITICAL
 
       - name: Scan API image
-        if: steps.changes.outputs.container_build_required == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ steps.release.outputs.api_image_tag }}
@@ -88,7 +105,6 @@ jobs:
           severity: HIGH,CRITICAL
 
       - name: Paired runtime smoke
-        if: steps.changes.outputs.container_build_required == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -104,17 +120,33 @@ jobs:
             sleep 1
           done
           curl --fail --silent http://localhost:18000/internal/ready >/dev/null
-          curl --fail --silent http://localhost:18000/internal/identity > api-identity.json
-          curl --fail --silent http://localhost:18080/internal/identity > web-identity.json
+          curl --fail --silent http://localhost:18000/internal/identity > "$RUNNER_TEMP/api-identity.json"
+          curl --fail --silent http://localhost:18080/internal/identity > "$RUNNER_TEMP/web-identity.json"
           proxy_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST --header 'Content-Type: application/json' --data '{}' http://localhost:18080/api/v1/rooms)"
           if [[ "$proxy_status" != "401" && "$proxy_status" != "422" ]]; then
             echo "Web API proxy returned unexpected status: $proxy_status" >&2
             exit 1
           fi
-          python3 .github/utils/paired_smoke.py --web-identity web-identity.json --api-identity api-identity.json --version "${{ steps.release.outputs.version }}" --commit "${{ steps.release.outputs.commit_sha }}"
+          python3 .github/utils/paired_smoke.py --web-identity "$RUNNER_TEMP/web-identity.json" --api-identity "$RUNNER_TEMP/api-identity.json" --version "${{ steps.release.outputs.version }}" --commit "${{ steps.release.outputs.commit_sha }}"
+
+      - name: Generate Web SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.release.outputs.web_image_tag }}
+          format: cyclonedx
+          output: ${{ runner.temp }}/web-sbom.cdx.json
+          exit-code: "0"
+
+      - name: Generate API SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.release.outputs.api_image_tag }}
+          format: cyclonedx
+          output: ${{ runner.temp }}/api-sbom.cdx.json
+          exit-code: "0"
 
       - name: Log in to GHCR
-        if: steps.release.outputs.should_push_image == 'true'
+        if: inputs.push
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
@@ -122,7 +154,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push paired images
-        if: steps.release.outputs.should_push_image == 'true'
+        if: inputs.push
         id: push
         shell: bash
         run: |
@@ -146,66 +178,40 @@ jobs:
           echo "web_digest=$web_digest" >> "$GITHUB_OUTPUT"
           echo "api_digest=$api_digest" >> "$GITHUB_OUTPUT"
 
-      - name: Attest Web release image
-        if: github.ref_type == 'tag'
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      - name: Attest Web provenance
+        if: inputs.push
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ${{ steps.release.outputs.web_image }}
           subject-digest: ${{ steps.push.outputs.web_digest }}
           push-to-registry: true
+          create-storage-record: false
 
-      - name: Attest API release image
-        if: github.ref_type == 'tag'
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      - name: Attest API provenance
+        if: inputs.push
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ${{ steps.release.outputs.api_image }}
           subject-digest: ${{ steps.push.outputs.api_digest }}
           push-to-registry: true
+          create-storage-record: false
 
-      - name: Write paired release manifest
-        if: github.ref_type == 'tag'
-        run: >-
-          python3 .github/utils/paired_release_manifest.py
-          --tag "${{ github.ref_name }}" --commit "${{ steps.release.outputs.commit_sha }}"
-          --web-image "${{ steps.release.outputs.web_image }}" --web-digest "${{ steps.push.outputs.web_digest }}"
-          --api-image "${{ steps.release.outputs.api_image }}" --api-digest "${{ steps.push.outputs.api_digest }}"
-          --output paired-release-manifest.json
-
-      - name: Upload paired release manifest artifact
-        if: github.ref_type == 'tag'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - name: Attest Web SBOM
+        if: inputs.push
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          name: paired-release-manifest-${{ github.ref_name }}
-          path: paired-release-manifest.json
-          if-no-files-found: error
+          subject-name: ${{ steps.release.outputs.web_image }}
+          subject-digest: ${{ steps.push.outputs.web_digest }}
+          sbom-path: ${{ runner.temp }}/web-sbom.cdx.json
+          push-to-registry: true
+          create-storage-record: false
 
-  publish-paired-release-manifest:
-    name: Publish paired release manifest
-    if: github.ref_type == 'tag'
-    needs: build-scan-publish
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download paired release manifest
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - name: Attest API SBOM
+        if: inputs.push
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          name: paired-release-manifest-${{ github.ref_name }}
-          path: .paired-release-manifest
-
-      - name: Wait for GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          for attempt in 1 2 3 4 5 6; do
-            if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then exit 0; fi
-            [[ "$attempt" == "6" ]] && { echo "GitHub Release ${GITHUB_REF_NAME} was not available after 30 seconds." >&2; exit 1; }
-            sleep 5
-          done
-
-      - name: Upload Release asset
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${GITHUB_REF_NAME}" .paired-release-manifest/paired-release-manifest.json --repo "${GITHUB_REPOSITORY}"
+          subject-name: ${{ steps.release.outputs.api_image }}
+          subject-digest: ${{ steps.push.outputs.api_digest }}
+          sbom-path: ${{ runner.temp }}/api-sbom.cdx.json
+          push-to-registry: true
+          create-storage-record: false

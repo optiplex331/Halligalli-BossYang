@@ -1,0 +1,69 @@
+name: Release
+
+# Release Tags created by Release Please publish one Paired Release: both
+# images, their provenance and SBOM attestations, and the paired manifest.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+# Each job receives only the write access it needs.
+permissions: {}
+
+jobs:
+  images:
+    name: Release images
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/build-images.yml
+    with:
+      push: true
+
+  manifest:
+    name: Publish paired release manifest
+    needs: images
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Write paired release manifest
+        env:
+          COMMIT_SHA: ${{ needs.images.outputs.commit_sha }}
+          WEB_IMAGE: ${{ needs.images.outputs.web_image }}
+          WEB_DIGEST: ${{ needs.images.outputs.web_digest }}
+          API_IMAGE: ${{ needs.images.outputs.api_image }}
+          API_DIGEST: ${{ needs.images.outputs.api_digest }}
+        run: >-
+          python3 .github/utils/paired_release_manifest.py
+          --tag "$GITHUB_REF_NAME" --commit "$COMMIT_SHA"
+          --web-image "$WEB_IMAGE" --web-digest "$WEB_DIGEST"
+          --api-image "$API_IMAGE" --api-digest "$API_DIGEST"
+          --output "$RUNNER_TEMP/paired-release-manifest.json"
+
+      - name: Wait for GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6; do
+            if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then exit 0; fi
+            [[ "$attempt" == "6" ]] && { echo "GitHub Release ${GITHUB_REF_NAME} was not available after 30 seconds." >&2; exit 1; }
+            sleep 5
+          done
+
+      - name: Upload Release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # No --clobber: an existing same-name asset fails the upload.
+        run: gh release upload "${GITHUB_REF_NAME}" "$RUNNER_TEMP/paired-release-manifest.json" --repo "${GITHUB_REPOSITORY}"
