@@ -15,9 +15,14 @@ FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de
 
 WORKDIR /app
 
+# Forwarded client addresses are resolved only by the app (HALLIGALLI_TRUSTED_PROXY_HOPS), and
+# WebSocket messages share the app's 4096-byte bound. The uvicorn CLI reads UVICORN_* here and
+# in the deployment targets that override the command.
 ENV PATH=/app/.venv/bin:$PATH \
   PYTHONPATH=/app/src \
-  PYTHONDONTWRITEBYTECODE=1
+  PYTHONDONTWRITEBYTECODE=1 \
+  UVICORN_PROXY_HEADERS=false \
+  UVICORN_WS_MAX_SIZE=4096
 
 COPY --from=build /app/.venv /app/.venv
 COPY --from=build /app/src /app/src

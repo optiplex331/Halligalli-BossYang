@@ -21,6 +21,9 @@ _logger = logging.getLogger("halligalli.authority")
 ROOM_TTL_SECONDS = 60 * 60
 DUE_INDEX_KEY = "halligalli:rooms:due"
 ACTIVE_ROOMS_KEY = "halligalli:rooms:active"
+# Pre-registered to cover one load generator; the derivation is in README.md, "Client bounds".
+ROOM_CREATION_BUDGET = 480
+ROOM_CREATION_WINDOW_SECONDS = 60 * 60
 COMMAND_HISTORY_LIMIT = 128
 # New rooms are refused once Redis uses this share of `maxmemory`, leaving headroom for running rooms.
 MEMORY_ADMISSION_RATIO = 0.8
@@ -352,6 +355,8 @@ class MultiplayerAuthority(Protocol):
     def now_ms(self) -> int: ...
 
     async def advance_due(self, now_ms: int | None = None) -> list[str]: ...
+
+    async def admit_room_creation(self, client_address: str) -> None: ...
 
 
 class RedisRevisionSubscription:
@@ -1015,11 +1020,13 @@ class RedisMultiplayerAuthority:
         *,
         clock: Callable[[], int] = wall_clock_ms,
         deck: DeckSource | None = None,
+        room_creation_budget: int = ROOM_CREATION_BUDGET,
     ) -> None:
         self._redis = redis_client
         self._telemetry = telemetry
         self._clock = clock
         self._deck = deck or StandardDeck()
+        self._room_creation_budget = room_creation_budget
         self._memory_sampled_at: float | None = None
         self._memory: dict[str, int] = {"used_memory": 0, "maxmemory": 0}
 
@@ -1086,6 +1093,26 @@ class RedisMultiplayerAuthority:
     @staticmethod
     def _entry_key(idempotency_key: str) -> str:
         return f"halligalli:entry:{idempotency_key}"
+
+    async def admit_room_creation(self, client_address: str) -> None:
+        """Spend one unit of the client address's hourly room-creation budget or refuse with 429.
+
+        Memory admission is checked first so a create refused for capacity spends no budget.
+        """
+        from redis.exceptions import OutOfMemoryError
+
+        if not await self._admits_new_room():
+            raise _capacity_exhausted()
+        key = f"halligalli:creation-budget:{client_address}"
+        try:
+            async with self._redis.pipeline(transaction=True) as pipeline:
+                pipeline.set(key, 0, ex=ROOM_CREATION_WINDOW_SECONDS, nx=True)
+                pipeline.incr(key)
+                _, created = await pipeline.execute()
+        except OutOfMemoryError as error:
+            raise _capacity_exhausted() from error
+        if created > self._room_creation_budget:
+            raise AuthorityError("room_creation_limited", 429, "Too many rooms were created from this address")
 
     @staticmethod
     def _new_room_code() -> str:
