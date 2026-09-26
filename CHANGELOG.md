@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.9.1...v0.9.2) (2026-09-26)
+
+
+### Continuous Integration
+
+* simplify delivery control ([#114](https://github.com/optiplex331/Halligalli-BossYang/issues/114)) ([bfa1a5e](https://github.com/optiplex331/Halligalli-BossYang/commit/bfa1a5ea623f997bccd3b4f119b81eb22b3026f4))
+
 ## [0.9.1](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.9.0...v0.9.1) (2026-09-26)
 
 
