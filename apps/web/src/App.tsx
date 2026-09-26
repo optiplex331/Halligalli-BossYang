@@ -117,6 +117,7 @@ const COPY = {
     seatLabel: "座位 {seat}",
     correctBellEvent: "抢铃成功，得分已由服务器确认。",
     wrongBellEvent: "错拍，已按当前得分应用惩罚。",
+    staleBellEvent: "慢了一步，这次拍铃不计分。",
     missedBellEvent: "漏拍，已按当前得分应用惩罚。",
     continueMatch: "继续下一局",
     leaveRoom: "离开房间",
@@ -218,6 +219,7 @@ const COPY = {
     seatLabel: "Seat {seat}",
     correctBellEvent: "Successful ring. The server confirmed the score.",
     wrongBellEvent: "Wrong ring. The penalty was applied to the current score.",
+    staleBellEvent: "Too slow. That ring did not count.",
     missedBellEvent: "Missed bell. The penalty was applied to the current score.",
     continueMatch: "Continue to next match",
     leaveRoom: "Leave room",
@@ -748,6 +750,9 @@ export default function App() {
                         {t("forfeitMatch")}
                       </button>
                     </div>
+                  )}
+                  {roomEntry.bellTooSlow && (
+                    <p className="multiplayer-event">{t("staleBellEvent")}</p>
                   )}
                   {roomProjection.snapshot.lastEvent === "correct_bell" && (
                     <p className="multiplayer-event">{t("correctBellEvent")}</p>

@@ -4,7 +4,8 @@ type RoomSnapshot = components["schemas"]["RoomSnapshot"];
 
 export type ServerFrame =
   | { type: "snapshot"; snapshot: RoomSnapshot }
-  | { type: "error"; code: string; title: string };
+  | { type: "error"; code: string; title: string }
+  | { type: "bell_stale"; revealSequence: number };
 
 const RECONNECT_BASE_MS = 400;
 const RECONNECT_CAP_MS = 5_000;
@@ -29,6 +30,9 @@ export function parseServerFrame(data: unknown): ServerFrame | null {
   }
   if (payload.type === "error" && typeof payload.code === "string" && typeof payload.title === "string") {
     return { type: "error", code: payload.code, title: payload.title };
+  }
+  if (payload.type === "bell_stale" && typeof payload.revealSequence === "number") {
+    return { type: "bell_stale", revealSequence: payload.revealSequence };
   }
   return null;
 }
