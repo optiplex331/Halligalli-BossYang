@@ -1021,7 +1021,7 @@ class RedisMultiplayerAuthority:
         self._clock = clock
         self._deck = deck or StandardDeck()
         self._memory_sampled_at: float | None = None
-        self._memory_admits = True
+        self._memory: dict[str, int] = {"used_memory": 0, "maxmemory": 0}
 
     @classmethod
     def from_url(
@@ -1121,15 +1121,19 @@ class RedisMultiplayerAuthority:
         self._record_redis("execute", "stale_bell" if isinstance(result, StaleBellResult) else "success", started_at)
         return result
 
-    async def _admits_new_room(self) -> bool:
-        """Whether Redis memory leaves room for another room, sampled at most once per interval."""
+    async def redis_memory(self) -> dict[str, int]:
+        """Redis `used_memory` and `maxmemory`, sampled at most once per interval."""
         now = time.monotonic()
         if self._memory_sampled_at is None or now - self._memory_sampled_at >= MEMORY_SAMPLE_SECONDS:
             memory = await self._redis.info("memory")
-            maxmemory = int(memory.get("maxmemory", 0))
-            self._memory_admits = maxmemory == 0 or int(memory["used_memory"]) < maxmemory * MEMORY_ADMISSION_RATIO
+            self._memory = {"used_memory": int(memory["used_memory"]), "maxmemory": int(memory.get("maxmemory", 0))}
             self._memory_sampled_at = now
-        return self._memory_admits
+        return self._memory
+
+    async def _admits_new_room(self) -> bool:
+        """Whether Redis memory leaves room for another room."""
+        memory = await self.redis_memory()
+        return memory["maxmemory"] == 0 or memory["used_memory"] < memory["maxmemory"] * MEMORY_ADMISSION_RATIO
 
     async def _create(self, command: CreateRoom) -> EntryResult:
         from redis.exceptions import WatchError
@@ -1340,10 +1344,6 @@ class RedisMultiplayerAuthority:
     async def active_room_count(self) -> int:
         await self._redis.zremrangebyscore(ACTIVE_ROOMS_KEY, "-inf", self._clock())
         return await self._redis.zcard(ACTIVE_ROOMS_KEY)
-
-    async def redis_memory(self) -> dict[str, int]:
-        info = await self._redis.info("memory")
-        return {"used_memory": int(info["used_memory"]), "maxmemory": int(info.get("maxmemory", 0))}
 
     async def readiness(self) -> bool:
         try:
