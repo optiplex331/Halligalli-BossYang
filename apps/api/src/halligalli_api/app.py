@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import asyncio
+import ipaddress
 import json
 import logging
 import time
@@ -44,6 +45,37 @@ _logger = logging.getLogger("halligalli.api")
 # Only a credential that no longer authenticates or a room that no longer exists ends the socket.
 _SOCKET_CLOSING_ERRORS = frozenset({"credential_invalid", "room_not_found"})
 _RELEASE_IDENTITY_PATH = Path(__file__).with_name("release-identity.json")
+# Room commands and authentication are a few hundred bytes. The release image sets uvicorn's
+# UVICORN_WS_MAX_SIZE to the same bound so an oversized frame is refused before it is buffered.
+WEBSOCKET_MAX_MESSAGE_BYTES = 4_096
+_MESSAGE_TOO_BIG = 1009
+TRUSTED_PROXY_HOPS_ENV = "HALLIGALLI_TRUSTED_PROXY_HOPS"
+
+
+def _trusted_proxy_hops_from_env() -> int:
+    raw = os.environ.get(TRUSTED_PROXY_HOPS_ENV, "0")
+    if not raw.isdigit():
+        raise RuntimeError(f"{TRUSTED_PROXY_HOPS_ENV} must be a non-negative integer")
+    return int(raw)
+
+
+def resolve_client_address(peer: str | None, forwarded_for: list[str], trusted_proxy_hops: int) -> str:
+    """Return the client address as written by the outermost of exactly `trusted_proxy_hops` proxies.
+
+    Every trusted proxy appends its own peer to X-Forwarded-For, so the entry that many places from
+    the right is the client. Entries further left came from the client and are never trusted. A
+    request carrying fewer entries did not pass every trusted proxy and is keyed on its peer.
+    """
+    peer_address = peer or "unknown"
+    if trusted_proxy_hops == 0:
+        return peer_address
+    entries = [entry.strip() for value in forwarded_for for entry in value.split(",")]
+    if len(entries) < trusted_proxy_hops:
+        return peer_address
+    try:
+        return str(ipaddress.ip_address(entries[-trusted_proxy_hops]))
+    except ValueError:
+        return peer_address
 
 
 def _load_release_identity() -> dict[str, str]:
@@ -195,8 +227,10 @@ def create_app(
     *,
     due_interval_seconds: float = 0.1,
     startup_timeout_seconds: float = 10.0,
+    trusted_proxy_hops: int | None = None,
 ) -> FastAPI:
     build_identity = _load_release_identity()
+    proxy_hops = _trusted_proxy_hops_from_env() if trusted_proxy_hops is None else trusted_proxy_hops
     telemetry = Telemetry()
     selected_authority = authority or _runtime_authority(telemetry)
     hub = RoomSocketHub()
@@ -337,12 +371,21 @@ def create_app(
             401: {"model": ProblemDetails},
             409: {"model": ProblemDetails},
             422: {"model": ProblemDetails},
+            429: {"model": ProblemDetails},
         },
     )
     async def create_room(
+        http_request: Request,
         request: CreateRoomRequest,
         idempotency_key: Annotated[UUID, Header(alias="Idempotency-Key")],
     ) -> EntryResult:
+        await app.state.authority.admit_room_creation(
+            resolve_client_address(
+                http_request.client.host if http_request.client else None,
+                http_request.headers.getlist("x-forwarded-for"),
+                proxy_hops,
+            ),
+        )
         return await app.state.authority.execute(
             None,
             CreateRoom(
@@ -411,6 +454,14 @@ def create_app(
             span=span,
         )
 
+    async def receive_bounded_text(websocket: WebSocket) -> str | None:
+        """Receive one text message, closing the socket with 1009 when it exceeds the fixed bound."""
+        message = await websocket.receive_text()
+        if len(message.encode("utf-8")) > WEBSOCKET_MAX_MESSAGE_BYTES:
+            await websocket.close(code=_MESSAGE_TOO_BIG)
+            return None
+        return message
+
     @app.websocket("/ws/v1/rooms/{room_code}")
     async def room_websocket(websocket: WebSocket, room_code: str) -> None:
         await websocket.accept()
@@ -419,7 +470,10 @@ def create_app(
             with telemetry.span("websocket.command") as span:
                 trace_id = telemetry.trace_id(span)
                 started_at = time.perf_counter()
-                payload = WebSocketAuthentication.model_validate_json(await websocket.receive_text())
+                authentication = await receive_bounded_text(websocket)
+                if authentication is None:
+                    return
+                payload = WebSocketAuthentication.model_validate_json(authentication)
                 snapshot = await app.state.authority.snapshot(
                     canonical_room_code,
                     Viewer(credential=payload.credential),
@@ -445,7 +499,9 @@ def create_app(
         hub.attach(canonical_room_code, websocket, payload.credential, snapshot.revision)
         try:
             while True:
-                message = await websocket.receive_text()
+                message = await receive_bounded_text(websocket)
+                if message is None:
+                    return
                 with telemetry.span("websocket.command") as span:
                     trace_id = telemetry.trace_id(span)
                     started_at = time.perf_counter()

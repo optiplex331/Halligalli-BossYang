@@ -85,6 +85,30 @@ daily goals, and achievements are removed on load and are never written again.
 There are no accounts, payments, durable match records, player profiles, or
 room recovery. The Multiplayer Authority uses ephemeral Redis state.
 
+## Client bounds
+
+The API keys client limits on the client address resolved through exactly the
+number of proxies that each deployment target places in front of it, set by
+`HALLIGALLI_TRUSTED_PROXY_HOPS`. Every trusted proxy appends its own peer to
+`X-Forwarded-For`, so the entry that many places from the right is the client;
+entries further left were written by the client and are ignored. The default
+`0` trusts no header and uses the TCP peer, which is correct for Compose, where
+the Vite proxy adds no forwarded header. The release image disables uvicorn's
+own forwarded-header handling so this is the only trust decision.
+
+Room creation spends one unit of a per-address budget of 480 rooms per hour,
+stored as an expiring Redis counter; the 481st creation in the window returns
+`429 room_creation_limited`. The budget is pre-registered to cover one load
+generator at the simulated traffic peak: 15 concurrent rooms for the whole
+20-minute run, each replaced after the shortest possible match (72 reveals at
+the hard pace of 550 ms, about 40 s), gives 15 × 1200 s / 40 s ≈ 455
+creations, rounded up to 480 for retries. Rematches continue in the same room,
+so they spend no budget; the bound still holds if every rematch were a new room.
+
+WebSocket messages larger than 4096 bytes close the socket with code 1009. The
+release image sets `UVICORN_WS_MAX_SIZE` to the same bound so oversized frames
+are refused before they are buffered.
+
 ## Project shape
 
 ```text
