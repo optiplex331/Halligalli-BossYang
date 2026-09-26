@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { components } from "./rest.generated.js";
-import { parseServerFrame, reconnectDelayMs } from "./socket-protocol.js";
+import { parseServerFrame, reconnectAfterClose } from "./socket-protocol.js";
 
 type EntryRequest = components["schemas"]["EntryRequest"];
 type CreateRoomRequest = components["schemas"]["CreateRoomRequest"];
@@ -158,15 +158,15 @@ export function useRoomEntry() {
       if (generationRef.current !== generation) return;
       setConnected(true);
     });
-    socket.addEventListener("close", () => {
+    socket.addEventListener("close", (event) => {
       if (generationRef.current !== generation) return;
       setConnected(false);
       if (!intentionalCloseRef.current.has(socket)) {
-        const delay = reconnectDelayMs(reconnectAttemptRef.current);
-        reconnectAttemptRef.current += 1;
+        const { delayMs, nextAttempt } = reconnectAfterClose(event.code, reconnectAttemptRef.current);
+        reconnectAttemptRef.current = nextAttempt;
         retryTimer = window.setTimeout(() => {
           if (generationRef.current === generation) setRetryNonce((value) => value + 1);
-        }, delay);
+        }, delayMs);
       }
     });
     return () => {
