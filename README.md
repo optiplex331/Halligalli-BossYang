@@ -93,7 +93,11 @@ number of proxies that each deployment target places in front of it, set by
 `X-Forwarded-For`, so the entry that many places from the right is the client;
 entries further left were written by the client and are ignored. The default
 `0` trusts no header and uses the TCP peer, which is correct for Compose, where
-the Vite proxy adds no forwarded header. The release image disables uvicorn's
+the Vite proxy adds no forwarded header. Each deployment target sets its count
+in the Infrastructure repository: Container Apps trusts three hops (Cloudflare,
+the platform ingress, and the Web nginx, with the ingress admitting only
+Cloudflare), K3s two (Cloudflare Tunnel and the Web nginx), and AKS one (the
+NGINX Ingress controller). The release image disables uvicorn's
 own forwarded-header handling so this is the only trust decision.
 
 Room creation spends one unit of a per-address budget of 480 rooms per hour,
