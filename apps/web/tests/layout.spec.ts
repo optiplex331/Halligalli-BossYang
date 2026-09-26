@@ -73,6 +73,7 @@ test("all Table Seat cards remain complete across responsive table layouts", asy
 
 for (const language of ["en", "zh"] as const) {
   test(`the ${language} flow remains usable from home through results at 320 px`, async ({ page }) => {
+    await page.clock.install();
     await page.setViewportSize({ width: 320, height: 900 });
     await page.goto("/");
     await page.getByRole("button", { name: language === "en" ? "English" : "中文", exact: true }).click();
@@ -92,7 +93,9 @@ for (const language of ["en", "zh"] as const) {
     await page.getByRole("button", { name: language === "en" ? "Start Practice" : "开始练习", exact: true }).click();
     const endRound = page.getByRole("button", { name: language === "en" ? "End Round" : "结束本局", exact: true });
     await expect(endRound).toBeDisabled();
-    await expect(endRound).toBeEnabled({ timeout: 5_000 });
+    // Run the 3-2-1 countdown on the fake clock so the round starts without depending on wall-clock timers.
+    await page.clock.runFor(3_000);
+    await expect(endRound).toBeEnabled();
     await expectCompleteTable(page, 8);
     await expectFeedbackClearOfPlayContent(page);
     await endRound.click();
