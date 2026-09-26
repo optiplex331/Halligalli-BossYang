@@ -13,7 +13,7 @@ class RollingDeployTest(RedisAsyncTestCase):
         await self.redis.hset("halligalli:room:{LGCY}", mapping={"state": PREVIOUS_RELEASE_ROOM})
 
         advanced = await self.authority.execute("LGCY", AdvanceTurn(now_ms=1_700))
-        rung = await self.authority.execute("LGCY", Bell(credential_verifier("legacy-guest"), now_ms=1_710))
+        rung = await self.authority.execute("LGCY", Bell(credential_verifier("legacy-guest"), now_ms=1_710, reveal_sequence=2))
         due = await self.authority.advance_due(rung.snapshot.turn_deadline_at)
 
         self.assertEqual(advanced.snapshot.bell_fruit, "banana")

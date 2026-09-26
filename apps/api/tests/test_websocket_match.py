@@ -59,7 +59,7 @@ class WebSocketMatchTest(RedisTestCase):
                 self.clock.now_ms = started["snapshot"]["turnDeadlineAt"]
                 bell_window = host_socket.receive_json()
                 guest_socket.receive_json()
-                host_socket.send_json({"type": "bell"})
+                host_socket.send_json({"type": "bell", "revealSequence": bell_window["snapshot"]["lastReveal"]["sequence"]})
                 continued = host_socket.receive_json()
 
         self.assertEqual(started["snapshot"]["phase"], "playing")
@@ -113,6 +113,41 @@ class WebSocketMatchTest(RedisTestCase):
         self.assertEqual((invalid["type"], invalid["code"]), ("error", "invalid_request"))
         self.assertEqual(accepted["type"], "snapshot")
         self.assertTrue(accepted["snapshot"]["participants"][1]["ready"])
+
+    def test_the_slower_bell_gets_a_stale_frame_instead_of_a_penalty(self) -> None:
+        with TestClient(create_app(authority=self.authority)) as client:
+            room_code = self._room(client, "host", "guest")
+            with client.websocket_connect(f"/ws/v1/rooms/{room_code}") as host_socket, client.websocket_connect(
+                f"/ws/v1/rooms/{room_code}",
+            ) as guest_socket:
+                sockets = (host_socket, guest_socket)
+                for socket, credential in zip(sockets, ("host", "guest"), strict=True):
+                    socket.send_json({"type": "authenticate", "credential": credential})
+                    socket.receive_json()
+                for sender, command in ((host_socket, "ready"), (guest_socket, "ready"), (host_socket, "start")):
+                    sender.send_json({"type": command})
+                    started = host_socket.receive_json()
+                    guest_socket.receive_json()
+                self.clock.now_ms = started["snapshot"]["turnDeadlineAt"]
+                bell_window = host_socket.receive_json()
+                guest_socket.receive_json()
+                sequence = bell_window["snapshot"]["lastReveal"]["sequence"]
+
+                guest_socket.send_json({"type": "bell"})
+                unnamed = guest_socket.receive_json()
+                host_socket.send_json({"type": "bell", "revealSequence": sequence})
+                won = host_socket.receive_json()
+                guest_socket.receive_json()
+                guest_socket.send_json({"type": "bell", "revealSequence": sequence})
+                stale = guest_socket.receive_json()
+                guest_socket.send_json({"type": "forfeit"})
+                after = guest_socket.receive_json()
+
+        self.assertEqual((unnamed["type"], unnamed["code"]), ("error", "invalid_request"))
+        self.assertEqual(won["snapshot"]["lastEvent"], "correct_bell")
+        self.assertEqual(stale, {"type": "bell_stale", "revealSequence": sequence})
+        self.assertEqual(after["snapshot"]["revision"], won["snapshot"]["revision"] + 1)
+        self.assertEqual(after["snapshot"]["scoreboard"][1]["wrongHits"], 0)
 
     def test_a_bad_credential_closes_the_socket(self) -> None:
         with TestClient(create_app(authority=self.authority)) as client:

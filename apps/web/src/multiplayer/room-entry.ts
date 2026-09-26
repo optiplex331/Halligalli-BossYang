@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { components } from "./rest.generated.js";
-import { parseServerFrame, reconnectDelayMs } from "./socket-protocol.js";
+import { parseServerFrame, reconnectAfterClose } from "./socket-protocol.js";
 
 type EntryRequest = components["schemas"]["EntryRequest"];
 type CreateRoomRequest = components["schemas"]["CreateRoomRequest"];
 type EntryResult = components["schemas"]["EntryResult"];
 type ProblemDetails = components["schemas"]["ProblemDetails"];
+
+const STALE_BELL_NOTICE_MS = 1_500;
 
 export type RoomSnapshot = components["schemas"]["RoomSnapshot"];
 
@@ -81,6 +83,7 @@ function watchRoom(
   session: RoomSession,
   onSnapshot: (snapshot: RoomSnapshot) => void,
   onError: (code: string, title: string) => void,
+  onStaleBell: () => void,
 ): WebSocket {
   const socket = new WebSocket(
     `${websocketOrigin()}/ws/v1/rooms/${encodeURIComponent(session.roomCode)}`,
@@ -92,6 +95,7 @@ function watchRoom(
     const frame = parseServerFrame(event.data);
     if (frame?.type === "snapshot") onSnapshot(frame.snapshot);
     else if (frame?.type === "error") onError(frame.code, frame.title);
+    else if (frame?.type === "bell_stale") onStaleBell();
   });
   return socket;
 }
@@ -102,6 +106,8 @@ export function useRoomEntry() {
   const [pending, setPending] = useState(false);
   const [connected, setConnected] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
+  const [bellTooSlow, setBellTooSlow] = useState(false);
+  const staleBellTimerRef = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const sessionRef = useRef<RoomSession | null>(null);
   const generationRef = useRef(0);
@@ -112,6 +118,10 @@ export function useRoomEntry() {
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
+
+  useEffect(() => () => {
+    if (staleBellTimerRef.current !== null) window.clearTimeout(staleBellTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!session) {
@@ -137,21 +147,26 @@ export function useRoomEntry() {
     }, (code, title) => {
       console.warn(`Room command rejected: ${code}: ${title}`);
       if (generationRef.current === generation) setError(code);
+    }, () => {
+      if (generationRef.current !== generation) return;
+      setBellTooSlow(true);
+      if (staleBellTimerRef.current !== null) window.clearTimeout(staleBellTimerRef.current);
+      staleBellTimerRef.current = window.setTimeout(() => setBellTooSlow(false), STALE_BELL_NOTICE_MS);
     });
     socketRef.current = socket;
     socket.addEventListener("open", () => {
       if (generationRef.current !== generation) return;
       setConnected(true);
     });
-    socket.addEventListener("close", () => {
+    socket.addEventListener("close", (event) => {
       if (generationRef.current !== generation) return;
       setConnected(false);
       if (!intentionalCloseRef.current.has(socket)) {
-        const delay = reconnectDelayMs(reconnectAttemptRef.current);
-        reconnectAttemptRef.current += 1;
+        const { delayMs, nextAttempt } = reconnectAfterClose(event.code, reconnectAttemptRef.current);
+        reconnectAttemptRef.current = nextAttempt;
         retryTimer = window.setTimeout(() => {
           if (generationRef.current === generation) setRetryNonce((value) => value + 1);
-        }, delay);
+        }, delayMs);
       }
     });
     return () => {
@@ -171,7 +186,9 @@ export function useRoomEntry() {
       return;
     }
     setError("");
-    socket.send(JSON.stringify({ type, commandId: globalThis.crypto.randomUUID() }));
+    // A bell names the reveal it reacts to so the authority can discard it as stale (ADR-0035).
+    const revealSequence = type === "bell" ? sessionRef.current?.snapshot.lastReveal?.sequence : undefined;
+    socket.send(JSON.stringify({ type, commandId: globalThis.crypto.randomUUID(), revealSequence }));
   }
 
   async function enter(path: string, payload: EntryRequest | CreateRoomRequest): Promise<void> {
@@ -223,6 +240,7 @@ export function useRoomEntry() {
     error,
     pending,
     connected,
+    bellTooSlow,
     createRoom: (name: string, configuration: Omit<CreateRoomRequest, "name" | "credentialVerifier">) =>
       enter("/api/v1/rooms", { name, credentialVerifier: "", ...configuration }),
     joinRoom: (roomCode: string, name: string) =>
