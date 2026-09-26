@@ -16,7 +16,7 @@ from uuid import UUID
 from fastapi import FastAPI, Header, Request, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
-from pydantic import ConfigDict, Field, ValidationError
+from pydantic import ConfigDict, Field, ValidationError, model_validator
 
 from .authority import (
     ApiModel,
@@ -33,6 +33,7 @@ from .authority import (
     RedisMultiplayerAuthority,
     RedisRevisionSubscription,
     RoomSnapshot,
+    StaleBellResult,
     Start,
     Viewer,
     credential_verifier,
@@ -90,6 +91,13 @@ class WebSocketAuthentication(ApiModel):
 class WebSocketRoomCommand(ApiModel):
     type: Literal["ready", "start", "bell", "leave", "forfeit", "continue", "post_match_leave"]
     command_id: str | None = Field(default=None, min_length=1, max_length=64)
+    reveal_sequence: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def _bell_names_a_reveal(self) -> WebSocketRoomCommand:
+        if self.type == "bell" and self.reveal_sequence is None:
+            raise ValueError("A bell must name the reveal sequence it reacts to")
+        return self
 
 
 @dataclass
@@ -169,7 +177,7 @@ def _room_command(payload: WebSocketRoomCommand, credential: str, now_ms: int):
     if payload.type == "start":
         return Start(verifier, now_ms=now_ms, command_id=payload.command_id)
     if payload.type == "bell":
-        return Bell(verifier, now_ms=now_ms, command_id=payload.command_id)
+        return Bell(verifier, now_ms=now_ms, command_id=payload.command_id, reveal_sequence=payload.reveal_sequence)
     if payload.type == "leave":
         return Leave(verifier, payload.command_id)
     if payload.type == "forfeit":
@@ -457,7 +465,7 @@ def create_app(
                         continue
                     command_name = command_payload.type
                     try:
-                        await app.state.authority.execute(
+                        result = await app.state.authority.execute(
                             canonical_room_code,
                             _room_command(command_payload, payload.credential, app.state.authority.now_ms()),
                         )
@@ -468,12 +476,15 @@ def create_app(
                             return
                         await websocket.send_json({"type": "error", "code": error.code, "title": error.title})
                         continue
-                    await hub.publish(canonical_room_code, app.state.authority)
+                    if isinstance(result, StaleBellResult):
+                        await websocket.send_json({"type": "bell_stale", "revealSequence": command_payload.reveal_sequence})
+                    else:
+                        await hub.publish(canonical_room_code, app.state.authority)
                     telemetry.record_websocket(
                         trace_id=trace_id,
                         room_code=canonical_room_code,
                         command=command_name,
-                        outcome="success",
+                        outcome="stale_bell" if isinstance(result, StaleBellResult) else "success",
                         elapsed_seconds=elapsed_since(started_at),
                         span=span,
                     )

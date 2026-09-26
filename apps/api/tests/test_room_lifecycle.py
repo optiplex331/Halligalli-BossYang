@@ -111,10 +111,10 @@ class RoomLifecycleTest(RedisAsyncTestCase):
             await authority.execute(created.room_code, Ready(credential))
         await authority.execute(created.room_code, Start(credentials[0], 1_000))
         for index in range(COMMAND_HISTORY_LIMIT + 5):
-            latest = await authority.execute(created.room_code, Bell(credentials[0], 1_001, f"bell-{index}"))
+            latest = await authority.execute(created.room_code, Bell(credentials[0], 1_001, f"bell-{index}", reveal_sequence=1))
 
-        replayed = await authority.execute(created.room_code, Bell(credentials[0], 1_001, f"bell-{COMMAND_HISTORY_LIMIT + 4}"))
-        forgotten = await authority.execute(created.room_code, Bell(credentials[0], 1_001, "bell-0"))
+        replayed = await authority.execute(created.room_code, Bell(credentials[0], 1_001, f"bell-{COMMAND_HISTORY_LIMIT + 4}", reveal_sequence=1))
+        forgotten = await authority.execute(created.room_code, Bell(credentials[0], 1_001, "bell-0", reveal_sequence=1))
 
         self.assertEqual(replayed.snapshot.revision, latest.snapshot.revision)
         self.assertEqual(forgotten.snapshot.revision, latest.snapshot.revision + 1)

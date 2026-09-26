@@ -243,6 +243,10 @@ class EntryResult(AuthorityResult):
     pass
 
 
+class StaleBellResult(AuthorityResult):
+    """A discarded Stale Bell (ADR-0035): the room is unchanged and nothing was written."""
+
+
 class AuthorityError(Exception):
     def __init__(self, code: str, status_code: int, title: str) -> None:
         super().__init__(title)
@@ -286,6 +290,7 @@ class Bell:
     credential_verifier: str
     now_ms: int
     command_id: str | None = None
+    reveal_sequence: int = field(kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -437,6 +442,8 @@ class _Match:
     seed: int = 0
     deck: list[CardValue] = field(default_factory=list)
     reveal_sequence: int = 0
+    # The reveal sequence whose Bell Window was won or resolved as missed; 0 when none has closed.
+    closed_bell_sequence: int = 0
     next_card_index: int = 0
     bell_fruit: Literal["banana", "strawberry", "lemon", "grape"] | None = None
     bell_opened_at: int | None = None
@@ -464,6 +471,7 @@ class _Match:
             seed=raw.get("seed", 0),
             deck=[(fruit, count) for fruit, count in raw.get("deck", LEGACY_CARD_ORDER)],
             reveal_sequence=raw["reveal_sequence"],
+            closed_bell_sequence=raw.get("closed_bell_sequence", 0),
             next_card_index=raw["next_card_index"],
             bell_fruit=raw["bell_fruit"],
             bell_opened_at=raw["bell_opened_at"],
@@ -776,7 +784,25 @@ def _flip_next(room: _Room, now_ms: int) -> None:
     match.bell_opened_at = now_ms if match.bell_fruit is not None else None
 
 
+def _is_stale_bell(room: _Room, command: Bell) -> bool:
+    """Whether a Bell names a transition whose Bell Window already closed (ADR-0035)."""
+    _participant_for_verifier(room, command.credential_verifier)
+    match = room.match
+    if match is None:
+        return False
+    if command.reveal_sequence > match.reveal_sequence:
+        raise AuthorityError("invalid_request", 422, "Bell names a card that was not revealed")
+    return (
+        room.phase != "playing"
+        or command.reveal_sequence < match.reveal_sequence
+        or match.closed_bell_sequence == match.reveal_sequence
+    )
+
+
 def _apply_room_command(room: _Room, command: AuthorityCommand, deck: DeckSource) -> AuthorityResult:
+    # A replayed command keeps its cached outcome; a Stale Bell is decided before it could be cached.
+    if isinstance(command, Bell) and command.command_id not in room.commands and _is_stale_bell(room, command):
+        return StaleBellResult(room_code=room.code, snapshot=_snapshot_for_verifier(room, command.credential_verifier))
     cached = _cache_or_conflict(room, command)
     if cached is not None:
         return cached
@@ -830,6 +856,7 @@ def _apply_room_command(room: _Room, command: AuthorityCommand, deck: DeckSource
                 score.missed_hits += 1
                 score.streak = 0
             room.match.last_event = "missed_bell"
+            room.match.closed_bell_sequence = room.match.reveal_sequence
             if _deck_exhausted(room.match):
                 _finish_match(room, command.now_ms)
             else:
@@ -863,6 +890,7 @@ def _apply_room_command(room: _Room, command: AuthorityCommand, deck: DeckSource
         reaction_ms = max(0, command.now_ms - (room.match.bell_opened_at or command.now_ms))
         _award_correct(score, collected_count=collected_count, reaction_ms=reaction_ms)
         room.match.last_event = "correct_bell"
+        room.match.closed_bell_sequence = room.match.reveal_sequence
         room.match.top_cards = [None] * len(room.match.top_cards)
         room.match.face_up_card_counts = [0] * len(room.match.face_up_card_counts)
         room.match.current_turn = participant.seat_index
@@ -1070,7 +1098,7 @@ class RedisMultiplayerAuthority:
         except Exception:
             self._record_redis("execute", "server_error", started_at)
             raise
-        self._record_redis("execute", "success", started_at)
+        self._record_redis("execute", "stale_bell" if isinstance(result, StaleBellResult) else "success", started_at)
         return result
 
     async def _create(self, command: CreateRoom) -> EntryResult:
@@ -1167,6 +1195,8 @@ class RedisMultiplayerAuthority:
                     state = await pipeline.hget(room_key, "state")
                     room = _require_room(_Room.from_json(state) if state else None)
                     result = _apply_room_command(room, command, self._deck)
+                    if isinstance(result, StaleBellResult):
+                        return result
                     pipeline.multi()
                     self._queue_room_write(pipeline, room)
                     await pipeline.execute()
