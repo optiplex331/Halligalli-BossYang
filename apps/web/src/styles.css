@@ -1189,9 +1189,9 @@ h1 {
   animation: screen-slide-in 380ms ease-out both;
 }
 
-.home-enter > *:nth-child(1) { animation: fade-rise 480ms ease-out 0ms both; }
-.home-enter > *:nth-child(2) { animation: fade-rise 480ms ease-out 80ms both; }
-.home-enter > *:nth-child(3) { animation: fade-rise 480ms ease-out 160ms both; }
+.home-enter > * { animation: fade-rise 480ms ease-out both; }
+.home-enter > *:nth-child(2) { animation-delay: 80ms; }
+.home-enter > *:nth-child(3) { animation-delay: 160ms; }
 
 @keyframes screen-slide-in {
   from { opacity: 0; transform: translateY(20px); }
@@ -1270,6 +1270,13 @@ h1 {
 
   .hud-progress {
     transition: none;
+  }
+
+  .primary-button:active,
+  .ghost-button:active,
+  .chip:active,
+  .bell-button:active:not(:disabled) {
+    transform: none;
   }
 }
 
