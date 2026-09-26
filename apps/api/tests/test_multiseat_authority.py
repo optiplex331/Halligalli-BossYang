@@ -51,7 +51,7 @@ class TableSeatMatrixAuthorityTest(RedisAsyncTestCase):
     async def test_full_face_up_count_drives_collection_and_neutral_seats_never_score(self) -> None:
         authority, credentials, started = await self._started_room(8, 2)
         await authority.execute(started.room_code, AdvanceTurn(now_ms=started.snapshot.turn_deadline_at))
-        result = await authority.execute(started.room_code, Bell(credentials[1], now_ms=1_701))
+        result = await authority.execute(started.room_code, Bell(credentials[1], now_ms=1_701, reveal_sequence=2))
 
         self.assertEqual(len(result.snapshot.scoreboard), 2)
         self.assertEqual([score.seat_index for score in result.snapshot.scoreboard], [0, 1])

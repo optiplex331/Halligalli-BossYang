@@ -9,6 +9,11 @@ describe("room socket frames", () => {
     }
   });
 
+  it("reads the stale bell outcome as its own frame, not an error", () => {
+    expect(parseServerFrame('{"type":"bell_stale","revealSequence":7}')).toEqual({ type: "bell_stale", revealSequence: 7 });
+    expect(parseServerFrame('{"type":"bell_stale"}')).toBeNull();
+  });
+
   it("reads snapshot and error frames", () => {
     expect(parseServerFrame('{"type":"snapshot","snapshot":{"revision":3}}')).toEqual({
       type: "snapshot",

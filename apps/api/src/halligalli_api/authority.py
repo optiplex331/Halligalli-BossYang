@@ -25,6 +25,9 @@ ACTIVE_ROOMS_KEY = "halligalli:rooms:active"
 ROOM_CREATION_BUDGET = 480
 ROOM_CREATION_WINDOW_SECONDS = 60 * 60
 COMMAND_HISTORY_LIMIT = 128
+# New rooms are refused once Redis uses this share of `maxmemory`, leaving headroom for running rooms.
+MEMORY_ADMISSION_RATIO = 0.8
+MEMORY_SAMPLE_SECONDS = 1.0
 POST_MATCH_DURATION_MS = 30_000
 ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 SCORE_BONUS_WINDOW_MS = 1_500
@@ -246,12 +249,20 @@ class EntryResult(AuthorityResult):
     pass
 
 
+class StaleBellResult(AuthorityResult):
+    """A discarded Stale Bell (ADR-0035): the room is unchanged and nothing was written."""
+
+
 class AuthorityError(Exception):
     def __init__(self, code: str, status_code: int, title: str) -> None:
         super().__init__(title)
         self.code = code
         self.status_code = status_code
         self.title = title
+
+
+def _capacity_exhausted() -> AuthorityError:
+    return AuthorityError("capacity_exhausted", 503, "Server is at capacity; try again shortly")
 
 
 @dataclass(frozen=True)
@@ -289,6 +300,7 @@ class Bell:
     credential_verifier: str
     now_ms: int
     command_id: str | None = None
+    reveal_sequence: int = field(kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -442,6 +454,8 @@ class _Match:
     seed: int = 0
     deck: list[CardValue] = field(default_factory=list)
     reveal_sequence: int = 0
+    # The reveal sequence whose Bell Window was won or resolved as missed; 0 when none has closed.
+    closed_bell_sequence: int = 0
     next_card_index: int = 0
     bell_fruit: Literal["banana", "strawberry", "lemon", "grape"] | None = None
     bell_opened_at: int | None = None
@@ -469,6 +483,7 @@ class _Match:
             seed=raw.get("seed", 0),
             deck=[(fruit, count) for fruit, count in raw.get("deck", LEGACY_CARD_ORDER)],
             reveal_sequence=raw["reveal_sequence"],
+            closed_bell_sequence=raw.get("closed_bell_sequence", 0),
             next_card_index=raw["next_card_index"],
             bell_fruit=raw["bell_fruit"],
             bell_opened_at=raw["bell_opened_at"],
@@ -781,7 +796,25 @@ def _flip_next(room: _Room, now_ms: int) -> None:
     match.bell_opened_at = now_ms if match.bell_fruit is not None else None
 
 
+def _is_stale_bell(room: _Room, command: Bell) -> bool:
+    """Whether a Bell names a transition whose Bell Window already closed (ADR-0035)."""
+    _participant_for_verifier(room, command.credential_verifier)
+    match = room.match
+    if match is None:
+        return False
+    if command.reveal_sequence > match.reveal_sequence:
+        raise AuthorityError("invalid_request", 422, "Bell names a card that was not revealed")
+    return (
+        room.phase != "playing"
+        or command.reveal_sequence < match.reveal_sequence
+        or match.closed_bell_sequence == match.reveal_sequence
+    )
+
+
 def _apply_room_command(room: _Room, command: AuthorityCommand, deck: DeckSource) -> AuthorityResult:
+    # A replayed command keeps its cached outcome; a Stale Bell is decided before it could be cached.
+    if isinstance(command, Bell) and command.command_id not in room.commands and _is_stale_bell(room, command):
+        return StaleBellResult(room_code=room.code, snapshot=_snapshot_for_verifier(room, command.credential_verifier))
     cached = _cache_or_conflict(room, command)
     if cached is not None:
         return cached
@@ -835,6 +868,7 @@ def _apply_room_command(room: _Room, command: AuthorityCommand, deck: DeckSource
                 score.missed_hits += 1
                 score.streak = 0
             room.match.last_event = "missed_bell"
+            room.match.closed_bell_sequence = room.match.reveal_sequence
             if _deck_exhausted(room.match):
                 _finish_match(room, command.now_ms)
             else:
@@ -868,6 +902,7 @@ def _apply_room_command(room: _Room, command: AuthorityCommand, deck: DeckSource
         reaction_ms = max(0, command.now_ms - (room.match.bell_opened_at or command.now_ms))
         _award_correct(score, collected_count=collected_count, reaction_ms=reaction_ms)
         room.match.last_event = "correct_bell"
+        room.match.closed_bell_sequence = room.match.reveal_sequence
         room.match.top_cards = [None] * len(room.match.top_cards)
         room.match.face_up_card_counts = [0] * len(room.match.face_up_card_counts)
         room.match.current_turn = participant.seat_index
@@ -992,6 +1027,8 @@ class RedisMultiplayerAuthority:
         self._clock = clock
         self._deck = deck or StandardDeck()
         self._room_creation_budget = room_creation_budget
+        self._memory_sampled_at: float | None = None
+        self._memory_admits = True
 
     @classmethod
     def from_url(
@@ -1053,12 +1090,22 @@ class RedisMultiplayerAuthority:
         return f"halligalli:entry:{idempotency_key}"
 
     async def admit_room_creation(self, client_address: str) -> None:
-        """Spend one unit of the client address's hourly room-creation budget or refuse with 429."""
+        """Spend one unit of the client address's hourly room-creation budget or refuse with 429.
+
+        Memory admission is checked first so a create refused for capacity spends no budget.
+        """
+        from redis.exceptions import OutOfMemoryError
+
+        if not await self._admits_new_room():
+            raise _capacity_exhausted()
         key = f"halligalli:creation-budget:{client_address}"
-        async with self._redis.pipeline(transaction=True) as pipeline:
-            pipeline.set(key, 0, ex=ROOM_CREATION_WINDOW_SECONDS, nx=True)
-            pipeline.incr(key)
-            _, created = await pipeline.execute()
+        try:
+            async with self._redis.pipeline(transaction=True) as pipeline:
+                pipeline.set(key, 0, ex=ROOM_CREATION_WINDOW_SECONDS, nx=True)
+                pipeline.incr(key)
+                _, created = await pipeline.execute()
+        except OutOfMemoryError as error:
+            raise _capacity_exhausted() from error
         if created > self._room_creation_budget:
             raise AuthorityError("room_creation_limited", 429, "Too many rooms were created from this address")
 
@@ -1071,6 +1118,8 @@ class RedisMultiplayerAuthority:
         room_code: str | None,
         command: AuthorityCommand,
     ) -> AuthorityResult:
+        from redis.exceptions import OutOfMemoryError
+
         started_at = time.perf_counter()
         try:
             if isinstance(command, CreateRoom):
@@ -1084,11 +1133,25 @@ class RedisMultiplayerAuthority:
         except AuthorityError:
             self._record_redis("execute", "client_error", started_at)
             raise
+        except OutOfMemoryError as error:
+            # Last line of defense: Redis reached `maxmemory` under `noeviction` despite admission control.
+            self._record_redis("execute", "server_error", started_at)
+            raise _capacity_exhausted() from error
         except Exception:
             self._record_redis("execute", "server_error", started_at)
             raise
-        self._record_redis("execute", "success", started_at)
+        self._record_redis("execute", "stale_bell" if isinstance(result, StaleBellResult) else "success", started_at)
         return result
+
+    async def _admits_new_room(self) -> bool:
+        """Whether Redis memory leaves room for another room, sampled at most once per interval."""
+        now = time.monotonic()
+        if self._memory_sampled_at is None or now - self._memory_sampled_at >= MEMORY_SAMPLE_SECONDS:
+            memory = await self._redis.info("memory")
+            maxmemory = int(memory.get("maxmemory", 0))
+            self._memory_admits = maxmemory == 0 or int(memory["used_memory"]) < maxmemory * MEMORY_ADMISSION_RATIO
+            self._memory_sampled_at = now
+        return self._memory_admits
 
     async def _create(self, command: CreateRoom) -> EntryResult:
         from redis.exceptions import WatchError
@@ -1111,6 +1174,8 @@ class RedisMultiplayerAuthority:
                     room_code=room.code,
                     snapshot=_snapshot_for_verifier(room, command.credential_verifier),
                 )
+            if not await self._admits_new_room():
+                raise _capacity_exhausted()
 
             room = _Room(
                 code=self._new_room_code(),
@@ -1184,6 +1249,8 @@ class RedisMultiplayerAuthority:
                     state = await pipeline.hget(room_key, "state")
                     room = _require_room(_Room.from_json(state) if state else None)
                     result = _apply_room_command(room, command, self._deck)
+                    if isinstance(result, StaleBellResult):
+                        return result
                     pipeline.multi()
                     self._queue_room_write(pipeline, room)
                     await pipeline.execute()
@@ -1194,12 +1261,18 @@ class RedisMultiplayerAuthority:
 
     async def advance_due(self, now_ms: int | None = None) -> list[str]:
         """Advance every room whose deadline has passed and return the codes that changed."""
+        from redis.exceptions import OutOfMemoryError
+
         now = self._clock() if now_ms is None else now_ms
         due = await self._redis.zrangebyscore(DUE_INDEX_KEY, "-inf", now, withscores=True)
         changed = []
         for room_code, due_score in due:
             try:
                 advanced = await self._advance_room_if_due(room_code, now)
+            except OutOfMemoryError:
+                # A full Redis is temporary: keep the due entry so the next sweep retries this room.
+                _logger.warning("Redis is out of memory; room %s will retry on the next sweep", room_code)
+                continue
             except (AuthorityError, KeyError, TypeError, ValueError):
                 # A room that cannot advance must not stall every other room's deadline.
                 _logger.exception("Room %s cannot advance; dropping its due entry", room_code)

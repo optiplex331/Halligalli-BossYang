@@ -63,7 +63,7 @@ class SharedCorrectBellFixtureTest(RedisAsyncTestCase):
         await authority.execute(created.room_code, AdvanceTurn(now_ms=2_000))
         completed = await authority.execute(
             created.room_code,
-            Bell(host, now_ms=2_000 + int(case["reactionMs"])),
+            Bell(host, now_ms=2_000 + int(case["reactionMs"]), reveal_sequence=2),
         )
 
         score = completed.snapshot.scoreboard[0]
@@ -88,7 +88,7 @@ class SharedCorrectBellFixtureTest(RedisAsyncTestCase):
         await authority.execute(created.room_code, Ready(guest))
         await authority.execute(created.room_code, Start(host, now_ms=1_000))
 
-        wrong_result = await authority.execute(created.room_code, Bell(host, now_ms=1_001))
+        wrong_result = await authority.execute(created.room_code, Bell(host, now_ms=1_001, reveal_sequence=1))
         wrong_score = wrong_result.snapshot.scoreboard[0]
         wrong_expected = wrong["expected"]
         self.assertEqual(wrong_result.snapshot.last_event, "wrong_bell")
