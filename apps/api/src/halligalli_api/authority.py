@@ -1035,6 +1035,11 @@ class RedisMultiplayerAuthority:
         if record is not None:
             record(operation=operation, outcome=outcome, elapsed_seconds=elapsed_since(started_at))
 
+    def _record_runtime(self, method: str, value: object) -> None:
+        record = getattr(self._telemetry, method, None)
+        if record is not None:
+            record(value)
+
     @staticmethod
     def _room_key(room_code: str) -> str:
         return f"halligalli:room:{{{room_code}}}"
@@ -1177,6 +1182,7 @@ class RedisMultiplayerAuthority:
                     await pipeline.execute()
                     return result
             except WatchError:
+                self._record_runtime("record_watch_retry", "join")
                 continue
         raise AuthorityError("concurrent_update", 409, "Room changed while joining")
 
@@ -1194,14 +1200,21 @@ class RedisMultiplayerAuthority:
                     await pipeline.watch(room_key)
                     state = await pipeline.hget(room_key, "state")
                     room = _require_room(_Room.from_json(state) if state else None)
+                    revision = room.revision
                     result = _apply_room_command(room, command, self._deck)
                     if isinstance(result, StaleBellResult):
+                        self._record_runtime("record_bell_outcome", "stale")
                         return result
                     pipeline.multi()
                     self._queue_room_write(pipeline, room)
                     await pipeline.execute()
+                    # A replayed bell leaves the revision unchanged and is not counted again.
+                    if isinstance(command, Bell) and room.revision != revision and room.match is not None:
+                        outcome = "correct" if room.match.last_event == "correct_bell" else "wrong"
+                        self._record_runtime("record_bell_outcome", outcome)
                     return result
             except WatchError:
+                self._record_runtime("record_watch_retry", "room_command")
                 continue
         raise AuthorityError("concurrent_update", 409, "Room changed while updating")
 
@@ -1256,12 +1269,20 @@ class RedisMultiplayerAuthority:
                     command = _due_command(room, now_ms)
                     if command is None:
                         return False
+                    turn_deadline_at = room.match.turn_deadline_at if isinstance(command, AdvanceTurn) and room.match else None
+                    missed = isinstance(command, AdvanceTurn) and room.match is not None and room.match.bell_fruit is not None
                     _apply_room_command(room, command, self._deck)
                     pipeline.multi()
                     self._queue_room_write(pipeline, room)
                     await pipeline.execute()
+                    if turn_deadline_at is not None:
+                        # A fresh clock, not the sweep's start time, so a slow sweep cannot hide lateness.
+                        self._record_runtime("record_tick_lateness", max(0, self._clock() - turn_deadline_at) / 1_000)
+                    if missed:
+                        self._record_runtime("record_bell_outcome", "missed")
                     return True
             except WatchError:
+                self._record_runtime("record_watch_retry", "due_advance")
                 continue
         return False
 
@@ -1286,6 +1307,10 @@ class RedisMultiplayerAuthority:
     async def active_room_count(self) -> int:
         await self._redis.zremrangebyscore(ACTIVE_ROOMS_KEY, "-inf", self._clock())
         return await self._redis.zcard(ACTIVE_ROOMS_KEY)
+
+    async def redis_memory(self) -> dict[str, int]:
+        info = await self._redis.info("memory")
+        return {"used_memory": int(info["used_memory"]), "maxmemory": int(info.get("maxmemory", 0))}
 
     async def readiness(self) -> bool:
         try:
