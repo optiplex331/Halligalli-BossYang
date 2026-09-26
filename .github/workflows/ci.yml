@@ -1,36 +1,66 @@
 name: CI
 
+# Pull request CI. Work jobs are routed by changed paths inside the workflow;
+# `ci-ok` is the single required check and treats skipped work as success.
+
 on:
   pull_request:
     branches:
       - master
-  push:
-    branches:
-      - master
   workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
   pull-requests: read
 
 jobs:
-  product-checks:
-    name: Product checks
+  changes:
+    name: Changes and delivery control
     runs-on: ubuntu-24.04
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+      api: ${{ steps.filter.outputs.api }}
+      container: ${{ steps.filter.outputs.container }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
 
-      - name: Resolve check routing
-        id: changes
-        uses: ./.github/actions/resolve-check-routing
+      - name: Detect changed paths
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          filters: |
+            web:
+              - "apps/web/**"
+              - "contracts/**"
+              - "package.json"
+              - "pnpm-lock.yaml"
+              - "pnpm-workspace.yaml"
+              - ".github/workflows/ci.yml"
+            api:
+              - "apps/api/**"
+              - "contracts/**"
+              - ".github/workflows/ci.yml"
+            container:
+              - ".dockerignore"
+              - "apps/**"
+              - "package.json"
+              - "pnpm-lock.yaml"
+              - "pnpm-workspace.yaml"
+              - ".github/workflows/ci.yml"
+              - ".github/workflows/build-images.yml"
+              - ".github/utils/resolve_image_identity.py"
+              - ".github/utils/paired_smoke.py"
+            delivery:
+              - ".github/**"
 
       - name: Lint GitHub Actions workflows
-        if: steps.changes.outputs.delivery_control_checks_required == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.delivery == 'true'
         uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
         with:
           version: 1.7.12
@@ -38,70 +68,102 @@ jobs:
       - name: Validate release configuration
         run: python3 .github/utils/validate_release_config.py
 
-      - name: Test release utilities
+      - name: Test delivery utilities
         run: python3 -m unittest discover -s .github/utils/tests -p 'test_*.py'
 
-      - name: Skip heavy product checks
-        if: steps.changes.outputs.product_checks_required != 'true'
-        run: |
-          echo "Heavy product checks are not required for these changes."
+  web:
+    name: Web checks
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up pnpm
-        if: steps.changes.outputs.product_checks_required == 'true'
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           run_install: false
 
       - name: Set up Node.js with pnpm cache
-        if: steps.changes.outputs.product_checks_required == 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: package.json
           cache: pnpm
 
-      - name: Set up uv
-        if: steps.changes.outputs.product_checks_required == 'true'
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-
       - name: Install dependencies
-        if: steps.changes.outputs.product_checks_required == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Run Web tests
-        if: steps.changes.outputs.product_checks_required == 'true'
         run: pnpm --dir apps/web run test
 
       - name: Run Web layout tests
-        if: steps.changes.outputs.product_checks_required == 'true'
         run: pnpm --dir apps/web run test:layout
 
-      - name: Run Redis-backed API integration tests
-        if: steps.changes.outputs.product_checks_required == 'true'
-        env:
-          HALLIGALLI_TEST_REDIS_URL: redis://localhost:6379/0
-        run: |
-          redis_container=halligalli-api-tests-redis
-          cleanup() {
-            docker rm --force "$redis_container" >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
-          cleanup
-          docker run --detach --name "$redis_container" --publish 6379:6379 \
-            redis@sha256:62b5498c91778f738f0efbf0a6fd5b434011235a3e7b5f2ed4a2c0c63bb1c786
-          for _ in $(seq 1 30); do
-            if docker exec "$redis_container" redis-cli ping | grep --quiet PONG; then
-              pnpm run test:api
-              exit 0
-            fi
-            sleep 1
-          done
-          docker logs "$redis_container"
-          exit 1
-
       - name: Typecheck
-        if: steps.changes.outputs.product_checks_required == 'true'
         run: pnpm run typecheck
 
       - name: Build app
-        if: steps.changes.outputs.product_checks_required == 'true'
         run: pnpm run build
+
+  api:
+    name: API checks
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-24.04
+    services:
+      redis:
+        image: redis@sha256:62b5498c91778f738f0efbf0a6fd5b434011235a3e7b5f2ed4a2c0c63bb1c786
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+      - name: Run Redis-backed API integration tests
+        env:
+          HALLIGALLI_TEST_REDIS_URL: redis://localhost:6379/0
+        run: uv run --project apps/api python -m unittest discover -s apps/api/tests -p 'test_*.py'
+
+  container:
+    name: Container images
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.container == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-images.yml
+    with:
+      push: false
+
+  ci-ok:
+    name: ci-ok
+    needs: [changes, web, api, container]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Evaluate required work
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          WEB: ${{ needs.web.result }}
+          API: ${{ needs.api.result }}
+          CONTAINER: ${{ needs.container.result }}
+        run: |
+          echo "changes=$CHANGES web=$WEB api=$API container=$CONTAINER"
+          if [[ "$CHANGES" != "success" ]]; then
+            echo "Change detection and delivery-control checks did not succeed." >&2
+            exit 1
+          fi
+          for result in "$WEB" "$API" "$CONTAINER"; do
+            if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
+              echo "A required work job did not succeed." >&2
+              exit 1
+            fi
+          done

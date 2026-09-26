@@ -14,9 +14,17 @@ updates:
         update-types:
           - "version-update:semver-major"
     groups:
-      product-dependencies:
+      product-dependencies-minor-patch:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch
+      product-dependencies-major:
+        patterns:
+          - "*"
+        update-types:
+          - major
 
   - package-ecosystem: github-actions
     directory: /
@@ -28,9 +36,17 @@ updates:
       timezone: Europe/Amsterdam
     open-pull-requests-limit: 2
     groups:
-      actions:
+      actions-minor-patch:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch
+      actions-major:
+        patterns:
+          - "*"
+        update-types:
+          - major
 
   - package-ecosystem: uv
     directory: /apps/api
@@ -42,9 +58,17 @@ updates:
       timezone: Europe/Amsterdam
     open-pull-requests-limit: 3
     groups:
-      api-dependencies:
+      api-dependencies-minor-patch:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch
+      api-dependencies-major:
+        patterns:
+          - "*"
+        update-types:
+          - major
 
   - package-ecosystem: docker
     directories:
@@ -58,6 +82,14 @@ updates:
       timezone: Europe/Amsterdam
     open-pull-requests-limit: 2
     groups:
-      base-images:
+      base-images-minor-patch:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch
+      base-images-major:
+        patterns:
+          - "*"
+        update-types:
+          - major
