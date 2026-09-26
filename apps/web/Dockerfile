@@ -14,7 +14,7 @@ RUN pnpm --dir apps/web run build \
   && printf '{"version":"%s","commit":"%s"}\n' "$HALLIGALLI_RELEASE_VERSION" "$HALLIGALLI_RELEASE_COMMIT" \
   > apps/web/dist/internal-identity.json
 
-FROM nginxinc/nginx-unprivileged:1.30-alpine@sha256:4714e0b1b2577eaa1a6131d07c958b67f0eb68e6d0521e90c6e5287db8cf0bc5
+FROM nginxinc/nginx-unprivileged:1.31-alpine@sha256:6a23acdfca2b9cfbcec61419e3f1426bcbedb91362f2f19306a8567423bb4612
 
 # Alpine fixes often land before a new base digest; the Trivy gate relies on
 # this upgrade, and the published image is still pinned by its own digest.
