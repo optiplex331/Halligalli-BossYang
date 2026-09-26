@@ -1028,7 +1028,7 @@ class RedisMultiplayerAuthority:
         self._deck = deck or StandardDeck()
         self._room_creation_budget = room_creation_budget
         self._memory_sampled_at: float | None = None
-        self._memory_admits = True
+        self._memory: dict[str, int] = {"used_memory": 0, "maxmemory": 0}
 
     @classmethod
     def from_url(
@@ -1050,6 +1050,11 @@ class RedisMultiplayerAuthority:
         record = getattr(self._telemetry, "record_redis", None)
         if record is not None:
             record(operation=operation, outcome=outcome, elapsed_seconds=elapsed_since(started_at))
+
+    def _record_runtime(self, method: str, value: object) -> None:
+        record = getattr(self._telemetry, method, None)
+        if record is not None:
+            record(value)
 
     @staticmethod
     def _room_key(room_code: str) -> str:
@@ -1143,15 +1148,19 @@ class RedisMultiplayerAuthority:
         self._record_redis("execute", "stale_bell" if isinstance(result, StaleBellResult) else "success", started_at)
         return result
 
-    async def _admits_new_room(self) -> bool:
-        """Whether Redis memory leaves room for another room, sampled at most once per interval."""
+    async def redis_memory(self) -> dict[str, int]:
+        """Redis `used_memory` and `maxmemory`, sampled at most once per interval."""
         now = time.monotonic()
         if self._memory_sampled_at is None or now - self._memory_sampled_at >= MEMORY_SAMPLE_SECONDS:
             memory = await self._redis.info("memory")
-            maxmemory = int(memory.get("maxmemory", 0))
-            self._memory_admits = maxmemory == 0 or int(memory["used_memory"]) < maxmemory * MEMORY_ADMISSION_RATIO
+            self._memory = {"used_memory": int(memory["used_memory"]), "maxmemory": int(memory.get("maxmemory", 0))}
             self._memory_sampled_at = now
-        return self._memory_admits
+        return self._memory
+
+    async def _admits_new_room(self) -> bool:
+        """Whether Redis memory leaves room for another room."""
+        memory = await self.redis_memory()
+        return memory["maxmemory"] == 0 or memory["used_memory"] < memory["maxmemory"] * MEMORY_ADMISSION_RATIO
 
     async def _create(self, command: CreateRoom) -> EntryResult:
         from redis.exceptions import WatchError
@@ -1231,6 +1240,7 @@ class RedisMultiplayerAuthority:
                     await pipeline.execute()
                     return result
             except WatchError:
+                self._record_runtime("record_watch_retry", "join")
                 continue
         raise AuthorityError("concurrent_update", 409, "Room changed while joining")
 
@@ -1248,14 +1258,21 @@ class RedisMultiplayerAuthority:
                     await pipeline.watch(room_key)
                     state = await pipeline.hget(room_key, "state")
                     room = _require_room(_Room.from_json(state) if state else None)
+                    revision = room.revision
                     result = _apply_room_command(room, command, self._deck)
                     if isinstance(result, StaleBellResult):
+                        self._record_runtime("record_bell_outcome", "stale")
                         return result
                     pipeline.multi()
                     self._queue_room_write(pipeline, room)
                     await pipeline.execute()
+                    # A replayed bell leaves the revision unchanged and is not counted again.
+                    if isinstance(command, Bell) and room.revision != revision and room.match is not None:
+                        outcome = "correct" if room.match.last_event == "correct_bell" else "wrong"
+                        self._record_runtime("record_bell_outcome", outcome)
                     return result
             except WatchError:
+                self._record_runtime("record_watch_retry", "room_command")
                 continue
         raise AuthorityError("concurrent_update", 409, "Room changed while updating")
 
@@ -1316,12 +1333,20 @@ class RedisMultiplayerAuthority:
                     command = _due_command(room, now_ms)
                     if command is None:
                         return False
+                    turn_deadline_at = room.match.turn_deadline_at if isinstance(command, AdvanceTurn) and room.match else None
+                    missed = isinstance(command, AdvanceTurn) and room.match is not None and room.match.bell_fruit is not None
                     _apply_room_command(room, command, self._deck)
                     pipeline.multi()
                     self._queue_room_write(pipeline, room)
                     await pipeline.execute()
+                    if turn_deadline_at is not None:
+                        # A fresh clock, not the sweep's start time, so a slow sweep cannot hide lateness.
+                        self._record_runtime("record_tick_lateness", max(0, self._clock() - turn_deadline_at) / 1_000)
+                    if missed:
+                        self._record_runtime("record_bell_outcome", "missed")
                     return True
             except WatchError:
+                self._record_runtime("record_watch_retry", "due_advance")
                 continue
         return False
 

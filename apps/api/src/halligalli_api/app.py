@@ -142,6 +142,9 @@ class RoomSocketHub:
     def __init__(self) -> None:
         self._members: dict[str, dict[WebSocket, _SocketMember]] = {}
 
+    def socket_count(self) -> int:
+        return sum(len(members) for members in self._members.values())
+
     def attach(self, room_code: str, websocket: WebSocket, credential: str, revision: int) -> None:
         self._members.setdefault(room_code, {})[websocket] = _SocketMember(credential, revision)
 
@@ -187,6 +190,12 @@ def _runtime_authority(telemetry: Telemetry) -> RedisMultiplayerAuthority:
         os.environ.get("HALLIGALLI_REDIS_URL", "redis://redis:6379/0"),
         telemetry=telemetry,
     )
+
+
+def _runtime_summary_interval() -> float | None:
+    """Seconds between stdout runtime summaries; 0 disables them."""
+    seconds = float(os.environ.get("HALLIGALLI_RUNTIME_SUMMARY_SECONDS", "15"))
+    return seconds if seconds > 0 else None
 
 
 def _canonical_room_code(room_code: str) -> str:
@@ -236,6 +245,7 @@ def create_app(
     due_interval_seconds: float = 0.1,
     startup_timeout_seconds: float = 10.0,
     trusted_proxy_hops: int | None = None,
+    summary_interval_seconds: float | None = None,
 ) -> FastAPI:
     build_identity = _load_release_identity()
     proxy_hops = _trusted_proxy_hops_from_env() if trusted_proxy_hops is None else trusted_proxy_hops
@@ -245,9 +255,26 @@ def create_app(
 
     async def advance_due_rooms() -> None:
         while True:
+            started_at = time.perf_counter()
             for room_code in await selected_authority.advance_due():
                 await hub.publish(room_code, selected_authority)
+            telemetry.record_due_processing(elapsed_since(started_at))
             await asyncio.sleep(due_interval_seconds)
+
+    async def emit_runtime_summaries(interval_seconds: float) -> None:
+        read_memory = getattr(selected_authority, "redis_memory", None)
+        while True:
+            await asyncio.sleep(interval_seconds)
+            try:
+                memory = await read_memory() if read_memory is not None else None
+            except Exception:
+                memory = None
+            telemetry.emit_runtime_summary(
+                interval_seconds=interval_seconds,
+                active_rooms=await active_room_count(),
+                active_sockets=hub.socket_count(),
+                redis_memory=memory,
+            )
 
     ready_subscriptions: list[RedisRevisionSubscription] = []
 
@@ -269,6 +296,10 @@ def create_app(
         tasks = [asyncio.create_task(supervise("due deadline loop", advance_due_rooms))]
         if ready_subscriptions:
             tasks.append(asyncio.create_task(supervise("revision forwarder", forward_revisions)))
+        if summary_interval_seconds is not None:
+            tasks.append(asyncio.create_task(
+                supervise("runtime summary", lambda: emit_runtime_summaries(summary_interval_seconds)),
+            ))
         try:
             yield
         finally:
@@ -552,7 +583,7 @@ def create_app(
     return app
 
 
-app = create_app()
+app = create_app(summary_interval_seconds=_runtime_summary_interval())
 
 
 __all__ = ["app", "create_app"]

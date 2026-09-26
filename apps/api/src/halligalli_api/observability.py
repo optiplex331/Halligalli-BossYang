@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import sys
-from collections import Counter
+from collections import Counter, deque
 from collections.abc import Iterator
 from contextlib import contextmanager
 from time import perf_counter
@@ -18,6 +18,46 @@ from opentelemetry.trace import Span
 
 
 Outcome = Literal["success", "client_error", "server_error"]
+BellOutcome = Literal["correct", "wrong", "stale", "missed"]
+
+# Millisecond-scale buckets; 0.15 s and 0.25 s mark the load test's tick-lateness decision and abort thresholds.
+LATENCY_BUCKETS_SECONDS = (0.005, 0.01, 0.025, 0.05, 0.1, 0.15, 0.25, 0.5, 1.0, 2.5)
+_HISTOGRAMS = {
+    "command": ("halligalli_command_latency_seconds", ("command",)),
+    "due": ("halligalli_due_processing_seconds", ()),
+    "lateness": ("halligalli_turn_tick_lateness_seconds", ()),
+}
+_COUNTERS = {
+    "watch_retry": ("halligalli_watch_retries_total", ("operation",)),
+    "bell": ("halligalli_bell_outcomes_total", ("outcome",)),
+}
+# Bounds the samples kept for one summary interval's exact p95.
+_LATENESS_SAMPLE_LIMIT = 10_000
+
+
+class _Histogram:
+    def __init__(self) -> None:
+        self.buckets = [0] * len(LATENCY_BUCKETS_SECONDS)
+        self.count = 0
+        self.total = 0.0
+
+    def observe(self, seconds: float) -> None:
+        for index, bound in enumerate(LATENCY_BUCKETS_SECONDS):
+            if seconds <= bound:
+                self.buckets[index] += 1
+        self.count += 1
+        self.total += seconds
+
+
+def _labels(names: tuple[str, ...], values: tuple[str, ...]) -> str:
+    return ",".join(f'{name}="{value}"' for name, value in zip(names, values, strict=True))
+
+
+def _p95(samples: list[float]) -> float | None:
+    if not samples:
+        return None
+    ordered = sorted(samples)
+    return ordered[max(0, -(-len(ordered) * 95 // 100) - 1)]
 
 
 class Telemetry:
@@ -34,6 +74,10 @@ class Telemetry:
         self._logger.propagate = False
         self._counts: Counter[tuple[str, ...]] = Counter()
         self._durations: Counter[tuple[str, ...]] = Counter()
+        self._histograms: dict[tuple[str, ...], _Histogram] = {}
+        self._counters: Counter[tuple[str, ...]] = Counter()
+        self._interval_lateness: deque[float] = deque(maxlen=_LATENESS_SAMPLE_LIMIT)
+        self._interval_watch_retries = 0
         self._provider = TracerProvider(resource=Resource.create({"service.name": "halligalli-api"}))
         exporter = span_exporter or self._otlp_exporter()
         if exporter is not None:
@@ -102,6 +146,7 @@ class Telemetry:
         span: Span | None = None,
     ) -> None:
         labels = (command, outcome)
+        self._observe("command", elapsed_seconds, command)
         self._counts[("websocket", *labels)] += 1
         self._durations[("websocket", *labels)] += elapsed_seconds
         trace_id = self._record_span("websocket.command", {
@@ -126,6 +171,48 @@ class Telemetry:
             duration_ms=round(elapsed_seconds * 1000, 3),
         )
 
+    def _observe(self, kind: str, seconds: float, *labels: str) -> None:
+        self._histograms.setdefault((kind, *labels), _Histogram()).observe(seconds)
+
+    def record_due_processing(self, elapsed_seconds: float) -> None:
+        self._observe("due", elapsed_seconds)
+
+    def record_tick_lateness(self, lateness_seconds: float) -> None:
+        self._observe("lateness", lateness_seconds)
+        self._interval_lateness.append(lateness_seconds)
+
+    def record_watch_retry(self, operation: str) -> None:
+        self._counters[("watch_retry", operation)] += 1
+        self._interval_watch_retries += 1
+
+    def record_bell_outcome(self, outcome: BellOutcome) -> None:
+        self._counters[("bell", outcome)] += 1
+
+    def emit_runtime_summary(
+        self,
+        *,
+        interval_seconds: float,
+        active_rooms: int,
+        active_sockets: int,
+        redis_memory: dict[str, int] | None,
+    ) -> None:
+        """Print one greppable line for the interval since the previous summary, then start a new interval."""
+        p95 = _p95(list(self._interval_lateness))
+        memory = redis_memory or {}
+        self._emit(
+            event="runtime_summary",
+            interval_s=interval_seconds,
+            tick_lateness_p95_ms=None if p95 is None else round(p95 * 1000, 1),
+            tick_samples=len(self._interval_lateness),
+            watch_retries=self._interval_watch_retries,
+            active_rooms=active_rooms,
+            active_sockets=active_sockets,
+            redis_used_memory_bytes=memory.get("used_memory"),
+            redis_maxmemory_bytes=memory.get("maxmemory"),
+        )
+        self._interval_lateness.clear()
+        self._interval_watch_retries = 0
+
     def metrics(self, *, active_rooms: int) -> str:
         lines = ["# TYPE halligalli_active_rooms gauge", f"halligalli_active_rooms {active_rooms}"]
         for (kind, *labels), count in sorted(self._counts.items()):
@@ -139,6 +226,23 @@ class Telemetry:
             duration = self._durations[(kind, *labels)]
             base = metric.removesuffix("_total") + "_duration_seconds"
             lines.extend((f"{base}_count{{{rendered}}} {count}", f"{base}_sum{{{rendered}}} {duration:.6f}"))
+        for kind, (metric, names) in _HISTOGRAMS.items():
+            lines.append(f"# TYPE {metric} histogram")
+            for (series_kind, *labels), histogram in sorted(self._histograms.items(), key=lambda item: item[0]):
+                if series_kind != kind:
+                    continue
+                rendered = _labels(names, tuple(labels))
+                prefix = f"{rendered}," if rendered else ""
+                for bound, cumulative in zip(LATENCY_BUCKETS_SECONDS, histogram.buckets, strict=True):
+                    lines.append(f'{metric}_bucket{{{prefix}le="{bound}"}} {cumulative}')
+                lines.append(f'{metric}_bucket{{{prefix}le="+Inf"}} {histogram.count}')
+                suffix = f"{{{rendered}}}" if rendered else ""
+                lines.extend((f"{metric}_count{suffix} {histogram.count}", f"{metric}_sum{suffix} {histogram.total:.6f}"))
+        for kind, (metric, names) in _COUNTERS.items():
+            lines.append(f"# TYPE {metric} counter")
+            for (series_kind, *labels), count in sorted(self._counters.items()):
+                if series_kind == kind:
+                    lines.append(f"{metric}{{{_labels(names, tuple(labels))}}} {count}")
         return "\n".join(lines) + "\n"
 
     def shutdown(self) -> None:
