@@ -13,6 +13,12 @@ const MAX_PROBE_ROOMS = 60;
 const MAX_STEP_SECONDS = 180;
 const RUN_LIMIT_MS = 20 * 60 * 1_000;
 const SUMMARY_SILENCE_MS = 60_000;
+const K3S_ORIGIN = "https://k3s.halligalli.games";
+const SERVICE_RESTART_CLOSE_CODE = 1012;
+// Mirrors the Web client's reconnect backoff after a failed attempt (apps/web socket-protocol.ts).
+const RECONNECT_BASE_MS = 400;
+const RECONNECT_CAP_MS = 5_000;
+const RESTART_RECONNECT_ATTEMPTS = 5;
 // Steps use 5 x 180 s; the two drains share the remaining budget so a full run ends inside 20 minutes.
 const DRAIN_LIMIT_MS = 45_000;
 const FORFEIT_GRACE_MS = 10_000;
@@ -35,6 +41,7 @@ Options:
   --step-seconds <1..180>       Duration of each step (default: 180)
   --origin <loopback-http-url>  Web origin (default: http://localhost:5173)
   --target live-demo            Explicitly select https://play.halligalli.games
+  --target k3s                  Explicitly select https://k3s.halligalli.games (approved drills only)
   --metrics-url <loopback-url>  Optional local /internal/metrics endpoint
   --runtime-summary-file <path> Tail appended runtime_summary JSON lines
   --runtime-summary-stdin       Read runtime_summary JSON lines from stdin
@@ -101,14 +108,14 @@ function parseArgs(argv) {
   if (options.stepCount * options.stepSeconds * 1_000 + 2 * DRAIN_LIMIT_MS > RUN_LIMIT_MS) {
     throw new Error("Steps and drains must fit inside the 20 minute run limit; use fewer steps or shorter --step-seconds");
   }
-  if (options.target !== "local" && options.target !== "live-demo") {
-    throw new Error("--target must be local or live-demo");
+  if (!["local", "live-demo", "k3s"].includes(options.target)) {
+    throw new Error("--target must be local, live-demo, or k3s");
   }
-  if (options.target === "live-demo") {
+  if (options.target !== "local") {
     if (options.origin !== "http://localhost:5173") {
-      throw new Error("--origin cannot be combined with --target live-demo");
+      throw new Error(`--origin cannot be combined with --target ${options.target}`);
     }
-    options.origin = "https://play.halligalli.games";
+    options.origin = options.target === "k3s" ? K3S_ORIGIN : "https://play.halligalli.games";
   }
   const origin = new URL(options.origin);
   const isLoopback = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(origin.hostname);
@@ -210,6 +217,9 @@ class Monitor {
     this.totalMissedWindowsPlanned = 0;
     this.totalWrongBellAttempts = 0;
     this.totalReconnects = 0;
+    this.serviceRestartCloses = 0;
+    this.restartReconnectMs = [];
+    this.windowsMissedDuringRestart = 0;
     this.totalRevealReactions = [];
     this.clientLatenessWindow = [];
     this.errorReasons = new Map();
@@ -270,6 +280,15 @@ class Monitor {
     if (this.clientOperations > 0 && this.clientErrors / this.clientOperations > 0.02) {
       this.abort("client error rate exceeded 2%");
     }
+  }
+
+  recordServiceRestartClose() {
+    this.serviceRestartCloses += 1;
+    if (this.currentStep) this.currentStep.serviceRestartCloses += 1;
+  }
+
+  recordRestartReconnect(elapsedMs) {
+    this.restartReconnectMs.push(elapsedMs);
   }
 
   registerClient(client) {
@@ -419,7 +438,7 @@ function updateStepOutcome(step, name, amount) {
 }
 
 class SocketClient {
-  constructor({ monitor, manager, roomCode, credential, seatIndex, origin, websocketOrigin }) {
+  constructor({ monitor, manager, roomCode, credential, seatIndex, origin, websocketOrigin, countOpenFailure = true }) {
     this.monitor = monitor;
     this.manager = manager;
     this.roomCode = roomCode;
@@ -427,6 +446,7 @@ class SocketClient {
     this.seatIndex = seatIndex;
     this.origin = origin;
     this.websocketOrigin = websocketOrigin;
+    this.countOpenFailure = countOpenFailure;
     this.socket = null;
     this.latestSnapshot = null;
     this.lastRevision = null;
@@ -458,9 +478,9 @@ class SocketClient {
         settled = true;
         clearTimeout(connectionTimer);
         this.openFailed = true;
-        this.monitor.recordOperation(false, "WebSocket connection failed");
+        if (this.countOpenFailure) this.monitor.recordOperation(false, "WebSocket connection failed");
         const error = new Error("WebSocket connection failed");
-        error.clientCounted = true;
+        error.clientCounted = this.countOpenFailure;
         reject(error);
       };
       connectionTimer = setTimeout(failOpen, 8_000);
@@ -508,6 +528,14 @@ class SocketClient {
       });
       socket.addEventListener("error", failOpen);
       socket.addEventListener("close", (event) => {
+        const reconnectDelayMs = settled && !this.intentionalClose ? restartReconnectDelayMs(event.code) : null;
+        if (reconnectDelayMs !== null) {
+          // A planned restart: release this client's waiters, then let the room reconnect the bot as the Web would.
+          this.close(true);
+          this.manager.onSocketClose(this);
+          this.manager.onServiceRestart(this, reconnectDelayMs);
+          return;
+        }
         this.isClosed = true;
         if (!settled && !this.intentionalClose) failOpen();
         if (!this.intentionalClose && !this.openFailed && !this.monitor.abortReason) {
@@ -689,6 +717,13 @@ function countedError(message) {
   return error;
 }
 
+// Returns the delay before a bot reconnects after the server closed its socket, or null to count the close
+// as a client error. Only a planned restart (1012) reconnects, with the Web client's 0-500 ms jitter; a 1001
+// or 1006 during a rollout means a tier dropped the socket instead of the API closing it gracefully.
+function restartReconnectDelayMs(closeCode) {
+  return closeCode === SERVICE_RESTART_CLOSE_CODE ? randomInteger(0, 500) : null;
+}
+
 function randomInteger(minimum, maximum) {
   return minimum + Math.floor(Math.random() * (maximum - minimum + 1));
 }
@@ -729,6 +764,7 @@ class RoomManager {
     this.lastProcessedScores = null;
     this.currentStep = null;
     this.matchStartTimes = new Map();
+    this.restartReconnectsPending = 0;
     this.pendingBellTasks = new Set();
   }
 
@@ -786,8 +822,9 @@ class RoomManager {
     await Promise.all(this.bots.map((bot) => this.connectBot(bot)));
   }
 
-  async connectBot(bot) {
+  async connectBot(bot, { countOpenFailure = true } = {}) {
     const client = new SocketClient({
+      countOpenFailure,
       monitor: this.monitor,
       manager: this,
       roomCode: this.roomCode,
@@ -810,6 +847,43 @@ class RoomManager {
 
   onSocketClose(client) {
     this.closedSockets.add(client);
+  }
+
+  onServiceRestart(client, reconnectDelayMs) {
+    const bot = this.bots?.find((candidate) => candidate.socketClient === client);
+    if (!bot || this.monitor.abortReason) return;
+    const closedAt = Date.now();
+    this.monitor.recordServiceRestartClose();
+    this.reconnectAfterRestart(bot, client, closedAt, reconnectDelayMs).catch((error) => {
+      if (!this.monitor.abortReason) this.monitor.recordError(`restart reconnect: ${String(error?.message ?? error).slice(0, 80)}`);
+    });
+  }
+
+  async reconnectAfterRestart(bot, closedClient, closedAt, firstDelayMs) {
+    this.restartReconnectsPending += 1;
+    try {
+      await this.retryRestartReconnect(bot, closedClient, closedAt, firstDelayMs);
+    } finally {
+      this.restartReconnectsPending -= 1;
+    }
+  }
+
+  async retryRestartReconnect(bot, closedClient, closedAt, firstDelayMs) {
+    // Like the Web client: reconnect after the restart jitter, then back off while the old replica leaves the Service.
+    let delayMs = firstDelayMs;
+    for (let attempt = 0; attempt < RESTART_RECONNECT_ATTEMPTS; attempt += 1) {
+      await delay(delayMs);
+      if (this.monitor.abortReason || (bot.socketClient !== closedClient && !bot.socketClient?.openFailed)) return;
+      try {
+        await this.connectBot(bot, { countOpenFailure: false });
+        this.monitor.recordRestartReconnect(Date.now() - closedAt);
+        return;
+      } catch {
+        const ceiling = Math.min(RECONNECT_CAP_MS, RECONNECT_BASE_MS * 2 ** attempt);
+        delayMs = Math.round(ceiling / 2 + Math.random() * (ceiling / 2));
+      }
+    }
+    throw new Error(`no reconnect after ${RESTART_RECONNECT_ATTEMPTS} attempts`);
   }
 
   recordInvariant(invariant, observed) {
@@ -892,7 +966,9 @@ class RoomManager {
       this.handledTransitions.add(transitionKey);
       const bots = this.availableBots();
       if (bots.length < 2) {
-        this.recordInvariant("at least two bots race every open Bell Window", "fewer than two connected bots");
+        // Bots still reconnecting after a planned restart cannot race; count those windows instead of a violation.
+        if (this.restartReconnectsPending > 0) this.monitor.windowsMissedDuringRestart += 1;
+        else this.recordInvariant("at least two bots race every open Bell Window", "fewer than two connected bots");
         return;
       }
       const racers = chooseDistinct(bots, 2);
@@ -1099,6 +1175,7 @@ function createStepState(definition) {
     plannedMissedWindows: 0,
     wrongBellAttempts: 0,
     reconnects: 0,
+    serviceRestartCloses: 0,
     reactionSamplesMs: [],
     clientCadenceLatenessMs: [],
     clientCadenceGapMs: [],
@@ -1364,6 +1441,7 @@ function stepReport(step) {
     plannedMissedWindows: step.plannedMissedWindows,
     accidentalWrongBellAttempts: step.wrongBellAttempts,
     reconnects: step.reconnects,
+    serviceRestartCloses: step.serviceRestartCloses,
     clientErrorRate: step.clientOperations > 0 ? round(step.clientErrors / step.clientOperations) : 0,
     clientOperations: step.clientOperations,
     clientErrors: step.clientErrors,
@@ -1540,7 +1618,7 @@ function buildResult({ monitor, scheduler, steps, globalMetricsStart, globalMetr
     : designStep.serverTickLatenessP95Ms > 150 || (designCpuRatio !== null && designCpuRatio > 0.8);
   return {
     schemaVersion: 1,
-    target: options.target === "local" ? "localhost" : "approved-live-demo",
+    target: { local: "localhost", "live-demo": "approved-live-demo", k3s: "approved-k3s" }[options.target],
     startedAt: new Date(monitor.startedAt).toISOString(),
     finishedAt: new Date().toISOString(),
     totalDurationSeconds: round((Date.now() - monitor.startedAt) / 1_000, 2),
@@ -1582,6 +1660,12 @@ function buildResult({ monitor, scheduler, steps, globalMetricsStart, globalMetr
       plannedMissedWindows: monitor.totalMissedWindowsPlanned,
       accidentalWrongBellAttempts: monitor.totalWrongBellAttempts,
       reconnects: monitor.totalReconnects,
+      serviceRestartCloses: monitor.serviceRestartCloses,
+      restartReconnects: monitor.restartReconnectMs.length,
+      restartReconnectP50Ms: round(percentile(monitor.restartReconnectMs, 0.5)),
+      restartReconnectP95Ms: round(percentile(monitor.restartReconnectMs, 0.95)),
+      restartReconnectMaxMs: monitor.restartReconnectMs.length ? Math.max(...monitor.restartReconnectMs) : null,
+      bellWindowsUnracedDuringRestart: monitor.windowsMissedDuringRestart,
       intendedReactionP50Ms: round(percentile(monitor.totalRevealReactions, 0.5)),
     },
     steps: stepResults,
@@ -1666,6 +1750,7 @@ function markdownReport(result) {
     `- Planned missed windows: ${result.totals.plannedMissedWindows}`,
     `- Accidental wrong bell attempts: ${result.totals.accidentalWrongBellAttempts}`,
     `- Reconnects: ${result.totals.reconnects}`,
+    `- Planned restart closes (${SERVICE_RESTART_CLOSE_CODE}): ${result.totals.serviceRestartCloses}; reconnected ${result.totals.restartReconnects} (p50 ${result.totals.restartReconnectP50Ms ?? "n/a"} ms, p95 ${result.totals.restartReconnectP95Ms ?? "n/a"} ms, max ${result.totals.restartReconnectMaxMs ?? "n/a"} ms); Bell Windows unraced while reconnecting: ${result.totals.bellWindowsUnracedDuringRestart}`,
     `- Intended reaction median: ${result.totals.intendedReactionP50Ms ?? "n/a"} ms`,
     "",
   );

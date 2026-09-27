@@ -65,3 +65,9 @@ node tests/load/harness.mjs \
 `az containerapp logs show --follow` prints nothing when its output is not a terminal, so `script` gives it a pseudo-TTY (this is the macOS `script` syntax; on Linux use `script -qfc "<command>" /dev/null`). The loop reconnects if Azure closes the stream, which would otherwise end the run after 60 seconds without a summary.
 
 Run it from an otherwise idle machine: client-observed reveal lateness is measured on the load generator's event loop, so a busy host (load average well above its core count) inflates it and can abort the run on the 500 ms safety net. The Live Demo run uses the registered three-minute steps. Stop when the harness reports an abort. Review the sanitized Markdown and JSON artifacts before publishing them as evidence.
+
+## Approved k3s drill
+
+`--target k3s` selects `https://k3s.halligalli.games`, the k3s target's public route through its Cloudflare Tunnel, and is only for an approved drill such as a rollback during running matches. The k3s API runs more than one replica, so pass no `--runtime-summary-stdin`: the silence abort would stop the run while Pods are replaced. Read `runtime_summary` lines from the API Pods separately.
+
+When the server closes a socket with 1012 (a planned restart), the bot reconnects like the Web client: after 0 to 500 ms of jitter, then with backoff while the old replica leaves the Service, for up to five attempts. These closes are not client errors; the report counts them with the reconnect time from close to the first snapshot on the new socket, and Bell Windows that opened while too few bots were connected to race. Any other close, or five failed attempts, is still a client error.
