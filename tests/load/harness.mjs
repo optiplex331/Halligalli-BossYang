@@ -6,13 +6,9 @@ import { stat, writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { createInterface } from "node:readline";
 
-const RAMP_STEPS = [1, 2, 5, 10, 15].map((targetRooms) => ({
-  id: `ramp-${targetRooms}-rooms`,
-  targetRooms,
-  designLoad: false,
-}));
+const RAMP_ROOMS = [1, 2, 5, 10, 15];
 const DESIGN_STEP = { id: "design-load", targetRooms: 10, designLoad: true };
-const STEP_COUNT = RAMP_STEPS.length + 1;
+const MAX_PROBE_ROOMS = 60;
 const MAX_STEP_SECONDS = 180;
 const RUN_LIMIT_MS = 20 * 60 * 1_000;
 const SUMMARY_SILENCE_MS = 60_000;
@@ -47,6 +43,7 @@ Options:
   --web-digest <digest>         Web image digest to record in the report
   --api-digest <digest>         API image digest to record in the report
   --api-cpu-limit <cores>       API container CPU limit (default: 0.26 for live-demo, none locally)
+  --ramp <rooms,...>            Capacity probe: run only these increasing ramp steps, no Design Load
   --help                        Show this help
 `;
 }
@@ -69,6 +66,7 @@ function parseArgs(argv) {
     ["--json-out", "jsonOut"], ["--report-out", "reportOut"],
     ["--release-tag", "releaseTag"], ["--web-digest", "webDigest"],
     ["--api-digest", "apiDigest"], ["--api-cpu-limit", "apiCpuLimit"],
+    ["--ramp", "ramp"],
   ]);
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -89,6 +87,18 @@ function parseArgs(argv) {
   options.stepSeconds = Number(options.stepSeconds);
   if (!Number.isInteger(options.stepSeconds) || options.stepSeconds < 1 || options.stepSeconds > MAX_STEP_SECONDS) {
     throw new Error(`--step-seconds must be an integer from 1 to ${MAX_STEP_SECONDS}`);
+  }
+  // A capacity probe replaces the registered ramp and skips the Design Load, so it never yields a verdict.
+  options.capacityProbe = options.ramp !== undefined;
+  const rampRooms = options.capacityProbe ? options.ramp.split(",").map(Number) : RAMP_ROOMS;
+  if (!rampRooms.every((rooms, index) => Number.isInteger(rooms) && rooms >= 1 && rooms <= MAX_PROBE_ROOMS
+    && (index === 0 || rooms > rampRooms[index - 1]))) {
+    throw new Error(`--ramp must be strictly increasing integers from 1 to ${MAX_PROBE_ROOMS}`);
+  }
+  options.rampSteps = rampRooms.map((targetRooms) => ({ id: `ramp-${targetRooms}-rooms`, targetRooms, designLoad: false }));
+  options.stepCount = options.rampSteps.length + (options.capacityProbe ? 0 : 1);
+  if (options.stepCount * options.stepSeconds * 1_000 + 2 * DRAIN_LIMIT_MS > RUN_LIMIT_MS) {
+    throw new Error("Steps and drains must fit inside the 20 minute run limit; use fewer steps or shorter --step-seconds");
   }
   if (options.target !== "local" && options.target !== "live-demo") {
     throw new Error("--target must be local or live-demo");
@@ -1367,7 +1377,7 @@ function round(value, digits = 1) {
 function buildResult({ monitor, scheduler, steps, globalMetricsStart, globalMetricsEnd, options }) {
   const violationList = scheduler.managers.flatMap((manager) => manager.invariantViolations);
   const matchSummaries = scheduler.managers.flatMap((manager) => manager.matchSummaries);
-  const runComplete = !monitor.abortReason && steps.length === STEP_COUNT && scheduler.active.size === 0;
+  const runComplete = !monitor.abortReason && steps.length === options.stepCount && scheduler.active.size === 0;
   const invalidRoomShapes = steps.reduce((sum, step) => sum + step.invalidRoomShapes, 0);
   const designShape = steps.find((step) => step.id === "design-load");
   const designShapeValid = Boolean(
@@ -1506,7 +1516,9 @@ function buildResult({ monitor, scheduler, steps, globalMetricsStart, globalMetr
     && clientP95 - designStep.serverTickLatenessP95Ms > SIGNAL_DISAGREEMENT_MS;
   const invariantFailed = invariants.some((invariant) => invariant.status === "fail");
   const invariantUnverified = invariants.some((invariant) => invariant.status === "not_run");
-  const designLoadVerdict = monitor.abortReason || invariantFailed
+  const designLoadVerdict = options.capacityProbe
+    ? "not_applicable"
+    : monitor.abortReason || invariantFailed
     ? "fail"
     : invariantUnverified || designStep?.matchesStarted < 10 || designStep?.peakConcurrentRooms !== 10
       ? "inconclusive"
@@ -1534,7 +1546,9 @@ function buildResult({ monitor, scheduler, steps, globalMetricsStart, globalMetr
     runLimitSeconds: 1_200,
     configuration: {
       stepSeconds: options.stepSeconds,
-      steps: STEP_COUNT,
+      steps: options.stepCount,
+      capacityProbe: options.capacityProbe,
+      rampRooms: options.rampSteps.map((step) => step.targetRooms),
       mixedHumanParticipantsPerRoom: { min: 2, max: 6 },
       mixedTableSeats: { min: 4, max: 8 },
       difficultyWeights: { easy: 0.3, normal: 0.5, hard: 0.2 },
@@ -1598,6 +1612,7 @@ function markdownReport(result) {
     "# Simulated Player Traffic Report",
     "",
     `- Target: ${result.target}`,
+    `- Mode: ${result.configuration.capacityProbe ? `capacity probe (ramp ${result.configuration.rampRooms.join(", ")} rooms, no Design Load)` : "registered ramp and Design Load"}`,
     `- Started: ${result.startedAt}`,
     `- Duration: ${result.totalDurationSeconds} s (maximum 1,200 s)`,
     `- Release Tag: ${result.release.tag}`,
@@ -1681,7 +1696,7 @@ async function run(options) {
   const steps = [];
   const globalMetricsStart = await fetchMetrics(options.metricsUrl);
   monitor.startMetricsWatcher(options.metricsUrl, globalMetricsStart);
-  for (const definition of RAMP_STEPS) {
+  for (const definition of options.rampSteps) {
     if (monitor.abortReason) break;
     const step = createStepState(definition);
     step.startedAt = new Date().toISOString();
@@ -1695,12 +1710,12 @@ async function run(options) {
     step.metricsAtEnd = await fetchMetrics(options.metricsUrl);
     step.endedAt = new Date().toISOString();
   }
-  if (!monitor.abortReason && steps.length === RAMP_STEPS.length) {
+  if (!monitor.abortReason && !options.capacityProbe && steps.length === options.rampSteps.length) {
     // Drain ramp rooms so the Design Load contains exactly ten normal rooms, including in a short dry run.
     monitor.currentStep = null;
     await scheduler.drain();
   }
-  if (!monitor.abortReason && steps.length === RAMP_STEPS.length) {
+  if (!monitor.abortReason && !options.capacityProbe && steps.length === options.rampSteps.length) {
     const step = createStepState(DESIGN_STEP);
     step.startedAt = new Date().toISOString();
     step.metricsAtStart = await fetchMetrics(options.metricsUrl);
