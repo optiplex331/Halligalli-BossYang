@@ -15,6 +15,14 @@ const DESIGN_STEP = { id: "design-load", targetRooms: 10, designLoad: true };
 const STEP_COUNT = RAMP_STEPS.length + 1;
 const MAX_STEP_SECONDS = 180;
 const RUN_LIMIT_MS = 20 * 60 * 1_000;
+const SUMMARY_SILENCE_MS = 60_000;
+// Steps use 6 x 180 s; the two drains share the remaining budget so a full run ends inside 20 minutes.
+const DRAIN_LIMIT_MS = 45_000;
+const FORFEIT_GRACE_MS = 10_000;
+const DRAIN_EXPECTED_ERRORS = new Set(["participant_departed", "forfeit_not_allowed", "match_not_running"]);
+const CLIENT_LATENESS_WINDOW_MS = 15_000;
+const CLIENT_LATENESS_ABORT_MS = 500;
+const SIGNAL_DISAGREEMENT_MS = 100;
 const TURN_INTERVAL_MS = { easy: 900, normal: 700, hard: 550 };
 const BELL_WINDOW_MS = { easy: 1_800, normal: 1_500, hard: 1_200 };
 const FRUITS = ["banana", "strawberry", "lemon", "grape"];
@@ -38,6 +46,7 @@ Options:
   --release-tag <tag>           Release Tag to record in the report
   --web-digest <digest>         Web image digest to record in the report
   --api-digest <digest>         API image digest to record in the report
+  --api-cpu-limit <cores>       API container CPU limit (default: 0.26 for live-demo, none locally)
   --help                        Show this help
 `;
 }
@@ -59,7 +68,7 @@ function parseArgs(argv) {
     ["--runtime-summary-file", "runtimeSummaryFile"],
     ["--json-out", "jsonOut"], ["--report-out", "reportOut"],
     ["--release-tag", "releaseTag"], ["--web-digest", "webDigest"],
-    ["--api-digest", "apiDigest"],
+    ["--api-digest", "apiDigest"], ["--api-cpu-limit", "apiCpuLimit"],
   ]);
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -101,6 +110,11 @@ function parseArgs(argv) {
   if (origin.username || origin.password || origin.search || origin.hash || origin.pathname !== "/") {
     throw new Error("Origin must not include credentials, a path, a query, or a fragment");
   }
+  if (options.apiCpuLimit === undefined && options.target === "live-demo") options.apiCpuLimit = 0.26;
+  if (options.apiCpuLimit !== undefined) {
+    options.apiCpuLimit = Number(options.apiCpuLimit);
+    if (!(options.apiCpuLimit > 0)) throw new Error("--api-cpu-limit must be a positive number of cores");
+  }
   options.originUrl = origin;
   options.websocketOrigin = `${origin.protocol === "https:" ? "wss:" : "ws:"}//${origin.host}`;
   if (options.metricsUrl) {
@@ -135,17 +149,33 @@ function scoreFingerprint(snapshot, seatIndex) {
   });
 }
 
+function summaryFromValue(value, depth = 0) {
+  if (depth > 3) return null;
+  if (typeof value === "string") {
+    const start = value.indexOf("{");
+    const end = value.lastIndexOf("}");
+    if (start < 0 || end <= start) return null;
+    try {
+      return summaryFromValue(JSON.parse(value.slice(start, end + 1)), depth + 1);
+    } catch {
+      return null;
+    }
+  }
+  if (!value || typeof value !== "object") return null;
+  if (value.event === "runtime_summary") return value;
+  // Log streams such as `az containerapp logs show --format json` wrap the app's line in a field.
+  for (const nested of Object.values(value)) {
+    if (typeof nested === "string" && nested.includes("runtime_summary")) {
+      const record = summaryFromValue(nested, depth + 1);
+      if (record) return record;
+    }
+  }
+  return null;
+}
+
 function parseSummaryLine(line) {
   if (!line.includes("runtime_summary")) return null;
-  const start = line.indexOf("{");
-  const end = line.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
-  try {
-    const record = JSON.parse(line.slice(start, end + 1));
-    return record.event === "runtime_summary" ? record : null;
-  } catch {
-    return null;
-  }
+  return summaryFromValue(line);
 }
 
 class Monitor {
@@ -172,12 +202,22 @@ class Monitor {
     this.totalWrongBellAttempts = 0;
     this.totalReconnects = 0;
     this.totalRevealReactions = [];
+    this.clientLatenessWindow = [];
+    this.errorReasons = new Map();
     this.metricsTimer = null;
     this.previousMetrics = null;
     this.metricsWindowStartedAt = null;
     this.metricsPolling = false;
     this.hardLimitTimer = setTimeout(() => this.abort("20-minute run limit reached"), RUN_LIMIT_MS);
     this.hardLimitTimer.unref();
+    this.lastSummaryAt = Date.now();
+    if (options.runtimeSummaryStdin || options.runtimeSummaryFile) {
+      // Without summaries the server-side abort conditions cannot fire, so silence is itself an abort.
+      this.summaryWatchdog = setInterval(() => {
+        if (Date.now() - this.lastSummaryAt > SUMMARY_SILENCE_MS) this.abort("runtime summary stream went silent");
+      }, 5_000);
+      this.summaryWatchdog.unref();
+    }
     if (options.runtimeSummaryStdin) this.readStdin();
     if (options.runtimeSummaryFile) this.tailSummaryFile(options.runtimeSummaryFile);
   }
@@ -186,17 +226,32 @@ class Monitor {
     this.roomScheduler = scheduler;
   }
 
-  recordOperation(ok) {
+  recordOperation(ok, reason = "operation failed") {
     this.clientOperations += 1;
     if (this.currentStep) this.currentStep.clientOperations += 1;
     if (!ok) {
+      this.errorReasons.set(reason, (this.errorReasons.get(reason) ?? 0) + 1);
       this.clientErrors += 1;
       if (this.currentStep) this.currentStep.clientErrors += 1;
       this.checkErrorRate();
     }
   }
 
-  recordError() {
+  recordClientLateness(latenessMs) {
+    const now = Date.now();
+    this.clientLatenessWindow.push({ at: now, latenessMs });
+    while (this.clientLatenessWindow.length > 0 && now - this.clientLatenessWindow[0].at > CLIENT_LATENESS_WINDOW_MS) {
+      this.clientLatenessWindow.shift();
+    }
+    // A safety net that does not depend on the server summary stream; network jitter sets the higher bound.
+    if (this.clientLatenessWindow.length >= 20) {
+      const p95 = percentile(this.clientLatenessWindow.map((sample) => sample.latenessMs), 0.95);
+      if (p95 > CLIENT_LATENESS_ABORT_MS) this.abort("client-observed reveal lateness exceeded 500 ms");
+    }
+  }
+
+  recordError(reason = "unclassified") {
+    this.errorReasons.set(reason, (this.errorReasons.get(reason) ?? 0) + 1);
     this.clientErrors += 1;
     if (this.currentStep) this.currentStep.clientErrors += 1;
     this.checkErrorRate();
@@ -217,6 +272,7 @@ class Monitor {
   }
 
   receiveSummary(record) {
+    this.lastSummaryAt = Date.now();
     const sample = {
       at: new Date().toISOString(),
       tickLatenessP95Ms: finiteNumber(record.tick_lateness_p95_ms),
@@ -226,6 +282,7 @@ class Monitor {
       activeSockets: finiteNumber(record.active_sockets),
       watchRetries: finiteNumber(record.watch_retries),
       tickSamples: finiteNumber(record.tick_samples),
+      apiCpuCores: finiteNumber(record.api_cpu_cores),
     };
     this.runtimeSummaries.push(sample);
     this.summarySamples.push(sample);
@@ -239,6 +296,7 @@ class Monitor {
       if (this.currentStep) this.currentStep.redisMemoryRatios.push(ratio);
       if (ratio > 0.8) this.abort("Redis memory exceeded 80% of maxmemory");
     }
+    if (sample.apiCpuCores !== null) this.currentStep?.apiCpuSamples.push(sample.apiCpuCores);
   }
 
   readStdin() {
@@ -311,6 +369,7 @@ class Monitor {
 
   closeInputs() {
     clearTimeout(this.hardLimitTimer);
+    clearInterval(this.summaryWatchdog);
     clearInterval(this.fileTailTimer);
     clearInterval(this.metricsTimer);
     this.lineReader?.close();
@@ -390,7 +449,7 @@ class SocketClient {
         settled = true;
         clearTimeout(connectionTimer);
         this.openFailed = true;
-        this.monitor.recordOperation(false);
+        this.monitor.recordOperation(false, "WebSocket connection failed");
         const error = new Error("WebSocket connection failed");
         error.clientCounted = true;
         reject(error);
@@ -404,7 +463,7 @@ class SocketClient {
         try {
           message = JSON.parse(String(data));
         } catch {
-          this.monitor.recordError();
+          this.monitor.recordError("unparseable server frame");
           return;
         }
         if (message.type === "snapshot") {
@@ -425,7 +484,12 @@ class SocketClient {
           return;
         }
         if (message.type === "error") {
-          this.monitor.recordError();
+          // Drain forfeits race queued commands; these refusals are the harness ending rooms, not server faults.
+          if (this.manager.forfeiting && DRAIN_EXPECTED_ERRORS.has(message.code)) {
+            for (const waiter of this.waiters.splice(0)) waiter.reject(Object.assign(new Error("room forfeited"), { clientCounted: true }));
+            return;
+          }
+          this.monitor.recordError(`server error frame: ${String(message.code ?? "unknown").slice(0, 40)}`);
           for (const waiter of this.waiters.splice(0)) {
             const error = new Error(`WebSocket command returned ${message.code ?? "error"}`);
             error.clientCounted = true;
@@ -438,7 +502,7 @@ class SocketClient {
         this.isClosed = true;
         if (!settled && !this.intentionalClose) failOpen();
         if (!this.intentionalClose && !this.openFailed && !this.monitor.abortReason) {
-          this.monitor.recordError();
+          this.monitor.recordError(`unexpected socket close ${event.code}`);
         }
         this.manager.onSocketClose(this);
       });
@@ -489,30 +553,30 @@ class SocketClient {
   recordCadence(snapshot) {
     if (snapshot.phase !== "playing" || !snapshot.lastReveal?.sequence) return;
     const now = performance.now();
-    const current = { matchNumber: snapshot.matchNumber, sequence: snapshot.lastReveal.sequence, at: now };
+    const current = {
+      matchNumber: snapshot.matchNumber,
+      sequence: snapshot.lastReveal.sequence,
+      at: now,
+      // A coalesced first view may already show the window won, which still means it was open.
+      opensBellWindow: Boolean(snapshot.bellFruit) || snapshot.lastEvent === "correct_bell",
+    };
     const previous = this.lastCadence;
-    if (previous && previous.matchNumber === current.matchNumber && current.sequence <= previous.sequence) {
-      if (snapshot.lastEvent === "correct_bell") {
-        const resetKey = `${current.matchNumber}:${current.sequence}`;
-        if (this.lastCorrectResetKey !== resetKey) {
-          this.lastCorrectResetKey = resetKey;
-          this.lastCadence = current;
-        }
-      }
-      return;
-    }
+    // Later snapshots of the same reveal (a correct bell, another player's command) keep the reveal's time.
+    if (previous && previous.matchNumber === current.matchNumber && current.sequence <= previous.sequence) return;
     this.lastCadence = current;
     if (!previous || previous.matchNumber !== current.matchNumber) return;
     const pace = snapshot.configuration.difficulty;
-    const expectedMs = snapshot.lastEvent === "missed_bell"
-      ? BELL_WINDOW_MS[pace]
-      : TURN_INTERVAL_MS[pace] * (current.sequence - previous.sequence);
+    // A reveal that opened a Bell Window holds the next flip until the window's deadline, whether the
+    // window was won or missed; any further skipped reveals each took one turn interval.
+    const expectedMs = (previous.opensBellWindow ? BELL_WINDOW_MS[pace] : TURN_INTERVAL_MS[pace])
+      + TURN_INTERVAL_MS[pace] * (current.sequence - previous.sequence - 1);
     const gapMs = now - previous.at;
     const latenessMs = Math.max(0, gapMs - expectedMs);
     if (this.monitor.currentStep) {
       this.monitor.currentStep.clientCadenceGapMs.push(gapMs);
       this.monitor.currentStep.clientCadenceLatenessMs.push(latenessMs);
     }
+    this.monitor.recordClientLateness(latenessMs);
   }
 
   waitForSnapshot(predicate, timeoutMs = 8_000) {
@@ -573,7 +637,7 @@ class SocketClient {
         resolve,
         timer: setTimeout(() => {
           this.pendingBellResponses.delete(revealSequence);
-          this.monitor.recordError();
+          this.monitor.recordError("bell response timeout");
           resolve("timeout");
         }, 5_000),
       };
@@ -620,11 +684,11 @@ async function requestJson(monitor, origin, path, body) {
       body: JSON.stringify(body),
     });
   } catch {
-    monitor.recordOperation(false);
+    monitor.recordOperation(false, "room entry request failed");
     throw countedError("Web-origin room entry request failed");
   }
   if (response.status !== 201) {
-    monitor.recordOperation(false);
+    monitor.recordOperation(false, `room entry HTTP ${response.status}`);
     throw countedError(`Web-origin room entry returned HTTP ${response.status}`);
   }
   try {
@@ -632,7 +696,7 @@ async function requestJson(monitor, origin, path, body) {
     monitor.recordOperation(true);
     return result;
   } catch {
-    monitor.recordOperation(false);
+    monitor.recordOperation(false, "room entry invalid JSON");
     throw countedError("Web-origin room entry returned invalid JSON");
   }
 }
@@ -840,7 +904,8 @@ class RoomManager {
       if (bots.length === 0) return;
       const bot = bots[randomInteger(0, bots.length - 1)];
       let reaction = lognormalReactionMs();
-      reaction = Math.min(reaction, TURN_INTERVAL_MS[this.config.difficulty] - 40);
+      // Half the turn interval leaves room for snapshot delivery, so the bell still names the current transition.
+      reaction = Math.min(reaction, Math.floor(TURN_INTERVAL_MS[this.config.difficulty] / 2));
       if (step) step.wrongBellAttempts += 1;
       this.monitor.totalWrongBellAttempts += 1;
       this.trackBell(bot, sequence, reaction, false);
@@ -853,12 +918,12 @@ class RoomManager {
   async scheduleBell(bot, sequence, waitMs, waitForResolution) {
     try {
       await delay(waitMs);
-      if (this.monitor.abortReason) return;
+      if (this.monitor.abortReason || this.forfeiting) return;
       const client = bot.socketClient;
       if (!client || client.isClosed) return;
       await client.ring(sequence, waitMs, waitForResolution);
     } catch (error) {
-      if (!this.monitor.abortReason && !error?.clientCounted) this.monitor.recordError();
+      if (!this.monitor.abortReason && !error?.clientCounted) this.monitor.recordError(`flow: ${String(error?.message ?? error).slice(0, 80)}`);
     }
   }
 
@@ -939,16 +1004,34 @@ class RoomManager {
         participant.seatIndex === snapshot.viewerSeatIndex && participant.ready
       ))
     ))));
-    if (Math.random() < 0.05) {
-      const reconnectBot = this.bots[randomInteger(0, this.bots.length - 1)];
-      await this.reconnectBot(reconnectBot);
-    }
     clients = this.bots.map((bot) => bot.socketClient);
     const latest = clients[0].latestSnapshot;
     const running = this.waitForPhase("playing");
-    if (latest?.phase === "playing") return latest;
+    if (latest?.phase === "playing") {
+      running.catch(() => {});
+      return latest;
+    }
     await clients[0].command("start", (snapshot) => snapshot.phase === "playing");
     return running;
+  }
+
+  scheduleMatchReconnect() {
+    // About 5% of matches lose one bot's socket mid-match, exercising resume while the room keeps ticking.
+    if (Math.random() >= 0.05) return;
+    const bot = this.bots[randomInteger(0, this.bots.length - 1)];
+    const timer = setTimeout(() => {
+      if (this.monitor.abortReason || !bot.socketClient || bot.socketClient.isClosed) return;
+      this.reconnectBot(bot).catch((error) => {
+        if (!this.monitor.abortReason && !error?.clientCounted) this.monitor.recordError(`flow: ${String(error?.message ?? error).slice(0, 80)}`);
+      });
+    }, randomInteger(5_000, 20_000));
+    timer.unref();
+  }
+
+  async forfeitAll() {
+    this.forfeiting = true;
+    const clients = this.availableBots().map((bot) => bot.socketClient);
+    await Promise.allSettled(clients.map((client) => client.command("forfeit")));
   }
 
   async continueMatch() {
@@ -1008,6 +1091,7 @@ function createStepState(definition) {
     runtimeSummaries: [],
     serverP95Samples: [],
     redisMemoryRatios: [],
+    apiCpuSamples: [],
     metricsAtStart: null,
     metricsAtEnd: null,
     startedAt: null,
@@ -1030,6 +1114,7 @@ class RoomScheduler {
     this.stopped = false;
     this.roomStartHistory = [];
     this.lastConfig = null;
+    this.draining = false;
   }
 
   setLoad(targetRooms, enabled = true) {
@@ -1075,13 +1160,15 @@ class RoomScheduler {
     try {
       await manager.enter();
       await manager.readyAndStart();
+      manager.scheduleMatchReconnect();
       let matchesPlayed = 1;
       while (!this.monitor.abortReason) {
         const finalSnapshot = await manager.waitForPhase("post_match");
         await manager.settleBellTasks();
         manager.captureFinalMatch(finalSnapshot, this.monitor.currentStep);
-        if (matchesPlayed === 1 && Math.random() < 0.5) {
+        if (matchesPlayed === 1 && !this.draining && Math.random() < 0.5) {
           await manager.continueMatch();
+          manager.scheduleMatchReconnect();
           matchesPlayed += 1;
           continue;
         }
@@ -1089,7 +1176,7 @@ class RoomScheduler {
         break;
       }
     } catch (error) {
-      if (!this.monitor.abortReason && !error?.clientCounted) this.monitor.recordError();
+      if (!this.monitor.abortReason && !error?.clientCounted) this.monitor.recordError(`flow: ${String(error?.message ?? error).slice(0, 80)}`);
     } finally {
       manager.close();
     }
@@ -1113,12 +1200,18 @@ class RoomScheduler {
     for (const manager of this.managers) manager.close();
   }
 
-  async drain() {
+  async drain(limitMs = DRAIN_LIMIT_MS) {
     this.setLoad(0, false);
-    while (this.active.size > 0) {
-      await Promise.allSettled([...this.active]);
-      if (this.monitor.abortReason) break;
+    this.draining = true;
+    const settled = () => Promise.allSettled([...this.active]);
+    if (this.active.size > 0 && !this.monitor.abortReason) await Promise.race([settled(), delay(limitMs, undefined, { ref: false })]);
+    if (this.active.size > 0) {
+      // Rooms still mid-match forfeit so no unobserved room keeps ticking into the next step.
+      await Promise.allSettled(this.managers.map((manager) => manager.forfeitAll()));
+      await Promise.race([settled(), delay(FORFEIT_GRACE_MS, undefined, { ref: false })]);
     }
+    if (this.active.size > 0) for (const manager of this.managers) manager.close();
+    this.draining = false;
   }
 }
 
@@ -1248,6 +1341,7 @@ function stepReport(step) {
     serverDueProcessingP95Ms: round(dueP95Ms),
     serverTickSamples: metrics?.tickSamples ?? null,
     maxRedisMemoryRatio: round(memoryRatio, 4),
+    medianApiCpuCores: round(percentile(step.apiCpuSamples, 0.5), 3),
     bellOutcomes,
     clientObservedBellWindows: step.clientObservedWindows,
     racingBellAttempts: step.raceAttempts,
@@ -1400,6 +1494,11 @@ function buildResult({ monitor, scheduler, steps, globalMetricsStart, globalMetr
     || violationList.some((violation) => violation.step === step.id)
   ))?.id ?? (violationList.length > 0 ? "final-reconciliation" : null);
   const designStep = stepResults.find((step) => step.id === "design-load");
+  // The client cadence is the second lateness signal: if it exceeds the server's view by more than
+  // network jitter explains, the server measurement is suspect and the verdict cannot pass.
+  const clientP95 = designStep?.clientCadence?.p95LatenessMs ?? null;
+  const signalsDisagree = clientP95 !== null && designStep?.serverTickLatenessP95Ms !== null
+    && clientP95 - designStep.serverTickLatenessP95Ms > SIGNAL_DISAGREEMENT_MS;
   const invariantFailed = invariants.some((invariant) => invariant.status === "fail");
   const invariantUnverified = invariants.some((invariant) => invariant.status === "not_run");
   const designLoadVerdict = monitor.abortReason || invariantFailed
@@ -1408,9 +1507,19 @@ function buildResult({ monitor, scheduler, steps, globalMetricsStart, globalMetr
       ? "inconclusive"
       : designStep?.serverTickLatenessP95Ms === null || designStep?.maxRedisMemoryRatio === null
       ? "inconclusive"
+      : signalsDisagree
+      ? "inconclusive"
       : designStep.serverTickLatenessP95Ms <= 150 && designStep.maxRedisMemoryRatio <= 0.8
         ? "pass"
         : "fail";
+  // Pre-registered rule: fan-out work only if the Design Load shows p95 tick lateness > 150 ms or
+  // sustained (median) API CPU above 80% of the container limit.
+  const designCpuRatio = options.apiCpuLimit && designStep?.medianApiCpuCores !== null && designStep?.medianApiCpuCores !== undefined
+    ? round(designStep.medianApiCpuCores / options.apiCpuLimit, 3)
+    : null;
+  const fanOutWorkTriggered = designStep?.serverTickLatenessP95Ms === null || designStep?.serverTickLatenessP95Ms === undefined
+    ? null
+    : designStep.serverTickLatenessP95Ms > 150 || (designCpuRatio !== null && designCpuRatio > 0.8);
   return {
     schemaVersion: 1,
     target: options.target === "local" ? "localhost" : "approved-live-demo",
@@ -1471,6 +1580,10 @@ function buildResult({ monitor, scheduler, steps, globalMetricsStart, globalMetr
     abortReason: monitor.abortReason,
     capacityKnee,
     designLoadVerdict,
+    designLoadApiCpuRatio: designCpuRatio,
+    fanOutWorkTriggered,
+    latencySignalsDisagree: signalsDisagree,
+    clientErrorReasons: Object.fromEntries([...monitor.errorReasons].sort((a, b) => b[1] - a[1])),
     runtimeSummary: monitor.summarySamples,
   };
 }
@@ -1487,8 +1600,12 @@ function markdownReport(result) {
     `- API digest: ${result.release.apiDigest}`,
     `- Capacity knee: ${result.capacityKnee ?? "not observed"}`,
     `- Design Load verdict: ${result.designLoadVerdict}`,
+    `- Design Load median API CPU: ${result.designLoadApiCpuRatio === null ? "n/a" : `${(result.designLoadApiCpuRatio * 100).toFixed(1)}% of limit`}`,
+    `- Latency signals disagree: ${result.latencySignalsDisagree ? "yes" : "no"}`,
+    `- Fan-out work triggered (pre-registered rule): ${result.fanOutWorkTriggered === null ? "undetermined" : result.fanOutWorkTriggered ? "yes" : "no"}`,
     `- Abort reason: ${result.abortReason ?? "none"}`,
     `- Client error rate: ${(result.totals.clientErrorRate * 100).toFixed(2)}% (${result.totals.clientErrors}/${result.totals.clientOperations})`,
+    `- Client error reasons: ${Object.keys(result.clientErrorReasons).length ? Object.entries(result.clientErrorReasons).map(([reason, count]) => `${reason} (${count})`).join("; ") : "none"}`,
     "",
     "## Steps",
     "",

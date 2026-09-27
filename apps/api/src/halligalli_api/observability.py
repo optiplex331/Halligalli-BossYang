@@ -7,7 +7,7 @@ import sys
 from collections import Counter, deque
 from collections.abc import Iterator
 from contextlib import contextmanager
-from time import perf_counter
+from time import perf_counter, process_time
 from typing import Literal
 
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -78,6 +78,7 @@ class Telemetry:
         self._counters: Counter[tuple[str, ...]] = Counter()
         self._interval_lateness: deque[float] = deque(maxlen=_LATENESS_SAMPLE_LIMIT)
         self._interval_watch_retries = 0
+        self._interval_cpu_started = (process_time(), perf_counter())
         self._provider = TracerProvider(resource=Resource.create({"service.name": "halligalli-api"}))
         exporter = span_exporter or self._otlp_exporter()
         if exporter is not None:
@@ -199,6 +200,10 @@ class Telemetry:
         """Print one greppable line for the interval since the previous summary, then start a new interval."""
         p95 = _p95(list(self._interval_lateness))
         memory = redis_memory or {}
+        cpu_started, wall_started = self._interval_cpu_started
+        cpu_now, wall_now = process_time(), perf_counter()
+        # CPU cores this process used over the interval; compare with the container's CPU limit.
+        api_cpu_cores = round((cpu_now - cpu_started) / max(wall_now - wall_started, 1e-9), 3)
         self._emit(
             event="runtime_summary",
             interval_s=interval_seconds,
@@ -209,9 +214,11 @@ class Telemetry:
             active_sockets=active_sockets,
             redis_used_memory_bytes=memory.get("used_memory"),
             redis_maxmemory_bytes=memory.get("maxmemory"),
+            api_cpu_cores=api_cpu_cores,
         )
         self._interval_lateness.clear()
         self._interval_watch_retries = 0
+        self._interval_cpu_started = (cpu_now, wall_now)
 
     def metrics(self, *, active_rooms: int) -> str:
         lines = ["# TYPE halligalli_active_rooms gauge", f"halligalli_active_rooms {active_rooms}"]
