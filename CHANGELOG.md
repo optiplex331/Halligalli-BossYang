@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.10.0](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.9.2...v0.10.0) (2026-09-27)
+
+
+### Features
+
+* **api:** limit room creation per client address and bound WebSocket messages ([#126](https://github.com/optiplex331/Halligalli-BossYang/issues/126)) ([8e0d310](https://github.com/optiplex331/Halligalli-BossYang/commit/8e0d310878040d09cfc1cf25edee2d5e4cbdf02b))
+* **api:** measure tick lateness and contention ([#127](https://github.com/optiplex331/Halligalli-BossYang/issues/127)) ([726361d](https://github.com/optiplex331/Halligalli-BossYang/commit/726361d93ee02f3fd9c823cc9e83da01e0aa604c))
+* **multiplayer:** discard stale bells ([#123](https://github.com/optiplex331/Halligalli-BossYang/issues/123)) ([4e927f9](https://github.com/optiplex331/Halligalli-BossYang/commit/4e927f9ee8a162d81aed9cf7b38341deee3c07c9))
+* **web:** reconnect after planned api restart ([#122](https://github.com/optiplex331/Halligalli-BossYang/issues/122)) ([a3bf0c0](https://github.com/optiplex331/Halligalli-BossYang/commit/a3bf0c0dd4eb4ca259c079f03fc0b2409e660412))
+
+
+### Bug Fixes
+
+* **api:** bound redis memory and survive oom ([#124](https://github.com/optiplex331/Halligalli-BossYang/issues/124)) ([889b241](https://github.com/optiplex331/Halligalli-BossYang/commit/889b241c439be090cfd3f77c58b1d2dad96e129b))
+* **api:** end socket loop quietly after a failed publish ([#128](https://github.com/optiplex331/Halligalli-BossYang/issues/128)) ([80f2317](https://github.com/optiplex331/Halligalli-BossYang/commit/80f2317257ff413dd4a17a7c4b33a77dca69caeb))
+* **multiplayer:** stop reconnecting when the room is gone ([#131](https://github.com/optiplex331/Halligalli-BossYang/issues/131)) ([de0a0ff](https://github.com/optiplex331/Halligalli-BossYang/commit/de0a0ffa4776ef2e030c149b5f089f08eaf5be1b))
+
 ## [0.9.2](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.9.1...v0.9.2) (2026-09-26)
 
 
