@@ -6,7 +6,7 @@ The default run uses the local Web origin only. It runs the 1, 2, 5, 10, and 15 
 
 Between the ramp and the Design Load, and at the end, rooms get at most 45 seconds to finish without rematching; any room still playing then forfeits, so no unobserved room keeps ticking into the next step and the full run fits inside 20 minutes.
 
-The run aborts on a client error rate above 2% (Stale Bells and refusals caused by the harness's own drain forfeits are not errors), server p95 tick lateness above 250 ms, Redis memory above 80% of `maxmemory`, client-observed reveal lateness above 500 ms over 15 seconds, or no `runtime_summary` line for 60 seconds when a summary source is configured. The report applies the pre-registered decision rule: fan-out work is triggered only if the Design Load shows server p95 tick lateness above 150 ms or median API CPU above 80% of `--api-cpu-limit` (0.26 cores by default for the Live Demo). If client-observed lateness exceeds the server's by more than 100 ms, the Design Load verdict is inconclusive. Client errors are listed by reason.
+The run aborts on a client error rate above 2% (Stale Bells and refusals caused by the harness's own drain forfeits are not errors), server p95 tick lateness above 250 ms, Redis memory above 80% of `maxmemory`, client-observed reveal lateness above 500 ms over 15 seconds (each reveal counted once per room, at the first socket that sees it), or no `runtime_summary` line for 60 seconds when a summary source is configured. The report applies the pre-registered decision rule: fan-out work is triggered only if the Design Load shows server p95 tick lateness above 150 ms or median API CPU above 80% of `--api-cpu-limit` (0.26 cores by default for the Live Demo). If client-observed lateness exceeds the server's by more than 100 ms, the Design Load verdict is inconclusive. Client errors are listed by reason.
 
 The JSON result and Markdown report contain only aggregate values. They omit participant names, room codes, credentials, IP addresses, and the request origin. Release Tag and Web/API digests are placeholders unless their flags are supplied.
 
@@ -48,12 +48,18 @@ node tests/load/harness.mjs \
   --api-digest <api-image-digest> \
   --json-out /tmp/halligalli-live-load-result.json \
   --report-out /tmp/halligalli-live-load-report.md \
-  < <(az containerapp logs show \
-    --name <approved-container-app> \
-    --resource-group <approved-resource-group> \
-    --container api \
-    --format text \
-    --follow)
+  < <(while true; do
+    script -q /dev/null az containerapp logs show \
+      --name <approved-container-app> \
+      --resource-group <approved-resource-group> \
+      --container api \
+      --format text \
+      --follow \
+      --tail 1 </dev/null
+    sleep 2
+  done)
 ```
 
-The Live Demo run uses the registered three-minute steps. Stop when the harness reports an abort. Review the sanitized Markdown and JSON artifacts before publishing them as evidence.
+`az containerapp logs show --follow` prints nothing when its output is not a terminal, so `script` gives it a pseudo-TTY (this is the macOS `script` syntax; on Linux use `script -qfc "<command>" /dev/null`). The loop reconnects if Azure closes the stream, which would otherwise end the run after 60 seconds without a summary.
+
+Run it from an otherwise idle machine: client-observed reveal lateness is measured on the load generator's event loop, so a busy host (load average well above its core count) inflates it and can abort the run on the 500 ms safety net. The Live Demo run uses the registered three-minute steps. Stop when the harness reports an abort. Review the sanitized Markdown and JSON artifacts before publishing them as evidence.
