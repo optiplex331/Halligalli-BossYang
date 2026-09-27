@@ -38,7 +38,11 @@ test-results/
 *.tmp
 *.temp
 
-# Terraform local state and environment-specific deployment config
+# Default output of the load harness run from the repository root
+/load-result.json
+/load-report.md
+
+# Terraform lives in the infrastructure repository; keep state and plans out
 **/.terraform/
 *.tfstate
 *.tfstate.*
@@ -46,9 +50,6 @@ test-results/
 *.tfvars
 *.tfvars.json
 backend.hcl
-deploy/azure/environments/*/terraform.tfvars
-deploy/azure/environments/*/terraform.tfvars.json
-deploy/azure/environments/*/backend.hcl
 
 # Coding agents
 .claude/
