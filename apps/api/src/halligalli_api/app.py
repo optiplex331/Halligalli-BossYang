@@ -157,12 +157,25 @@ class RoomSocketHub:
         if not members:
             self._members.pop(room_code, None)
 
-    async def publish(self, room_code: str, authority: MultiplayerAuthority) -> None:
+    async def publish(self, room_code: str, authority: MultiplayerAuthority, revision: int | None = None) -> None:
+        """Send each member the room's newer snapshot, reading the room once for all of them.
+
+        A known `revision` that every member already holds needs no read at all.
+        """
         members = list(self._members.get(room_code, {}).items())
-        for websocket, member in members:
-            try:
-                snapshot = await authority.snapshot(room_code, Viewer(credential=member.credential))
-            except AuthorityError:
+        if not members or (revision is not None and all(member.revision >= revision for _, member in members)):
+            return
+        try:
+            snapshots = await authority.snapshots(
+                room_code,
+                [Viewer(credential=member.credential) for _, member in members],
+            )
+        except AuthorityError:
+            for websocket, _ in members:
+                self.detach(room_code, websocket)
+            return
+        for (websocket, member), snapshot in zip(members, snapshots, strict=True):
+            if isinstance(snapshot, AuthorityError):
                 self.detach(room_code, websocket)
                 continue
             if snapshot.revision <= member.revision:
@@ -178,12 +191,12 @@ class RoomSocketHub:
 
 
 async def forward_room_revisions(
-    room_codes: AsyncIterator[str],
+    revisions: AsyncIterator[tuple[str, int | None]],
     hub: RoomSocketHub,
     authority: MultiplayerAuthority,
 ) -> None:
-    async for room_code in room_codes:
-        await hub.publish(room_code, authority)
+    async for room_code, revision in revisions:
+        await hub.publish(room_code, authority, revision)
 
 
 def _runtime_authority(telemetry: Telemetry) -> RedisMultiplayerAuthority:
@@ -259,8 +272,10 @@ def create_app(
             started_at = time.perf_counter()
             for room_code in await selected_authority.advance_due():
                 await hub.publish(room_code, selected_authority)
-            telemetry.record_due_processing(elapsed_since(started_at))
-            await asyncio.sleep(due_interval_seconds)
+            elapsed = elapsed_since(started_at)
+            telemetry.record_due_processing(elapsed)
+            # Start sweeps on a fixed cadence: a slow sweep eats into the pause instead of adding to it.
+            await asyncio.sleep(max(0.0, due_interval_seconds - elapsed))
 
     async def emit_runtime_summaries(interval_seconds: float) -> None:
         read_memory = getattr(selected_authority, "redis_memory", None)

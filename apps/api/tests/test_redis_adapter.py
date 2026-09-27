@@ -42,6 +42,6 @@ class RedisAdapterTest(RedisAsyncTestCase):
                 created.room_code,
                 JoinRoom("join-pubsub", "Guest", hash_credential("guest-credential")),
             )
-            self.assertEqual(await asyncio.wait_for(revision, timeout=1), created.room_code)
+            self.assertEqual(await asyncio.wait_for(revision, timeout=1), (created.room_code, 2))
         finally:
             await subscription.aclose()

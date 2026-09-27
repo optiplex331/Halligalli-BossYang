@@ -352,11 +352,21 @@ class MultiplayerAuthority(Protocol):
 
     async def snapshot(self, room_code: str, viewer: Viewer) -> RoomSnapshot: ...
 
+    async def snapshots(self, room_code: str, viewers: Sequence[Viewer]) -> list[RoomSnapshot | AuthorityError]:
+        """Project one read of the room for each viewer, keeping each viewer's refusal in place."""
+        ...
+
     def now_ms(self) -> int: ...
 
     async def advance_due(self, now_ms: int | None = None) -> list[str]: ...
 
     async def admit_room_creation(self, client_address: str) -> None: ...
+
+
+def _published_revision(data: object) -> int | None:
+    if isinstance(data, bytes):
+        data = data.decode(errors="replace")
+    return int(data) if isinstance(data, str) and data.isdigit() else None
 
 
 class RedisRevisionSubscription:
@@ -369,7 +379,8 @@ class RedisRevisionSubscription:
     def __init__(self, pubsub: object) -> None:
         self._pubsub = pubsub
 
-    async def events(self) -> AsyncIterator[str]:
+    async def events(self) -> AsyncIterator[tuple[str, int | None]]:
+        """Yield the room code and published revision of each invalidation; the revision is None if unreadable."""
         async for message in self._pubsub.listen():
             if message.get("type") != "pmessage":
                 continue
@@ -379,7 +390,7 @@ class RedisRevisionSubscription:
             if not isinstance(channel, str):
                 continue
             if channel.startswith(self._prefix) and channel.endswith(self._suffix):
-                yield channel.removeprefix(self._prefix).removesuffix(self._suffix)
+                yield channel.removeprefix(self._prefix).removesuffix(self._suffix), _published_revision(message.get("data"))
 
     async def aclose(self) -> None:
         await self._pubsub.punsubscribe(self._pattern)
@@ -1367,6 +1378,25 @@ class RedisMultiplayerAuthority:
             raise
         self._record_redis("snapshot", "success", started_at)
         return result
+
+    async def snapshots(self, room_code: str, viewers: Sequence[Viewer]) -> list[RoomSnapshot | AuthorityError]:
+        started_at = time.perf_counter()
+        try:
+            room = await self._load_room(room_code)
+        except AuthorityError:
+            self._record_redis("snapshot", "client_error", started_at)
+            raise
+        except Exception:
+            self._record_redis("snapshot", "server_error", started_at)
+            raise
+        self._record_redis("snapshot", "success", started_at)
+        results: list[RoomSnapshot | AuthorityError] = []
+        for viewer in viewers:
+            try:
+                results.append(_snapshot_for_verifier(room, credential_verifier(viewer.credential)))
+            except AuthorityError as error:
+                results.append(error)
+        return results
 
     async def active_room_count(self) -> int:
         await self._redis.zremrangebyscore(ACTIVE_ROOMS_KEY, "-inf", self._clock())
