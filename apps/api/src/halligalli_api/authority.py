@@ -261,6 +261,14 @@ class AuthorityError(Exception):
         self.title = title
 
 
+def _authority_unavailable() -> AuthorityError:
+    return AuthorityError("authority_unavailable", 503, "Server is temporarily unavailable; try again shortly")
+
+
+def _error_outcome(error: AuthorityError) -> str:
+    return "server_error" if error.status_code >= 500 else "client_error"
+
+
 def _capacity_exhausted() -> AuthorityError:
     return AuthorityError("capacity_exhausted", 503, "Server is at capacity; try again shortly")
 
@@ -1134,7 +1142,7 @@ class RedisMultiplayerAuthority:
         room_code: str | None,
         command: AuthorityCommand,
     ) -> AuthorityResult:
-        from redis.exceptions import OutOfMemoryError
+        from redis.exceptions import ConnectionError, OutOfMemoryError, TimeoutError
 
         started_at = time.perf_counter()
         try:
@@ -1146,13 +1154,17 @@ class RedisMultiplayerAuthority:
                 result = await self._join(room_code, command)
             else:
                 result = await self._execute_room_command(room_code, command)
-        except AuthorityError:
-            self._record_redis("execute", "client_error", started_at)
+        except AuthorityError as error:
+            self._record_redis("execute", _error_outcome(error), started_at)
             raise
         except OutOfMemoryError as error:
             # Last line of defense: Redis reached `maxmemory` under `noeviction` despite admission control.
             self._record_redis("execute", "server_error", started_at)
             raise _capacity_exhausted() from error
+        except (ConnectionError, TimeoutError) as error:
+            # A lost Redis connection is temporary: the caller keeps its socket and may retry.
+            self._record_redis("execute", "server_error", started_at)
+            raise _authority_unavailable() from error
         except Exception:
             self._record_redis("execute", "server_error", started_at)
             raise
@@ -1362,7 +1374,12 @@ class RedisMultiplayerAuthority:
         return False
 
     async def _load_room(self, room_code: str) -> _Room:
-        state = await self._redis.hget(self._room_key(room_code), "state")
+        from redis.exceptions import ConnectionError, TimeoutError
+
+        try:
+            state = await self._redis.hget(self._room_key(room_code), "state")
+        except (ConnectionError, TimeoutError) as error:
+            raise _authority_unavailable() from error
         return _require_room(_Room.from_json(state) if state else None)
 
     async def snapshot(self, room_code: str, viewer: Viewer) -> RoomSnapshot:
@@ -1370,8 +1387,8 @@ class RedisMultiplayerAuthority:
         try:
             room = await self._load_room(room_code)
             result = _snapshot_for_verifier(room, credential_verifier(viewer.credential))
-        except AuthorityError:
-            self._record_redis("snapshot", "client_error", started_at)
+        except AuthorityError as error:
+            self._record_redis("snapshot", _error_outcome(error), started_at)
             raise
         except Exception:
             self._record_redis("snapshot", "server_error", started_at)
@@ -1383,8 +1400,8 @@ class RedisMultiplayerAuthority:
         started_at = time.perf_counter()
         try:
             room = await self._load_room(room_code)
-        except AuthorityError:
-            self._record_redis("snapshot", "client_error", started_at)
+        except AuthorityError as error:
+            self._record_redis("snapshot", _error_outcome(error), started_at)
             raise
         except Exception:
             self._record_redis("snapshot", "server_error", started_at)

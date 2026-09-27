@@ -51,6 +51,7 @@ _RELEASE_IDENTITY_PATH = Path(__file__).with_name("release-identity.json")
 # UVICORN_WS_MAX_SIZE to the same bound so an oversized frame is refused before it is buffered.
 WEBSOCKET_MAX_MESSAGE_BYTES = 4_096
 _MESSAGE_TOO_BIG = 1009
+_TRY_AGAIN_LATER = 1013
 TRUSTED_PROXY_HOPS_ENV = "HALLIGALLI_TRUSTED_PROXY_HOPS"
 
 
@@ -133,6 +134,12 @@ class WebSocketRoomCommand(ApiModel):
         return self
 
 
+async def close_with_error(websocket: WebSocket, code: str, title: str) -> None:
+    """Tell the peer why before a 1008 close, so the Web can stop reconnecting and show the reason."""
+    await websocket.send_json({"type": "error", "code": code, "title": title})
+    await websocket.close(code=1008)
+
+
 @dataclass
 class _SocketMember:
     credential: str
@@ -157,6 +164,19 @@ class RoomSocketHub:
         if not members:
             self._members.pop(room_code, None)
 
+    async def publish_all(self, authority: MultiplayerAuthority) -> None:
+        """Publish every room with attached members, so a room lost while unobserved is noticed."""
+        for room_code in list(self._members):
+            await self.publish(room_code, authority)
+
+    async def _close(self, room_code: str, websocket: WebSocket, error: AuthorityError) -> None:
+        self.detach(room_code, websocket)
+        try:
+            await close_with_error(websocket, error.code, error.title)
+        except Exception:
+            # The peer may already be gone; it is detached either way.
+            pass
+
     async def publish(self, room_code: str, authority: MultiplayerAuthority, revision: int | None = None) -> None:
         """Send each member the room's newer snapshot, reading the room once for all of them.
 
@@ -166,17 +186,20 @@ class RoomSocketHub:
         if not members or (revision is not None and all(member.revision >= revision for _, member in members)):
             return
         try:
-            snapshots = await authority.snapshots(
+            snapshots: list[RoomSnapshot | AuthorityError] = await authority.snapshots(
                 room_code,
                 [Viewer(credential=member.credential) for _, member in members],
             )
-        except AuthorityError:
-            for websocket, _ in members:
-                self.detach(room_code, websocket)
+        except AuthorityError as error:
+            if error.code in _SOCKET_CLOSING_ERRORS:
+                # The room is gone, for example after a Redis restart; tell every member now.
+                for websocket, _ in members:
+                    await self._close(room_code, websocket, error)
+            # A temporary failure keeps every member; the next revision or sweep publishes again.
             return
         for (websocket, member), snapshot in zip(members, snapshots, strict=True):
             if isinstance(snapshot, AuthorityError):
-                self.detach(room_code, websocket)
+                await self._close(room_code, websocket, snapshot)
                 continue
             if snapshot.revision <= member.revision:
                 continue
@@ -298,6 +321,8 @@ def create_app(
         # The first run uses the subscription made during startup; restarts subscribe again.
         subscription = ready_subscriptions.pop() if ready_subscriptions else await selected_authority.subscribe_revisions()
         try:
+            # Revisions published while no subscription listened (a Redis restart) are caught up once.
+            await hub.publish_all(selected_authority)
             await forward_room_revisions(subscription.events(), hub, selected_authority)
         finally:
             await subscription.aclose()
@@ -520,11 +545,6 @@ def create_app(
             return None
         return message
 
-    async def close_with_error(websocket: WebSocket, code: str, title: str) -> None:
-        """Tell the peer why before a 1008 close, so the Web can stop reconnecting and show the reason."""
-        await websocket.send_json({"type": "error", "code": code, "title": title})
-        await websocket.close(code=1008)
-
     @app.websocket("/ws/v1/rooms/{room_code}")
     async def room_websocket(websocket: WebSocket, room_code: str) -> None:
         await websocket.accept()
@@ -551,6 +571,11 @@ def create_app(
                 )
         except AuthorityError as error:
             record_client_error(canonical_room_code, "authenticate")
+            if error.status_code >= 500:
+                # A temporary failure: the Web reconnects after its backoff instead of giving up the room.
+                await websocket.send_json({"type": "error", "code": error.code, "title": error.title})
+                await websocket.close(code=_TRY_AGAIN_LATER)
+                return
             await close_with_error(websocket, error.code, error.title)
             return
         except ValidationError:
