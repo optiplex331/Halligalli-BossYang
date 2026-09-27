@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.2](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.10.1...v0.10.2) (2026-09-27)
+
+
+### Bug Fixes
+
+* **load:** count stale bell frames in the current step ([#140](https://github.com/optiplex331/Halligalli-BossYang/issues/140)) ([c327ffa](https://github.com/optiplex331/Halligalli-BossYang/commit/c327ffa9e07fe71fb08035eb8fe0476783bb0c52))
+
 ## [0.10.1](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.10.0...v0.10.1) (2026-09-27)
 
 
