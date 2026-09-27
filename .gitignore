@@ -1,5 +1,7 @@
 # Dependencies
 node_modules/
+# pnpm store the Compose web container creates inside the checkout
+.pnpm-store/
 .venv/
 __pycache__/
 *.py[cod]
