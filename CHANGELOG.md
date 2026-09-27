@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.1](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.10.0...v0.10.1) (2026-09-27)
+
+
+### Bug Fixes
+
+* **compose:** expose OTLP receivers and keep the pnpm store out of the checkout ([#136](https://github.com/optiplex331/Halligalli-BossYang/issues/136)) ([5bc8318](https://github.com/optiplex331/Halligalli-BossYang/commit/5bc831813994ae7c5228234b41c30ac33b89998d))
+
+
+### Performance Improvements
+
+* **api:** publish each room revision with one room read; notify sockets of lost rooms ([#137](https://github.com/optiplex331/Halligalli-BossYang/issues/137)) ([2c874d6](https://github.com/optiplex331/Halligalli-BossYang/commit/2c874d6060b8c3f2c90706aced1de872a9022db0))
+
 ## [0.10.0](https://github.com/optiplex331/Halligalli-BossYang/compare/v0.9.2...v0.10.0) (2026-09-27)
 
 
