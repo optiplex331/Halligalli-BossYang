@@ -2,7 +2,7 @@
 
 This standalone Node ESM harness is evidence tooling. It is not wired into CI and has no added dependencies. Use Node 24 so the built-in `fetch` and `WebSocket` APIs are available.
 
-The default run uses the local Web origin only. It runs the 1, 2, 5, 10, and 15 room ramp, then drains those rooms and runs a separate ten room Design Load step with four humans at normal difficulty. Each step lasts three minutes by default, and the complete run stops at 20 minutes. `--step-seconds` shortens all six steps for a local dry run.
+The default run uses the local Web origin only. It runs the 1, 2, 5, and 10 room ramp, then drains those rooms and runs a separate ten room Design Load step with four humans at normal difficulty. Each step lasts three minutes by default, and the complete run stops at 20 minutes. `--step-seconds` shortens all five steps for a local dry run.
 
 Between the ramp and the Design Load, and at the end, rooms get at most 45 seconds to finish without rematching; any room still playing then forfeits, so no unobserved room keeps ticking into the next step and the full run fits inside 20 minutes.
 
