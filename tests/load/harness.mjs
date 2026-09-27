@@ -487,7 +487,7 @@ class SocketClient {
         }
         if (message.type === "bell_stale") {
           this.monitor.globalClientOutcomes.staleFrames += 1;
-          if (this.manager.currentStep) this.manager.currentStep.clientBellOutcomes.staleFrames += 1;
+          if (this.monitor.currentStep) this.monitor.currentStep.clientBellOutcomes.staleFrames += 1;
           this.checkStaleScore(message.revealSequence);
           this.finishBell(message.revealSequence, "stale");
           return;
