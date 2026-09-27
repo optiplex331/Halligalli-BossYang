@@ -33,7 +33,12 @@ class ObservabilityTest(RedisTestCase):
             with client.websocket_connect(f"/ws/v1/rooms/{created.json()['roomCode']}") as websocket:
                 websocket.send_text(json.dumps({"type": "authenticate", "credential": credential}))
                 websocket.receive_json()
-            metrics = client.get("/internal/metrics")
+            # The first due sweep runs in the background; wait for it instead of racing it.
+            deadline = time.monotonic() + 2
+            while "halligalli_due_processing_seconds_count" not in (metrics := client.get("/internal/metrics")).text:
+                if time.monotonic() > deadline:
+                    break
+                time.sleep(0.01)
             identity = client.get("/internal/identity")
             readiness = client.get("/internal/ready")
 

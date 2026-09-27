@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from redis.exceptions import ConnectionError as RedisConnectionError
 from starlette.websockets import WebSocketDisconnect
 
 from halligalli_api.app import create_app
-from halligalli_api.authority import RedisMultiplayerAuthority
+from halligalli_api.authority import AuthorityError, Ready, RedisMultiplayerAuthority, Viewer
 from redis_test_case import RedisTestCase, hash_credential
 
 
@@ -17,6 +19,46 @@ class StartupTest(unittest.TestCase):
         with self.assertRaises(Exception):
             with TestClient(create_app(authority=unavailable)):
                 pass
+
+
+class UnavailableRedisTest(unittest.IsolatedAsyncioTestCase):
+    async def test_lost_redis_connection_is_a_temporary_authority_error(self) -> None:
+        unavailable = RedisMultiplayerAuthority.from_url("redis://127.0.0.1:1/0")
+        try:
+            for attempt in (
+                unavailable.execute("ABCD", Ready(hash_credential("host"), "ready-1")),
+                unavailable.snapshot("ABCD", Viewer("host")),
+                unavailable.snapshots("ABCD", [Viewer("host")]),
+            ):
+                with self.subTest(attempt=attempt.__qualname__), self.assertRaises(AuthorityError) as raised:
+                    await attempt
+                self.assertEqual((raised.exception.code, raised.exception.status_code), ("authority_unavailable", 503))
+        finally:
+            await unavailable.aclose()
+
+
+class _UnavailableAuthority:
+    def now_ms(self) -> int:
+        return 0
+
+    async def advance_due(self, now_ms: int | None = None) -> list[str]:
+        return []
+
+    async def snapshot(self, room_code: str, viewer: Viewer):
+        raise AuthorityError("authority_unavailable", 503, "Server is temporarily unavailable; try again shortly")
+
+
+class UnavailableSocketTest(unittest.TestCase):
+    def test_authentication_during_an_outage_closes_so_the_web_retries(self) -> None:
+        with TestClient(create_app(authority=_UnavailableAuthority())) as client:
+            with client.websocket_connect("/ws/v1/rooms/ABCD") as socket:
+                socket.send_json({"type": "authenticate", "credential": "host"})
+                frame = socket.receive_json()
+                with self.assertRaises(WebSocketDisconnect) as closed:
+                    socket.receive_json()
+
+        self.assertEqual(frame["code"], "authority_unavailable")
+        self.assertEqual(closed.exception.code, 1013)
 
 
 class WebSocketMatchTest(RedisTestCase):
@@ -94,6 +136,22 @@ class WebSocketMatchTest(RedisTestCase):
             json={"name": "Guest", "credentialVerifier": hash_credential(guest_credential)},
         )
         return room_code
+
+    def test_a_command_during_a_redis_outage_gets_an_error_frame_and_the_socket_stays_usable(self) -> None:
+        with TestClient(create_app(authority=self.authority)) as client:
+            room_code = self._room(client, "host", "guest")
+            with client.websocket_connect(f"/ws/v1/rooms/{room_code}") as guest_socket:
+                guest_socket.send_json({"type": "authenticate", "credential": "guest"})
+                guest_socket.receive_json()
+
+                with patch.object(self.authority._redis, "pipeline", side_effect=RedisConnectionError("Redis is down")):
+                    guest_socket.send_json({"type": "ready"})
+                    unavailable = guest_socket.receive_json()
+                guest_socket.send_json({"type": "ready"})
+                accepted = guest_socket.receive_json()
+
+        self.assertEqual((unavailable["type"], unavailable["code"]), ("error", "authority_unavailable"))
+        self.assertEqual(accepted["type"], "snapshot")
 
     def test_a_rejected_command_answers_with_an_error_frame_and_keeps_the_socket_open(self) -> None:
         with TestClient(create_app(authority=self.authority)) as client:

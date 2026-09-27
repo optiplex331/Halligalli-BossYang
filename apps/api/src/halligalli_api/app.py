@@ -51,6 +51,7 @@ _RELEASE_IDENTITY_PATH = Path(__file__).with_name("release-identity.json")
 # UVICORN_WS_MAX_SIZE to the same bound so an oversized frame is refused before it is buffered.
 WEBSOCKET_MAX_MESSAGE_BYTES = 4_096
 _MESSAGE_TOO_BIG = 1009
+_TRY_AGAIN_LATER = 1013
 TRUSTED_PROXY_HOPS_ENV = "HALLIGALLI_TRUSTED_PROXY_HOPS"
 
 
@@ -133,6 +134,19 @@ class WebSocketRoomCommand(ApiModel):
         return self
 
 
+def _is_open(websocket: WebSocket) -> bool:
+    # Another task (a publish) may have closed this socket while its own task awaited the authority.
+    return websocket.application_state == WebSocketState.CONNECTED
+
+
+async def close_with_error(websocket: WebSocket, code: str, title: str) -> None:
+    """Tell the peer why before a 1008 close, so the Web can stop reconnecting and show the reason."""
+    if not _is_open(websocket):
+        return
+    await websocket.send_json({"type": "error", "code": code, "title": title})
+    await websocket.close(code=1008)
+
+
 @dataclass
 class _SocketMember:
     credential: str
@@ -157,13 +171,42 @@ class RoomSocketHub:
         if not members:
             self._members.pop(room_code, None)
 
-    async def publish(self, room_code: str, authority: MultiplayerAuthority) -> None:
+    async def publish_all(self, authority: MultiplayerAuthority) -> None:
+        """Publish every room with attached members, so a room lost while unobserved is noticed."""
+        for room_code in list(self._members):
+            await self.publish(room_code, authority)
+
+    async def _close(self, room_code: str, websocket: WebSocket, error: AuthorityError) -> None:
+        self.detach(room_code, websocket)
+        try:
+            await close_with_error(websocket, error.code, error.title)
+        except Exception:
+            # The peer may already be gone; it is detached either way.
+            pass
+
+    async def publish(self, room_code: str, authority: MultiplayerAuthority, revision: int | None = None) -> None:
+        """Send each member the room's newer snapshot, reading the room once for all of them.
+
+        A known `revision` that every member already holds needs no read at all.
+        """
         members = list(self._members.get(room_code, {}).items())
-        for websocket, member in members:
-            try:
-                snapshot = await authority.snapshot(room_code, Viewer(credential=member.credential))
-            except AuthorityError:
-                self.detach(room_code, websocket)
+        if not members or (revision is not None and all(member.revision >= revision for _, member in members)):
+            return
+        try:
+            snapshots: list[RoomSnapshot | AuthorityError] = await authority.snapshots(
+                room_code,
+                [Viewer(credential=member.credential) for _, member in members],
+            )
+        except AuthorityError as error:
+            if error.code in _SOCKET_CLOSING_ERRORS:
+                # The room is gone, for example after a Redis restart; tell every member now.
+                for websocket, _ in members:
+                    await self._close(room_code, websocket, error)
+            # A temporary failure keeps every member; the next revision or sweep publishes again.
+            return
+        for (websocket, member), snapshot in zip(members, snapshots, strict=True):
+            if isinstance(snapshot, AuthorityError):
+                await self._close(room_code, websocket, snapshot)
                 continue
             if snapshot.revision <= member.revision:
                 continue
@@ -178,12 +221,12 @@ class RoomSocketHub:
 
 
 async def forward_room_revisions(
-    room_codes: AsyncIterator[str],
+    revisions: AsyncIterator[tuple[str, int | None]],
     hub: RoomSocketHub,
     authority: MultiplayerAuthority,
 ) -> None:
-    async for room_code in room_codes:
-        await hub.publish(room_code, authority)
+    async for room_code, revision in revisions:
+        await hub.publish(room_code, authority, revision)
 
 
 def _runtime_authority(telemetry: Telemetry) -> RedisMultiplayerAuthority:
@@ -259,8 +302,10 @@ def create_app(
             started_at = time.perf_counter()
             for room_code in await selected_authority.advance_due():
                 await hub.publish(room_code, selected_authority)
-            telemetry.record_due_processing(elapsed_since(started_at))
-            await asyncio.sleep(due_interval_seconds)
+            elapsed = elapsed_since(started_at)
+            telemetry.record_due_processing(elapsed)
+            # Start sweeps on a fixed cadence: a slow sweep eats into the pause instead of adding to it.
+            await asyncio.sleep(max(0.0, due_interval_seconds - elapsed))
 
     async def emit_runtime_summaries(interval_seconds: float) -> None:
         read_memory = getattr(selected_authority, "redis_memory", None)
@@ -283,6 +328,8 @@ def create_app(
         # The first run uses the subscription made during startup; restarts subscribe again.
         subscription = ready_subscriptions.pop() if ready_subscriptions else await selected_authority.subscribe_revisions()
         try:
+            # Revisions published while no subscription listened (a Redis restart) are caught up once.
+            await hub.publish_all(selected_authority)
             await forward_room_revisions(subscription.events(), hub, selected_authority)
         finally:
             await subscription.aclose()
@@ -484,12 +531,13 @@ def create_app(
         trace_id: str = "",
         started_at: float | None = None,
         span: object | None = None,
+        error: AuthorityError | None = None,
     ) -> None:
         telemetry.record_websocket(
             trace_id=trace_id,
             room_code=room_code,
             command=command,
-            outcome="client_error",
+            outcome="server_error" if error is not None and error.status_code >= 500 else "client_error",
             elapsed_seconds=elapsed_since(started_at) if started_at is not None else 0,
             span=span,
         )
@@ -504,11 +552,6 @@ def create_app(
             await websocket.close(code=_MESSAGE_TOO_BIG)
             return None
         return message
-
-    async def close_with_error(websocket: WebSocket, code: str, title: str) -> None:
-        """Tell the peer why before a 1008 close, so the Web can stop reconnecting and show the reason."""
-        await websocket.send_json({"type": "error", "code": code, "title": title})
-        await websocket.close(code=1008)
 
     @app.websocket("/ws/v1/rooms/{room_code}")
     async def room_websocket(websocket: WebSocket, room_code: str) -> None:
@@ -535,7 +578,12 @@ def create_app(
                     span=span,
                 )
         except AuthorityError as error:
-            record_client_error(canonical_room_code, "authenticate")
+            record_client_error(canonical_room_code, "authenticate", error=error)
+            if error.status_code >= 500:
+                # A temporary failure: the Web reconnects after its backoff instead of giving up the room.
+                await websocket.send_json({"type": "error", "code": error.code, "title": error.title})
+                await websocket.close(code=_TRY_AGAIN_LATER)
+                return
             await close_with_error(websocket, error.code, error.title)
             return
         except ValidationError:
@@ -570,14 +618,16 @@ def create_app(
                             _room_command(command_payload, payload.credential, app.state.authority.now_ms()),
                         )
                     except AuthorityError as error:
-                        record_client_error(canonical_room_code, command_name, trace_id, started_at, span)
+                        record_client_error(canonical_room_code, command_name, trace_id, started_at, span, error)
                         if error.code in _SOCKET_CLOSING_ERRORS:
                             await close_with_error(websocket, error.code, error.title)
                             return
-                        await websocket.send_json({"type": "error", "code": error.code, "title": error.title})
+                        if _is_open(websocket):
+                            await websocket.send_json({"type": "error", "code": error.code, "title": error.title})
                         continue
                     if isinstance(result, StaleBellResult):
-                        await websocket.send_json({"type": "bell_stale", "revealSequence": command_payload.reveal_sequence})
+                        if _is_open(websocket):
+                            await websocket.send_json({"type": "bell_stale", "revealSequence": command_payload.reveal_sequence})
                     else:
                         await hub.publish(canonical_room_code, app.state.authority)
                     telemetry.record_websocket(
