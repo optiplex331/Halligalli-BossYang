@@ -505,6 +505,11 @@ def create_app(
             return None
         return message
 
+    async def close_with_error(websocket: WebSocket, code: str, title: str) -> None:
+        """Tell the peer why before a 1008 close, so the Web can stop reconnecting and show the reason."""
+        await websocket.send_json({"type": "error", "code": code, "title": title})
+        await websocket.close(code=1008)
+
     @app.websocket("/ws/v1/rooms/{room_code}")
     async def room_websocket(websocket: WebSocket, room_code: str) -> None:
         await websocket.accept()
@@ -529,9 +534,13 @@ def create_app(
                     elapsed_seconds=elapsed_since(started_at),
                     span=span,
                 )
-        except (AuthorityError, ValidationError):
+        except AuthorityError as error:
             record_client_error(canonical_room_code, "authenticate")
-            await websocket.close(code=1008)
+            await close_with_error(websocket, error.code, error.title)
+            return
+        except ValidationError:
+            record_client_error(canonical_room_code, "authenticate")
+            await close_with_error(websocket, "invalid_request", "Authentication is invalid")
             return
         except WebSocketDisconnect:
             return
@@ -563,7 +572,7 @@ def create_app(
                     except AuthorityError as error:
                         record_client_error(canonical_room_code, command_name, trace_id, started_at, span)
                         if error.code in _SOCKET_CLOSING_ERRORS:
-                            await websocket.close(code=1008)
+                            await close_with_error(websocket, error.code, error.title)
                             return
                         await websocket.send_json({"type": "error", "code": error.code, "title": error.title})
                         continue

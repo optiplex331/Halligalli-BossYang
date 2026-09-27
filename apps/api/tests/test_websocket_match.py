@@ -154,9 +154,11 @@ class WebSocketMatchTest(RedisTestCase):
             room_code = self._room(client, "host", "guest")
             with client.websocket_connect(f"/ws/v1/rooms/{room_code}") as socket:
                 socket.send_json({"type": "authenticate", "credential": "stranger"})
+                reason = socket.receive_json()
                 with self.assertRaises(WebSocketDisconnect) as closed:
                     socket.receive_json()
 
+        self.assertEqual(reason["type"], "error")
         self.assertEqual(closed.exception.code, 1008)
 
     def test_room_creation_ignores_the_deprecated_duration_field_for_open_old_tabs(self) -> None:
