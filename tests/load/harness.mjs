@@ -6,13 +6,14 @@ import { stat, writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { createInterface } from "node:readline";
 
-const RAMP_ROOMS = [1, 2, 5, 10, 15];
+// The registered ramp stops at ten rooms: v0.10.0 exceeded capacity at 15 before reaching the Design Load.
+const RAMP_ROOMS = [1, 2, 5, 10];
 const DESIGN_STEP = { id: "design-load", targetRooms: 10, designLoad: true };
 const MAX_PROBE_ROOMS = 60;
 const MAX_STEP_SECONDS = 180;
 const RUN_LIMIT_MS = 20 * 60 * 1_000;
 const SUMMARY_SILENCE_MS = 60_000;
-// Steps use 6 x 180 s; the two drains share the remaining budget so a full run ends inside 20 minutes.
+// Steps use 5 x 180 s; the two drains share the remaining budget so a full run ends inside 20 minutes.
 const DRAIN_LIMIT_MS = 45_000;
 const FORFEIT_GRACE_MS = 10_000;
 const DRAIN_EXPECTED_ERRORS = new Set(["participant_departed", "forfeit_not_allowed", "match_not_running"]);
@@ -31,7 +32,7 @@ function usage() {
   return `Usage: node tests/load/harness.mjs [options]
 
 Options:
-  --step-seconds <1..180>       Duration of each of the six steps (default: 180)
+  --step-seconds <1..180>       Duration of each step (default: 180)
   --origin <loopback-http-url>  Web origin (default: http://localhost:5173)
   --target live-demo            Explicitly select https://play.halligalli.games
   --metrics-url <loopback-url>  Optional local /internal/metrics endpoint
