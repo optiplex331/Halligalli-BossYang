@@ -10,11 +10,13 @@ services:
     environment:
       CI: "true"
       HALLIGALLI_API_ORIGIN: http://api:8000
+      npm_config_store_dir: /pnpm/store
       TMPDIR: /tmp
     volumes:
       - .:/workspace
       - /workspace/node_modules
       - /workspace/apps/web/node_modules
+      - pnpm-store:/pnpm
     ports:
       - "5173:5173"
     depends_on:
@@ -75,6 +77,7 @@ configs:
         otlp:
           protocols:
             http:
+              endpoint: 0.0.0.0:4318
       exporters:
         otlphttp/tempo:
           endpoint: http://tempo:4318
@@ -92,8 +95,12 @@ configs:
           otlp:
             protocols:
               http:
+                endpoint: 0.0.0.0:4318
       storage:
         trace:
           backend: local
           local:
             path: /tmp/tempo
+
+volumes:
+  pnpm-store:
