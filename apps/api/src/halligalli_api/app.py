@@ -15,6 +15,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import FastAPI, Header, Request, WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketState
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from pydantic import ConfigDict, Field, ValidationError, model_validator
@@ -495,6 +496,9 @@ def create_app(
 
     async def receive_bounded_text(websocket: WebSocket) -> str | None:
         """Receive one text message, closing the socket with 1009 when it exceeds the fixed bound."""
+        if websocket.application_state != WebSocketState.CONNECTED:
+            # A publish to this peer failed and Starlette marked it disconnected; end the loop quietly.
+            raise WebSocketDisconnect(code=1006)
         message = await websocket.receive_text()
         if len(message.encode("utf-8")) > WEBSOCKET_MAX_MESSAGE_BYTES:
             await websocket.close(code=_MESSAGE_TOO_BIG)
