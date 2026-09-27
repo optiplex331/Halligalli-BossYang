@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from redis.exceptions import ConnectionError as RedisConnectionError
 from starlette.websockets import WebSocketDisconnect
 
 from halligalli_api.app import create_app
@@ -134,6 +136,22 @@ class WebSocketMatchTest(RedisTestCase):
             json={"name": "Guest", "credentialVerifier": hash_credential(guest_credential)},
         )
         return room_code
+
+    def test_a_command_during_a_redis_outage_gets_an_error_frame_and_the_socket_stays_usable(self) -> None:
+        with TestClient(create_app(authority=self.authority)) as client:
+            room_code = self._room(client, "host", "guest")
+            with client.websocket_connect(f"/ws/v1/rooms/{room_code}") as guest_socket:
+                guest_socket.send_json({"type": "authenticate", "credential": "guest"})
+                guest_socket.receive_json()
+
+                with patch.object(self.authority._redis, "pipeline", side_effect=RedisConnectionError("Redis is down")):
+                    guest_socket.send_json({"type": "ready"})
+                    unavailable = guest_socket.receive_json()
+                guest_socket.send_json({"type": "ready"})
+                accepted = guest_socket.receive_json()
+
+        self.assertEqual((unavailable["type"], unavailable["code"]), ("error", "authority_unavailable"))
+        self.assertEqual(accepted["type"], "snapshot")
 
     def test_a_rejected_command_answers_with_an_error_frame_and_keeps_the_socket_open(self) -> None:
         with TestClient(create_app(authority=self.authority)) as client:

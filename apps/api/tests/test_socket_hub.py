@@ -3,6 +3,8 @@ from __future__ import annotations
 import unittest
 from dataclasses import dataclass
 
+from starlette.websockets import WebSocketState
+
 from halligalli_api.app import RoomSocketHub, forward_room_revisions
 from halligalli_api.authority import AuthorityError, Viewer
 
@@ -19,12 +21,14 @@ class _Socket:
     def __init__(self) -> None:
         self.sent: list[dict] = []
         self.close_code: int | None = None
+        self.application_state = WebSocketState.CONNECTED
 
     async def send_json(self, payload: dict) -> None:
         self.sent.append(payload)
 
     async def close(self, code: int) -> None:
         self.close_code = code
+        self.application_state = WebSocketState.DISCONNECTED
 
 
 class _Authority:

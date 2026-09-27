@@ -134,8 +134,15 @@ class WebSocketRoomCommand(ApiModel):
         return self
 
 
+def _is_open(websocket: WebSocket) -> bool:
+    # Another task (a publish) may have closed this socket while its own task awaited the authority.
+    return websocket.application_state == WebSocketState.CONNECTED
+
+
 async def close_with_error(websocket: WebSocket, code: str, title: str) -> None:
     """Tell the peer why before a 1008 close, so the Web can stop reconnecting and show the reason."""
+    if not _is_open(websocket):
+        return
     await websocket.send_json({"type": "error", "code": code, "title": title})
     await websocket.close(code=1008)
 
@@ -524,12 +531,13 @@ def create_app(
         trace_id: str = "",
         started_at: float | None = None,
         span: object | None = None,
+        error: AuthorityError | None = None,
     ) -> None:
         telemetry.record_websocket(
             trace_id=trace_id,
             room_code=room_code,
             command=command,
-            outcome="client_error",
+            outcome="server_error" if error is not None and error.status_code >= 500 else "client_error",
             elapsed_seconds=elapsed_since(started_at) if started_at is not None else 0,
             span=span,
         )
@@ -570,7 +578,7 @@ def create_app(
                     span=span,
                 )
         except AuthorityError as error:
-            record_client_error(canonical_room_code, "authenticate")
+            record_client_error(canonical_room_code, "authenticate", error=error)
             if error.status_code >= 500:
                 # A temporary failure: the Web reconnects after its backoff instead of giving up the room.
                 await websocket.send_json({"type": "error", "code": error.code, "title": error.title})
@@ -610,14 +618,16 @@ def create_app(
                             _room_command(command_payload, payload.credential, app.state.authority.now_ms()),
                         )
                     except AuthorityError as error:
-                        record_client_error(canonical_room_code, command_name, trace_id, started_at, span)
+                        record_client_error(canonical_room_code, command_name, trace_id, started_at, span, error)
                         if error.code in _SOCKET_CLOSING_ERRORS:
                             await close_with_error(websocket, error.code, error.title)
                             return
-                        await websocket.send_json({"type": "error", "code": error.code, "title": error.title})
+                        if _is_open(websocket):
+                            await websocket.send_json({"type": "error", "code": error.code, "title": error.title})
                         continue
                     if isinstance(result, StaleBellResult):
-                        await websocket.send_json({"type": "bell_stale", "revealSequence": command_payload.reveal_sequence})
+                        if _is_open(websocket):
+                            await websocket.send_json({"type": "bell_stale", "revealSequence": command_payload.reveal_sequence})
                     else:
                         await hub.publish(canonical_room_code, app.state.authority)
                     telemetry.record_websocket(
