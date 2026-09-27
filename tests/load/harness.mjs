@@ -137,16 +137,14 @@ function percentile(values, quantile) {
   return ordered[Math.max(0, Math.ceil(quantile * ordered.length) - 1)];
 }
 
+/**
+ * The sender's bell counters. A Stale Bell must leave them unchanged; the score itself may still
+ * move meanwhile, because the same Bell Window can resolve as missed and charge every participant.
+ */
 function scoreFingerprint(snapshot, seatIndex) {
   const entry = snapshot?.scoreboard?.find((score) => score.seatIndex === seatIndex);
   if (!entry) return null;
-  return JSON.stringify({
-    score: entry.score,
-    correctHits: entry.correctHits,
-    wrongHits: entry.wrongHits,
-    missedHits: entry.missedHits,
-    scoreBreakdown: entry.scoreBreakdown,
-  });
+  return JSON.stringify({ correctHits: entry.correctHits, wrongHits: entry.wrongHits });
 }
 
 function summaryFromValue(value, depth = 0) {
@@ -428,7 +426,7 @@ class SocketClient {
     this.openFailed = false;
     this.pendingStaleChecks = new Map();
     this.pendingBellResponses = new Map();
-    this.lastCadence = null;
+    this.lastRungSequence = null;
     this.connect();
   }
 
@@ -517,7 +515,7 @@ class SocketClient {
     }
     this.lastRevision = snapshot.revision;
     this.latestSnapshot = snapshot;
-    this.recordCadence(snapshot);
+    this.manager.recordCadence(snapshot);
     this.checkBellSnapshots(snapshot);
     for (let index = this.waiters.length - 1; index >= 0; index -= 1) {
       const waiter = this.waiters[index];
@@ -548,35 +546,6 @@ class SocketClient {
     this.pendingBellResponses.delete(sequence);
     clearTimeout(pending.timer);
     pending.resolve(outcome);
-  }
-
-  recordCadence(snapshot) {
-    if (snapshot.phase !== "playing" || !snapshot.lastReveal?.sequence) return;
-    const now = performance.now();
-    const current = {
-      matchNumber: snapshot.matchNumber,
-      sequence: snapshot.lastReveal.sequence,
-      at: now,
-      // A coalesced first view may already show the window won, which still means it was open.
-      opensBellWindow: Boolean(snapshot.bellFruit) || snapshot.lastEvent === "correct_bell",
-    };
-    const previous = this.lastCadence;
-    // Later snapshots of the same reveal (a correct bell, another player's command) keep the reveal's time.
-    if (previous && previous.matchNumber === current.matchNumber && current.sequence <= previous.sequence) return;
-    this.lastCadence = current;
-    if (!previous || previous.matchNumber !== current.matchNumber) return;
-    const pace = snapshot.configuration.difficulty;
-    // A reveal that opened a Bell Window holds the next flip until the window's deadline, whether the
-    // window was won or missed; any further skipped reveals each took one turn interval.
-    const expectedMs = (previous.opensBellWindow ? BELL_WINDOW_MS[pace] : TURN_INTERVAL_MS[pace])
-      + TURN_INTERVAL_MS[pace] * (current.sequence - previous.sequence - 1);
-    const gapMs = now - previous.at;
-    const latenessMs = Math.max(0, gapMs - expectedMs);
-    if (this.monitor.currentStep) {
-      this.monitor.currentStep.clientCadenceGapMs.push(gapMs);
-      this.monitor.currentStep.clientCadenceLatenessMs.push(latenessMs);
-    }
-    this.monitor.recordClientLateness(latenessMs);
   }
 
   waitForSnapshot(predicate, timeoutMs = 8_000) {
@@ -626,6 +595,7 @@ class SocketClient {
     const scoreAtSend = scoreFingerprint(this.latestSnapshot, this.seatIndex) ?? baseline;
     const initialScore = this.latestSnapshot?.scoreboard?.find((entry) => entry.seatIndex === this.seatIndex);
     this.pendingStaleChecks.set(revealSequence, scoreAtSend);
+    this.lastRungSequence = revealSequence;
     this.monitor.recordOperation(true);
     this.socket.send(JSON.stringify({ type: "bell", commandId: randomUUID(), revealSequence }));
     this.monitor.currentStep && this.monitor.currentStep.reactionSamplesMs.push(plannedReactionMs);
@@ -648,7 +618,8 @@ class SocketClient {
   checkStaleScore(revealSequence) {
     const baseline = this.pendingStaleChecks.get(revealSequence);
     this.pendingStaleChecks.delete(revealSequence);
-    if (!baseline) return;
+    // A later bell from this participant can legitimately move its counters, so the check is inconclusive.
+    if (!baseline || this.lastRungSequence !== revealSequence) return;
     const after = scoreFingerprint(this.latestSnapshot, this.seatIndex);
     if (after && after !== baseline) {
       this.manager.recordInvariant("Stale Bells change no score", "participant score or breakdown changed around a stale response");
@@ -727,6 +698,7 @@ function lognormalReactionMs() {
 class RoomManager {
   constructor({ monitor, origin, websocketOrigin, config, roomNumber }) {
     this.monitor = monitor;
+    this.lastCadence = null;
     this.origin = origin;
     this.websocketOrigin = websocketOrigin;
     this.config = config;
@@ -747,6 +719,39 @@ class RoomManager {
     this.currentStep = null;
     this.matchStartTimes = new Map();
     this.pendingBellTasks = new Set();
+  }
+
+  /**
+   * Records each reveal once per room, at the first socket that sees it, so one late reveal is one
+   * sample rather than one per participant and per-client network jitter does not inflate the gap.
+   */
+  recordCadence(snapshot) {
+    if (snapshot.phase !== "playing" || !snapshot.lastReveal?.sequence) return;
+    const now = performance.now();
+    const current = {
+      matchNumber: snapshot.matchNumber,
+      sequence: snapshot.lastReveal.sequence,
+      at: now,
+      // A coalesced first view may already show the window won, which still means it was open.
+      opensBellWindow: Boolean(snapshot.bellFruit) || snapshot.lastEvent === "correct_bell",
+    };
+    const previous = this.lastCadence;
+    // Later snapshots of the same reveal (a correct bell, another player's command) keep the reveal's time.
+    if (previous && previous.matchNumber === current.matchNumber && current.sequence <= previous.sequence) return;
+    this.lastCadence = current;
+    if (!previous || previous.matchNumber !== current.matchNumber) return;
+    const pace = snapshot.configuration.difficulty;
+    // A reveal that opened a Bell Window holds the next flip until the window's deadline, whether the
+    // window was won or missed; any further skipped reveals each took one turn interval.
+    const expectedMs = (previous.opensBellWindow ? BELL_WINDOW_MS[pace] : TURN_INTERVAL_MS[pace])
+      + TURN_INTERVAL_MS[pace] * (current.sequence - previous.sequence - 1);
+    const gapMs = now - previous.at;
+    const latenessMs = Math.max(0, gapMs - expectedMs);
+    if (this.monitor.currentStep) {
+      this.monitor.currentStep.clientCadenceGapMs.push(gapMs);
+      this.monitor.currentStep.clientCadenceLatenessMs.push(latenessMs);
+    }
+    this.monitor.recordClientLateness(latenessMs);
   }
 
   async enter() {
