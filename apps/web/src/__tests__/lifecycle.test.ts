@@ -66,7 +66,11 @@ describe("room socket restart lifecycle", () => {
   it("reconnects within half a second after a planned API restart without counting a failure", () => {
     expect(reconnectAfterClose(1012, 5, () => 0)).toEqual({ delayMs: 0, nextAttempt: 0 });
     expect(reconnectAfterClose(1012, 5, () => 1)).toEqual({ delayMs: 500, nextAttempt: 0 });
-    expect(reconnectAfterClose(1012, 0, () => 0.25).delayMs).not.toEqual(reconnectAfterClose(1012, 0, () => 0.75).delayMs);
+    expect(reconnectAfterClose(1012, 0, () => 0.25)?.delayMs).not.toEqual(reconnectAfterClose(1012, 0, () => 0.75)?.delayMs);
+  });
+
+  it("stops reconnecting when the room or credential is gone", () => {
+    expect(reconnectAfterClose(1008, 2, () => 1)).toBeNull();
   });
 
   it("keeps backing off after other closes", () => {

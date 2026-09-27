@@ -162,7 +162,13 @@ export function useRoomEntry() {
       if (generationRef.current !== generation) return;
       setConnected(false);
       if (!intentionalCloseRef.current.has(socket)) {
-        const { delayMs, nextAttempt } = reconnectAfterClose(event.code, reconnectAttemptRef.current);
+        const plan = reconnectAfterClose(event.code, reconnectAttemptRef.current);
+        if (plan === null) {
+          // The server sent the reason as an error frame first; fall back in case it never arrived.
+          setError((current) => current || "room_not_found");
+          return;
+        }
+        const { delayMs, nextAttempt } = plan;
         reconnectAttemptRef.current = nextAttempt;
         retryTimer = window.setTimeout(() => {
           if (generationRef.current === generation) setRetryNonce((value) => value + 1);
