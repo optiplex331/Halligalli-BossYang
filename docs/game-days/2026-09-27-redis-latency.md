@@ -141,3 +141,21 @@ measurement of any target.
    of work-then-sleep; pipeline the per-room reads.
 3. Harness: the "Command p95" and "Due processing p95" columns are `n/a` without a
    metrics URL. Adding them to `runtime_summary` would make latency drills self-explaining.
+
+## Follow-up disposition (2026-09-28)
+
+These later statuses do not change the synthetic-delay measurements above.
+
+1. **Open evidence gap.** No direct API-to-Redis round-trip samples for K3s or AKS are
+   recorded here. The K3s rollback drill records runtime lateness, not Redis RTT; the
+   [AKS runbook](https://github.com/optiplex331/Halligalli-infrastructure/blob/main/docs/operations/aks.md)
+   says no cluster is running, so there is no current AKS target measurement.
+2. **Resolved for the tested `v0.10.1` Container Apps shape.** The release loads each
+   room once per publish, skips revisions already held by every member, and uses a
+   fixed-cadence due sweep. The [load evidence](https://github.com/optiplex331/Halligalli-infrastructure/blob/main/targets/container-apps/evidence/load-2026-09-27-v0.10.1-summary.md)
+   records a 101 ms p95 at Design Load; the pre-registered 150 ms fan-out trigger did not
+   require further work for that measured shape.
+3. **Open instrumentation gap.** `runtime_summary` still omits Command p95 and Due
+   processing p95. Reports need the internal metrics URL for those columns; without it,
+   they remain `n/a`. See `apps/api/src/halligalli_api/observability.py` and
+   `tests/load/README.md`.
