@@ -28,11 +28,13 @@ architecture and delivery overview.
 node --version       # v24.x
 pnpm --version       # 11.0.9
 pnpm install
-pnpm run dev         # Web, API, Redis; open http://localhost:5173
+pnpm run dev         # Web, API, Redis, Collector, Tempo; open http://localhost:5173
 ```
 
 Compose exposes only the Web on `http://localhost:5173`. Vite proxies `/api/v1`
-and `/ws/v1` to the internal API, so browser traffic remains same-origin. Room
+and `/ws/v1` to the internal API, so browser traffic remains same-origin. The API
+sends OTLP traces to an internal OpenTelemetry Collector, which forwards them to
+an internal Tempo; neither publishes a host port. Room
 state belongs only to the disposable Redis container; Compose commits neither
 credentials nor a data volume.
 
@@ -122,9 +124,12 @@ apps/
 contracts/
 ├── fixtures/               # Versioned language-neutral behavior data
 └── openapi.json            # Pydantic-generated REST contract snapshot
+docs/
+└── game-days/              # Dated Compose fault and capacity drill reports
 tests/
-└── e2e/                    # Cross-Web/API Compose journey
-compose.yaml                # Web + API + Redis local development stack
+├── e2e/                    # Cross-Web/API Compose journey
+└── load/                   # Multiplayer load harness
+compose.yaml                # Web + API + Redis + Collector/Tempo local stack
 ```
 
 `contracts/` is data only. The TypeScript browser rules and Python authority
