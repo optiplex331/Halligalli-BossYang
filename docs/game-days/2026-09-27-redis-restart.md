@@ -126,3 +126,21 @@ The cost is log noise and the missing structured error.
    retryable error or close with 1011, instead of letting the exception escape.
 3. Harness: in a drill mode, classify closes caused by the fault separately from client
    errors, as suggested in the API kill report.
+
+## Follow-up disposition (2026-09-28)
+
+These later statuses do not change the Compose observations above.
+
+1. **Resolved in `v0.10.1`.** The revision forwarder republishes attached rooms after
+   reconnecting, so a missing room is reported to the socket and the Web stops retrying
+   on the terminal close. See `apps/api/src/halligalli_api/app.py`,
+   `apps/api/tests/test_socket_hub.py`, and
+   `apps/web/src/__tests__/lifecycle.test.ts`.
+2. **Resolved in `v0.10.1`.** Redis connection and timeout failures become the
+   retryable `authority_unavailable` frame; the socket remains usable. See
+   `apps/api/src/halligalli_api/authority.py` and
+   `apps/api/tests/test_websocket_match.py`.
+3. **Partly resolved.** The load harness reconnects and records planned `1012` restart
+   closes for the K3s drill. Other closes, including fault-related `1006`, remain client
+   errors; a Redis-restart fault mode is still unimplemented. The planned-restart result
+   is recorded in the [K3s rollback evidence](https://github.com/optiplex331/Halligalli-infrastructure/blob/main/targets/k3s/evidence/rollback-drill-2026-09-27.md).
