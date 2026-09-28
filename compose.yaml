@@ -57,7 +57,7 @@ services:
       retries: 20
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.156.0
+    image: otel/opentelemetry-collector:0.156.0
     command: ["--config=/etc/otelcol/config.yaml"]
     configs:
       - source: otel-collector-config
