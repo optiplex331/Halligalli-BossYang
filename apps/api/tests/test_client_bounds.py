@@ -39,7 +39,7 @@ class ClientBoundsTest(RedisTestCase):
         )
 
     def test_budget_keys_on_the_client_written_by_the_outermost_trusted_proxy(self) -> None:
-        # Two trusted hops, as on Container Apps: platform ingress, then the local nginx.
+        # The two-hop chain exercises selection; target counts live in Infrastructure.
         with self._client(trusted_proxy_hops=2, room_creation_budget=1) as client:
             first = self._create(client, "203.0.113.7, 10.0.0.5")
             other_client = self._create(client, "198.51.100.9, 10.0.0.5")
