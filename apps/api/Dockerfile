@@ -1,14 +1,14 @@
 FROM astral/uv:python3.14-alpine
 
-# Copy the project into the image
-COPY ./uv.lock /app
-
-# Disable development dependencies
-ENV UV_NO_DEV=1
-
 WORKDIR /app
-RUN uv sync --locked
 
-COPY ./src/halligalli_api /app/halligalli_api
+# Copy the project requirements into the image
+COPY uv.lock pyproject.toml ./
 
-CMD ["uvicorn", "halligalli_api.app:app", "--reload", "--port", "8000", "--host", "0.0.0.0"]
+RUN uv sync --locked --no-install-project --no-dev
+
+COPY ./src/halligalli_api halligalli_api
+
+ENV PATH="/app/.venv/bin:$PATH"
+
+CMD ["uvicorn", "halligalli_api.app:app", "--ws-max-size", "4096", "--port", "8000", "--host", "0.0.0.0"]
