@@ -233,6 +233,19 @@ export function useRoomEntry() {
   function leaveRoom(): void {
     if (!sessionRef.current) return;
     sendCommand("leave");
+    endSession();
+  }
+
+  // Leaving after a match must not wait for the decision window: a participant who forfeited has no
+  // post-match commands left, so the local session ends whether or not the authority is told.
+  function leaveAfterMatch(): void {
+    const current = sessionRef.current;
+    if (!current) return;
+    if (current.snapshot.allowedCommands.includes("post_match_leave")) sendCommand("post_match_leave");
+    endSession();
+  }
+
+  function endSession(): void {
     const socket = socketRef.current;
     if (socket) intentionalCloseRef.current.add(socket);
     generationRef.current += 1;
@@ -257,6 +270,6 @@ export function useRoomEntry() {
     leaveRoom,
     forfeit: () => sendCommand("forfeit"),
     continueMatch: () => sendCommand("continue"),
-    leaveAfterMatch: () => sendCommand("post_match_leave"),
+    leaveAfterMatch,
   };
 }
