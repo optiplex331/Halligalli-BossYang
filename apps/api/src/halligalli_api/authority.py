@@ -19,7 +19,7 @@ _logger = logging.getLogger("halligalli.authority")
 
 ROOM_TTL_SECONDS = 60 * 60
 DUE_INDEX_KEY = "halligalli:rooms:due"
-# Pre-registered to cover one load generator; the derivation is in README.md, "Client bounds".
+# One address may create this many rooms per window; see "Client bounds" in README.md.
 ROOM_CREATION_BUDGET = 480
 ROOM_CREATION_WINDOW_SECONDS = 60 * 60
 COMMAND_HISTORY_LIMIT = 128
