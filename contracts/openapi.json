@@ -133,16 +133,37 @@
             "type": "array"
           },
           "score": {
-            "title": "Score",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
           },
           "winnerName": {
-            "title": "Winnername",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Winnername"
           },
           "winnerSeatIndex": {
-            "title": "Winnerseatindex",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Winnerseatindex"
           }
         },
         "required": [

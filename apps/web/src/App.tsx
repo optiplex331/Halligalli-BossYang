@@ -51,6 +51,7 @@ const COPY = {
   waitingForReady: "Waiting for every player to be ready",
   turnOwner: "Current turn: {name}",
   matchResult: "{name} wins with {score} points",
+  matchResultNoWinner: "Everyone forfeited. No one wins this match.",
   scoreboardTitle: "Score breakdown",
   seatLabel: "Seat {seat}",
   correctBellEvent: "Successful ring. The server confirmed the score.",
@@ -512,10 +513,12 @@ export default function App() {
                 )}
                 {roomProjection.snapshot.phase === "post_match" && roomProjection.snapshot.result && (
                   <>
-                    <p>{t("matchResult", {
-                      name: roomProjection.snapshot.result.winnerName,
-                      score: roomProjection.snapshot.result.score,
-                    })}</p>
+                    <p>{roomProjection.snapshot.result.winnerName === null || roomProjection.snapshot.result.score === null
+                      ? t("matchResultNoWinner")
+                      : t("matchResult", {
+                        name: roomProjection.snapshot.result.winnerName,
+                        score: roomProjection.snapshot.result.score,
+                      })}</p>
                     <button className="primary-button" disabled={!roomEntry.connected || !roomProjection.snapshot.allowedCommands.includes("continue")} onClick={roomEntry.continueMatch}>
                       {t("continueMatch")}
                     </button>

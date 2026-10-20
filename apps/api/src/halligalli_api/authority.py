@@ -175,9 +175,10 @@ class ParticipantScore(ApiModel):
 
 
 class MatchResult(ApiModel):
-    winner_seat_index: int
-    winner_name: str
-    score: int
+    # All three are null when every Human Participant forfeited: nobody finished, so nobody won.
+    winner_seat_index: int | None
+    winner_name: str | None
+    score: int | None
     participants: list[ParticipantScore]
 
 
@@ -433,9 +434,9 @@ class _Card:
 
 @dataclass
 class _MatchResult:
-    winner_seat_index: int
-    score: int
-    winner_name: str = ""
+    winner_seat_index: int | None
+    score: int | None
+    winner_name: str | None = ""
 
 
 @dataclass
@@ -505,7 +506,10 @@ class _Match:
             scores=scores,
             last_event=raw["last_event"],
             result=(
-                _MatchResult(**{"winner_name": scores[result["winner_seat_index"]].name, **result})
+                _MatchResult(**{
+                    "winner_name": None if result["winner_seat_index"] is None else scores[result["winner_seat_index"]].name,
+                    **result,
+                })
                 if result is not None
                 else None
             ),
@@ -774,15 +778,15 @@ def _finish_match(room: _Room, now_ms: int) -> None:
     if match is None:
         raise AuthorityError("match_not_running", 409, "Match is not running")
     remaining = [seat for seat in match.frozen_human_seat_indexes if not match.scores[seat].forfeited]
-    winner_seat_index = min(
-        remaining or match.frozen_human_seat_indexes,
-        key=lambda seat_index: (-_score_for(match.scores[seat_index]), seat_index),
-    )
-    match.result = _MatchResult(
-        winner_seat_index=winner_seat_index,
-        score=_score_for(match.scores[winner_seat_index]),
-        winner_name=match.scores[winner_seat_index].name,
-    )
+    if remaining:
+        winner_seat_index = min(remaining, key=lambda seat_index: (-_score_for(match.scores[seat_index]), seat_index))
+        match.result = _MatchResult(
+            winner_seat_index=winner_seat_index,
+            score=_score_for(match.scores[winner_seat_index]),
+            winner_name=match.scores[winner_seat_index].name,
+        )
+    else:
+        match.result = _MatchResult(winner_seat_index=None, score=None, winner_name=None)
     match.turn_deadline_at = None
     match.bell_fruit = None
     match.bell_opened_at = None
