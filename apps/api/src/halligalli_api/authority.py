@@ -12,7 +12,6 @@ from typing import Literal, Protocol, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .observability import elapsed_since
 
 
 _logger = logging.getLogger("halligalli.authority")
@@ -20,7 +19,6 @@ _logger = logging.getLogger("halligalli.authority")
 
 ROOM_TTL_SECONDS = 60 * 60
 DUE_INDEX_KEY = "halligalli:rooms:due"
-ACTIVE_ROOMS_KEY = "halligalli:rooms:active"
 # Pre-registered to cover one load generator; the derivation is in README.md, "Client bounds".
 ROOM_CREATION_BUDGET = 480
 ROOM_CREATION_WINDOW_SECONDS = 60 * 60
@@ -263,10 +261,6 @@ class AuthorityError(Exception):
 
 def _authority_unavailable() -> AuthorityError:
     return AuthorityError("authority_unavailable", 503, "Server is temporarily unavailable; try again shortly")
-
-
-def _error_outcome(error: AuthorityError) -> str:
-    return "server_error" if error.status_code >= 500 else "client_error"
 
 
 def _capacity_exhausted() -> AuthorityError:
@@ -1035,14 +1029,12 @@ class RedisMultiplayerAuthority:
     def __init__(
         self,
         redis_client: object,
-        telemetry: object | None = None,
         *,
         clock: Callable[[], int] = wall_clock_ms,
         deck: DeckSource | None = None,
         room_creation_budget: int = ROOM_CREATION_BUDGET,
     ) -> None:
         self._redis = redis_client
-        self._telemetry = telemetry
         self._clock = clock
         self._deck = deck or StandardDeck()
         self._room_creation_budget = room_creation_budget
@@ -1053,27 +1045,16 @@ class RedisMultiplayerAuthority:
     def from_url(
         cls,
         url: str,
-        telemetry: object | None = None,
         *,
         clock: Callable[[], int] = wall_clock_ms,
         deck: DeckSource | None = None,
     ) -> RedisMultiplayerAuthority:
         from redis.asyncio import Redis
 
-        return cls(Redis.from_url(url, decode_responses=True), telemetry=telemetry, clock=clock, deck=deck)
+        return cls(Redis.from_url(url, decode_responses=True), clock=clock, deck=deck)
 
     def now_ms(self) -> int:
         return self._clock()
-
-    def _record_redis(self, operation: str, outcome: str, started_at: float) -> None:
-        record = getattr(self._telemetry, "record_redis", None)
-        if record is not None:
-            record(operation=operation, outcome=outcome, elapsed_seconds=elapsed_since(started_at))
-
-    def _record_runtime(self, method: str, value: object) -> None:
-        record = getattr(self._telemetry, method, None)
-        if record is not None:
-            record(value)
 
     @staticmethod
     def _room_key(room_code: str) -> str:
@@ -1100,7 +1081,6 @@ class RedisMultiplayerAuthority:
         ttl_seconds = self._ttl_seconds(room)
         pipeline.hset(room_key, mapping={"state": room.to_json()})
         pipeline.expire(room_key, ttl_seconds)
-        pipeline.zadd(ACTIVE_ROOMS_KEY, {room.code: self._clock() + ttl_seconds * 1_000})
         due_at = _due_at(room)
         if due_at is None:
             pipeline.zrem(DUE_INDEX_KEY, room.code)
@@ -1144,7 +1124,6 @@ class RedisMultiplayerAuthority:
     ) -> AuthorityResult:
         from redis.exceptions import ConnectionError, OutOfMemoryError, TimeoutError
 
-        started_at = time.perf_counter()
         try:
             if isinstance(command, CreateRoom):
                 result = await self._create(command)
@@ -1154,21 +1133,12 @@ class RedisMultiplayerAuthority:
                 result = await self._join(room_code, command)
             else:
                 result = await self._execute_room_command(room_code, command)
-        except AuthorityError as error:
-            self._record_redis("execute", _error_outcome(error), started_at)
-            raise
         except OutOfMemoryError as error:
             # Last line of defense: Redis reached `maxmemory` under `noeviction` despite admission control.
-            self._record_redis("execute", "server_error", started_at)
             raise _capacity_exhausted() from error
         except (ConnectionError, TimeoutError) as error:
             # A lost Redis connection is temporary: the caller keeps its socket and may retry.
-            self._record_redis("execute", "server_error", started_at)
             raise _authority_unavailable() from error
-        except Exception:
-            self._record_redis("execute", "server_error", started_at)
-            raise
-        self._record_redis("execute", "stale_bell" if isinstance(result, StaleBellResult) else "success", started_at)
         return result
 
     async def redis_memory(self) -> dict[str, int]:
@@ -1263,7 +1233,6 @@ class RedisMultiplayerAuthority:
                     await pipeline.execute()
                     return result
             except WatchError:
-                self._record_runtime("record_watch_retry", "join")
                 continue
         raise AuthorityError("concurrent_update", 409, "Room changed while joining")
 
@@ -1281,21 +1250,14 @@ class RedisMultiplayerAuthority:
                     await pipeline.watch(room_key)
                     state = await pipeline.hget(room_key, "state")
                     room = _require_room(_Room.from_json(state) if state else None)
-                    revision = room.revision
                     result = _apply_room_command(room, command, self._deck)
                     if isinstance(result, StaleBellResult):
-                        self._record_runtime("record_bell_outcome", "stale")
                         return result
                     pipeline.multi()
                     self._queue_room_write(pipeline, room)
                     await pipeline.execute()
-                    # A replayed bell leaves the revision unchanged and is not counted again.
-                    if isinstance(command, Bell) and room.revision != revision and room.match is not None:
-                        outcome = "correct" if room.match.last_event == "correct_bell" else "wrong"
-                        self._record_runtime("record_bell_outcome", outcome)
                     return result
             except WatchError:
-                self._record_runtime("record_watch_retry", "room_command")
                 continue
         raise AuthorityError("concurrent_update", 409, "Room changed while updating")
 
@@ -1356,20 +1318,12 @@ class RedisMultiplayerAuthority:
                     command = _due_command(room, now_ms)
                     if command is None:
                         return False
-                    turn_deadline_at = room.match.turn_deadline_at if isinstance(command, AdvanceTurn) and room.match else None
-                    missed = isinstance(command, AdvanceTurn) and room.match is not None and room.match.bell_fruit is not None
                     _apply_room_command(room, command, self._deck)
                     pipeline.multi()
                     self._queue_room_write(pipeline, room)
                     await pipeline.execute()
-                    if turn_deadline_at is not None:
-                        # A fresh clock, not the sweep's start time, so a slow sweep cannot hide lateness.
-                        self._record_runtime("record_tick_lateness", max(0, self._clock() - turn_deadline_at) / 1_000)
-                    if missed:
-                        self._record_runtime("record_bell_outcome", "missed")
                     return True
             except WatchError:
-                self._record_runtime("record_watch_retry", "due_advance")
                 continue
         return False
 
@@ -1383,30 +1337,11 @@ class RedisMultiplayerAuthority:
         return _require_room(_Room.from_json(state) if state else None)
 
     async def snapshot(self, room_code: str, viewer: Viewer) -> RoomSnapshot:
-        started_at = time.perf_counter()
-        try:
-            room = await self._load_room(room_code)
-            result = _snapshot_for_verifier(room, credential_verifier(viewer.credential))
-        except AuthorityError as error:
-            self._record_redis("snapshot", _error_outcome(error), started_at)
-            raise
-        except Exception:
-            self._record_redis("snapshot", "server_error", started_at)
-            raise
-        self._record_redis("snapshot", "success", started_at)
-        return result
+        room = await self._load_room(room_code)
+        return _snapshot_for_verifier(room, credential_verifier(viewer.credential))
 
     async def snapshots(self, room_code: str, viewers: Sequence[Viewer]) -> list[RoomSnapshot | AuthorityError]:
-        started_at = time.perf_counter()
-        try:
-            room = await self._load_room(room_code)
-        except AuthorityError as error:
-            self._record_redis("snapshot", _error_outcome(error), started_at)
-            raise
-        except Exception:
-            self._record_redis("snapshot", "server_error", started_at)
-            raise
-        self._record_redis("snapshot", "success", started_at)
+        room = await self._load_room(room_code)
         results: list[RoomSnapshot | AuthorityError] = []
         for viewer in viewers:
             try:
@@ -1414,10 +1349,6 @@ class RedisMultiplayerAuthority:
             except AuthorityError as error:
                 results.append(error)
         return results
-
-    async def active_room_count(self) -> int:
-        await self._redis.zremrangebyscore(ACTIVE_ROOMS_KEY, "-inf", self._clock())
-        return await self._redis.zcard(ACTIVE_ROOMS_KEY)
 
     async def readiness(self) -> bool:
         try:
