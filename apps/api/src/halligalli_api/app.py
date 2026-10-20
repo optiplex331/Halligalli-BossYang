@@ -3,14 +3,12 @@ from __future__ import annotations
 import os
 import asyncio
 import ipaddress
-import json
 import logging
 import time
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from inspect import isawaitable
-from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -46,9 +44,8 @@ from .observability import Telemetry, elapsed_since
 _logger = logging.getLogger("halligalli.api")
 # Only a credential that no longer authenticates or a room that no longer exists ends the socket.
 _SOCKET_CLOSING_ERRORS = frozenset({"credential_invalid", "room_not_found"})
-_RELEASE_IDENTITY_PATH = Path(__file__).with_name("release-identity.json")
-# Room commands and authentication are a few hundred bytes. The release image sets uvicorn's
-# UVICORN_WS_MAX_SIZE to the same bound so an oversized frame is refused before it is buffered.
+# Room commands and authentication are a few hundred bytes. Run uvicorn with
+# --ws-max-size set to the same bound so an oversized frame is refused before it is buffered.
 WEBSOCKET_MAX_MESSAGE_BYTES = 4_096
 _MESSAGE_TOO_BIG = 1009
 _TRY_AGAIN_LATER = 1013
@@ -79,17 +76,6 @@ def resolve_client_address(peer: str | None, forwarded_for: list[str], trusted_p
         return str(ipaddress.ip_address(entries[-trusted_proxy_hops]))
     except ValueError:
         return peer_address
-
-
-def _load_release_identity() -> dict[str, str]:
-    identity = json.loads(_RELEASE_IDENTITY_PATH.read_text(encoding="utf-8"))
-    if (
-        not isinstance(identity, dict)
-        or not isinstance(identity.get("version"), str)
-        or not isinstance(identity.get("commit"), str)
-    ):
-        raise RuntimeError("Release identity must contain string version and commit values")
-    return {"version": identity["version"], "commit": identity["commit"]}
 
 
 class EntryRequest(ApiModel):
@@ -291,7 +277,6 @@ def create_app(
     trusted_proxy_hops: int | None = None,
     summary_interval_seconds: float | None = None,
 ) -> FastAPI:
-    build_identity = _load_release_identity()
     proxy_hops = _trusted_proxy_hops_from_env() if trusted_proxy_hops is None else trusted_proxy_hops
     telemetry = Telemetry()
     selected_authority = authority or _runtime_authority(telemetry)
@@ -404,10 +389,6 @@ def create_app(
             return 0
         result = count()
         return await result if isawaitable(result) else result
-
-    @app.get("/internal/identity", include_in_schema=False)
-    async def release_identity() -> dict[str, str]:
-        return dict(build_identity)
 
     @app.get("/internal/ready", include_in_schema=False)
     async def readiness() -> JSONResponse:

@@ -39,7 +39,6 @@ class ObservabilityTest(RedisTestCase):
                 if time.monotonic() > deadline:
                     break
                 time.sleep(0.01)
-            identity = client.get("/internal/identity")
             readiness = client.get("/internal/ready")
 
         self.assertEqual(created.status_code, 201)
@@ -47,7 +46,6 @@ class ObservabilityTest(RedisTestCase):
         self.assertIn("halligalli_active_rooms 1", metrics.text)
         self.assertEqual(_sample(metrics.text, 'halligalli_command_latency_seconds_bucket{command="authenticate",le="+Inf"}'), 1)
         self.assertGreaterEqual(_sample(metrics.text, "halligalli_due_processing_seconds_count"), 1)
-        self.assertEqual(identity.status_code, 200)
         self.assertEqual(readiness.status_code, 200)
         lines = "\n".join(captured.output)
         self.assertNotIn(credential, lines)
