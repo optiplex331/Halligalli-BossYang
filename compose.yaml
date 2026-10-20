@@ -1,8 +1,6 @@
 services:
   api:
     build: ./apps/api
-    ports:
-      - 8000:8000
     depends_on:
       redis:
         condition: service_healthy
@@ -16,3 +14,10 @@ services:
       interval: 2s
       timeout: 2s
       retries: 10
+  web:
+    build: ./apps/web
+    ports:
+      - 8080:80
+    depends_on:
+      api:
+        condition: service_started
