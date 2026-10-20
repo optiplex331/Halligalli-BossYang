@@ -85,7 +85,7 @@ class CreateRoomRequest(EntryRequest):
     model_config = ConfigDict(extra="forbid")
 
     table_seat_count: int = Field(ge=4, le=8)
-    target_human_participant_count: int = Field(ge=2)
+    target_human_participant_count: int = Field(ge=1)
     difficulty: Literal["easy", "normal", "hard"]
     duration_sec: int | None = Field(
         default=None,

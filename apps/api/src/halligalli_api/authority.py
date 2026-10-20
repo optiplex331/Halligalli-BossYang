@@ -45,7 +45,9 @@ MATCH_PACE: dict[Difficulty, MatchPace] = {
 }
 MIN_TABLE_SEATS = 4
 MAX_TABLE_SEATS = 8
-MIN_HUMAN_PARTICIPANTS = 2
+MIN_HUMAN_PARTICIPANTS = 1
+# A match with this many humans or more ends when fewer than this many remain; a smaller match plays on until its last human leaves.
+MATCH_CONTINUES_WITH_HUMANS = 2
 FRUIT_ORDER = ("banana", "strawberry", "lemon", "grape")
 CARD_DISTRIBUTION = ((1, 3), (2, 5), (3, 5), (4, 3), (5, 2))
 
@@ -946,7 +948,7 @@ def _apply_room_command(room: _Room, command: AuthorityCommand, deck: DeckSource
         participant.continue_playing = False
         room.match.scores[participant.seat_index].forfeited = True
         room.match.last_event = "forfeit"
-        if len(_active_participants(room)) < MIN_HUMAN_PARTICIPANTS:
+        if len(_active_participants(room)) < min(MATCH_CONTINUES_WITH_HUMANS, len(room.match.frozen_human_seat_indexes)):
             _finish_match(room, command.now_ms)
         room.revision += 1
         return _result_for_verifier(room, command.credential_verifier)
