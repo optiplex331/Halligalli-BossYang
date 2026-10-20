@@ -1,38 +1,15 @@
-import type { Difficulty, FruitDefinition } from "./types.js";
+export type FruitKey = "banana" | "strawberry" | "lemon" | "grape";
+export type Difficulty = "easy" | "normal" | "hard";
 
-export const FRUITS = [
-  { key: "banana", label: "香蕉", labelEn: "banana", icon: "🍌" },
-  { key: "strawberry", label: "草莓", labelEn: "strawberry", icon: "🍓" },
-  { key: "lemon", label: "柠檬", labelEn: "lemon", icon: "🍋" },
-  { key: "grape", label: "葡萄", labelEn: "grape", icon: "🍇" },
-] as const satisfies readonly FruitDefinition[];
+export const FRUITS: readonly { key: FruitKey; icon: string }[] = [
+  { key: "banana", icon: "🍌" },
+  { key: "strawberry", icon: "🍓" },
+  { key: "lemon", icon: "🍋" },
+  { key: "grape", icon: "🍇" },
+];
 
-export interface GameModeConfig {
-  label: string;
-  labelEn: string;
-  revealMs: number;
-  scoreBonusWindow: number;
-  isBoss?: boolean;
-}
-
-export const MODES = {
-  easy: {
-    label: "简单",
-    labelEn: "Easy",
-    revealMs: 1450,
-    scoreBonusWindow: 1900,
-  },
-  normal: {
-    label: "标准",
-    labelEn: "Normal",
-    revealMs: 1100,
-    scoreBonusWindow: 1500,
-  },
-  hard: {
-    label: "Boss模式",
-    labelEn: "Boss Mode",
-    revealMs: 900,
-    scoreBonusWindow: 1000,
-    isBoss: true,
-  },
-} as const satisfies Record<Difficulty, GameModeConfig>;
+export const DIFFICULTIES: readonly { key: Difficulty; label: string }[] = [
+  { key: "easy", label: "Easy" },
+  { key: "normal", label: "Normal" },
+  { key: "hard", label: "Hard" },
+];
