@@ -23,6 +23,9 @@ jobs:
           --health-timeout 3s
           --health-retries 5
 
+    env:
+      HALLIGALLI_TEST_REDIS_URL: redis://localhost:6379/0
+
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v7
