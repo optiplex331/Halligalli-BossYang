@@ -5,10 +5,13 @@ import hashlib
 import os
 import unittest
 
+from halligalli_api.authority import (
+    AuthorityResult,
+    CreateRoom,
+    JoinRoom,
+    RedisMultiplayerAuthority,
+)
 from redis.asyncio import Redis
-
-from halligalli_api.authority import AuthorityResult, CreateRoom, JoinRoom, RedisMultiplayerAuthority
-
 
 REDIS_URL = os.environ.get("HALLIGALLI_TEST_REDIS_URL")
 
@@ -25,10 +28,19 @@ OPENING_CARDS = (
 
 
 def _fixed_card_order() -> tuple[tuple[str, int], ...]:
-    remaining = {(fruit, count): repetitions for fruit in FRUITS for count, repetitions in DISTRIBUTION}
+    remaining = {
+        (fruit, count): repetitions
+        for fruit in FRUITS
+        for count, repetitions in DISTRIBUTION
+    }
     for card in OPENING_CARDS:
         remaining[card] -= 1
-    rest = [(fruit, count) for fruit in FRUITS for count, _ in DISTRIBUTION for _ in range(remaining[(fruit, count)])]
+    rest = [
+        (fruit, count)
+        for fruit in FRUITS
+        for count, _ in DISTRIBUTION
+        for _ in range(remaining[(fruit, count)])
+    ]
     return OPENING_CARDS + tuple(rest)
 
 
@@ -69,7 +81,9 @@ async def _flush_redis() -> None:
         await redis.aclose()
 
 
-@unittest.skipUnless(REDIS_URL, "set HALLIGALLI_TEST_REDIS_URL to run Redis-backed API tests")
+@unittest.skipUnless(
+    REDIS_URL, "set HALLIGALLI_TEST_REDIS_URL to run Redis-backed API tests"
+)
 class RedisAsyncTestCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.redis = Redis.from_url(REDIS_URL, decode_responses=True)
@@ -111,9 +125,13 @@ class RedisAsyncTestCase(unittest.IsolatedAsyncioTestCase):
         return created, credentials
 
 
-@unittest.skipUnless(REDIS_URL, "set HALLIGALLI_TEST_REDIS_URL to run Redis-backed API tests")
+@unittest.skipUnless(
+    REDIS_URL, "set HALLIGALLI_TEST_REDIS_URL to run Redis-backed API tests"
+)
 class RedisTestCase(unittest.TestCase):
     def setUp(self) -> None:
         asyncio.run(_flush_redis())
         self.clock = ManualClock()
-        self.authority = RedisMultiplayerAuthority.from_url(REDIS_URL, deck=FixedDeck(), clock=self.clock)
+        self.authority = RedisMultiplayerAuthority.from_url(
+            REDIS_URL, deck=FixedDeck(), clock=self.clock
+        )
