@@ -1,4 +1,7 @@
 services:
+  api:
+    environment:
+      - HALLIGALLI_TRUSTED_PROXY_HOPS=2
   caddy:
     image: caddy:2-alpine
     ports:
