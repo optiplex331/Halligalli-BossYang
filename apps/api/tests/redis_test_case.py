@@ -15,6 +15,11 @@ from redis.asyncio import Redis
 
 REDIS_URL = os.environ.get("HALLIGALLI_TEST_REDIS_URL")
 
+if REDIS_URL is None and os.environ.get("CI") == "true":
+    raise RuntimeError(
+        "HALLIGALLI_TEST_REDIS_URL must be set in CI to run Redis-backed API tests"
+    )
+
 FRUITS = ("banana", "strawberry", "lemon", "grape")
 DISTRIBUTION = ((1, 3), (2, 5), (3, 5), (4, 3), (5, 2))
 OPENING_CARDS = (
