@@ -1,15 +1,20 @@
-FROM astral/uv:python3.14-alpine
+FROM astral/uv:python3.14-alpine AS build
 
 WORKDIR /app
 
-RUN addgroup -S api && adduser -S -G api api_user
-
-# Copy the project requirements into the image
 COPY uv.lock pyproject.toml ./
 
 RUN uv sync --locked --no-install-project --no-dev
 
+FROM python:3.14-alpine AS runtime
+
+WORKDIR /app
+
+COPY --from=build /app/.venv .venv
+
 COPY ./src/halligalli_api halligalli_api
+
+RUN addgroup -S api && adduser -S -G api api_user
 
 USER api_user
 
