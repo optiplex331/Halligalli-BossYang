@@ -1,4 +1,4 @@
-FROM astral/uv:python3.14-alpine AS build
+FROM astral/uv:python3.14-alpine@sha256:4ce2a2ef69130ffb97688c8446ae771415035406355fbcb7932c59a535f82888 AS build
 
 WORKDIR /app
 
@@ -6,7 +6,7 @@ COPY uv.lock pyproject.toml ./
 
 RUN uv sync --locked --no-install-project --no-dev
 
-FROM python:3.14-alpine AS runtime
+FROM python:3.14-alpine@sha256:01ddf82b43479870a7ea87037b7d68472bef12cc244941843c26bb75bf9a9b04 AS runtime
 
 WORKDIR /app
 
