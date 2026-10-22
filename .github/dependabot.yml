@@ -1,0 +1,51 @@
+# Minor and patch updates are grouped into one PR per ecosystem.
+# Major updates stay as separate PRs because they can break things.
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /apps/api
+    schedule:
+      interval: weekly
+    groups:
+      api-minor-patch:
+        update-types: [minor, patch]
+
+  # pnpm projects use the npm ecosystem.
+  - package-ecosystem: npm
+    directory: /apps/web
+    schedule:
+      interval: weekly
+    ignore:
+      # Types must match the Node 24 runtime, not the newest Node.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+    groups:
+      web-minor-patch:
+        update-types: [minor, patch]
+
+  # Updates the pinned SHAs and their version comments.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]
+
+  # Base images in the Dockerfiles; updates both tag and digest.
+  - package-ecosystem: docker
+    directories: [/apps/api, /apps/web]
+    schedule:
+      interval: weekly
+    groups:
+      base-images-minor-patch:
+        update-types: [minor, patch]
+
+  # redis and caddy in the compose files.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      compose-images-minor-patch:
+        update-types: [minor, patch]
