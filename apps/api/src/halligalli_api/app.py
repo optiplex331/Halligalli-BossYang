@@ -3,21 +3,18 @@ from __future__ import annotations
 import os
 import asyncio
 import ipaddress
-import json
 import logging
 import time
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
-from inspect import isawaitable
-from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import FastAPI, Header, Request, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from pydantic import ConfigDict, Field, ValidationError, model_validator
 
 from .authority import (
@@ -40,15 +37,13 @@ from .authority import (
     Viewer,
     credential_verifier,
 )
-from .observability import Telemetry, elapsed_since
 
 
 _logger = logging.getLogger("halligalli.api")
 # Only a credential that no longer authenticates or a room that no longer exists ends the socket.
 _SOCKET_CLOSING_ERRORS = frozenset({"credential_invalid", "room_not_found"})
-_RELEASE_IDENTITY_PATH = Path(__file__).with_name("release-identity.json")
-# Room commands and authentication are a few hundred bytes. The release image sets uvicorn's
-# UVICORN_WS_MAX_SIZE to the same bound so an oversized frame is refused before it is buffered.
+# Room commands and authentication are a few hundred bytes. Run uvicorn with
+# --ws-max-size set to the same bound so an oversized frame is refused before it is buffered.
 WEBSOCKET_MAX_MESSAGE_BYTES = 4_096
 _MESSAGE_TOO_BIG = 1009
 _TRY_AGAIN_LATER = 1013
@@ -81,17 +76,6 @@ def resolve_client_address(peer: str | None, forwarded_for: list[str], trusted_p
         return peer_address
 
 
-def _load_release_identity() -> dict[str, str]:
-    identity = json.loads(_RELEASE_IDENTITY_PATH.read_text(encoding="utf-8"))
-    if (
-        not isinstance(identity, dict)
-        or not isinstance(identity.get("version"), str)
-        or not isinstance(identity.get("commit"), str)
-    ):
-        raise RuntimeError("Release identity must contain string version and commit values")
-    return {"version": identity["version"], "commit": identity["commit"]}
-
-
 class EntryRequest(ApiModel):
     name: str = Field(min_length=1, max_length=24, pattern=r"^[^\r\n]+$")
     credential_verifier: str = Field(pattern=r"^[a-f0-9]{64}$")
@@ -101,7 +85,7 @@ class CreateRoomRequest(EntryRequest):
     model_config = ConfigDict(extra="forbid")
 
     table_seat_count: int = Field(ge=4, le=8)
-    target_human_participant_count: int = Field(ge=2)
+    target_human_participant_count: int = Field(ge=1)
     difficulty: Literal["easy", "normal", "hard"]
     duration_sec: int | None = Field(
         default=None,
@@ -229,17 +213,8 @@ async def forward_room_revisions(
         await hub.publish(room_code, authority, revision)
 
 
-def _runtime_authority(telemetry: Telemetry) -> RedisMultiplayerAuthority:
-    return RedisMultiplayerAuthority.from_url(
-        os.environ.get("HALLIGALLI_REDIS_URL", "redis://redis:6379/0"),
-        telemetry=telemetry,
-    )
-
-
-def _runtime_summary_interval() -> float | None:
-    """Seconds between stdout runtime summaries; 0 disables them."""
-    seconds = float(os.environ.get("HALLIGALLI_RUNTIME_SUMMARY_SECONDS", "15"))
-    return seconds if seconds > 0 else None
+def _runtime_authority() -> RedisMultiplayerAuthority:
+    return RedisMultiplayerAuthority.from_url(os.environ.get("HALLIGALLI_REDIS_URL", "redis://localhost:6379/0"))
 
 
 def _canonical_room_code(room_code: str) -> str:
@@ -289,12 +264,9 @@ def create_app(
     due_interval_seconds: float = 0.1,
     startup_timeout_seconds: float = 10.0,
     trusted_proxy_hops: int | None = None,
-    summary_interval_seconds: float | None = None,
 ) -> FastAPI:
-    build_identity = _load_release_identity()
     proxy_hops = _trusted_proxy_hops_from_env() if trusted_proxy_hops is None else trusted_proxy_hops
-    telemetry = Telemetry()
-    selected_authority = authority or _runtime_authority(telemetry)
+    selected_authority = authority or _runtime_authority()
     hub = RoomSocketHub()
 
     async def advance_due_rooms() -> None:
@@ -302,25 +274,8 @@ def create_app(
             started_at = time.perf_counter()
             for room_code in await selected_authority.advance_due():
                 await hub.publish(room_code, selected_authority)
-            elapsed = elapsed_since(started_at)
-            telemetry.record_due_processing(elapsed)
             # Start sweeps on a fixed cadence: a slow sweep eats into the pause instead of adding to it.
-            await asyncio.sleep(max(0.0, due_interval_seconds - elapsed))
-
-    async def emit_runtime_summaries(interval_seconds: float) -> None:
-        read_memory = getattr(selected_authority, "redis_memory", None)
-        while True:
-            await asyncio.sleep(interval_seconds)
-            try:
-                memory = await read_memory() if read_memory is not None else None
-            except Exception:
-                memory = None
-            telemetry.emit_runtime_summary(
-                interval_seconds=interval_seconds,
-                active_rooms=await active_room_count(),
-                active_sockets=hub.socket_count(),
-                redis_memory=memory,
-            )
+            await asyncio.sleep(max(0.0, due_interval_seconds - (time.perf_counter() - started_at)))
 
     ready_subscriptions: list[RedisRevisionSubscription] = []
 
@@ -344,10 +299,6 @@ def create_app(
         tasks = [asyncio.create_task(supervise("due deadline loop", advance_due_rooms))]
         if ready_subscriptions:
             tasks.append(asyncio.create_task(supervise("revision forwarder", forward_revisions)))
-        if summary_interval_seconds is not None:
-            tasks.append(asyncio.create_task(
-                supervise("runtime summary", lambda: emit_runtime_summaries(summary_interval_seconds)),
-            ))
         try:
             yield
         finally:
@@ -357,7 +308,6 @@ def create_app(
             close = getattr(selected_authority, "aclose", None)
             if close is not None:
                 await close()
-            telemetry.shutdown()
 
     app = FastAPI(
         title="Halligalli API",
@@ -367,60 +317,12 @@ def create_app(
     )
     app.state.authority = selected_authority
     app.state.room_socket_hub = hub
-    app.state.telemetry = telemetry
-
-    @app.middleware("http")
-    async def record_http(request: Request, call_next):
-        with telemetry.span("http.request") as span:
-            trace_id = telemetry.trace_id(span)
-            started_at = time.perf_counter()
-            try:
-                response = await call_next(request)
-            except Exception:
-                telemetry.record_http(
-                    trace_id=trace_id,
-                    method=request.method,
-                    route=request.url.path,
-                    status_code=500,
-                    elapsed_seconds=elapsed_since(started_at),
-                    span=span,
-                )
-                raise
-            route = request.scope.get("route")
-            telemetry.record_http(
-                trace_id=trace_id,
-                method=request.method,
-                route=getattr(route, "path", request.url.path),
-                status_code=response.status_code,
-                elapsed_seconds=elapsed_since(started_at),
-                span=span,
-            )
-            response.headers["X-Trace-Id"] = trace_id
-            return response
-
-    async def active_room_count() -> int:
-        count = getattr(selected_authority, "active_room_count", None)
-        if count is None:
-            return 0
-        result = count()
-        return await result if isawaitable(result) else result
-
-    @app.get("/internal/identity", include_in_schema=False)
-    async def release_identity() -> dict[str, str]:
-        return dict(build_identity)
 
     @app.get("/internal/ready", include_in_schema=False)
     async def readiness() -> JSONResponse:
         check = getattr(selected_authority, "readiness", None)
         ready = True if check is None else await check()
         return JSONResponse({"ready": ready}, status_code=200 if ready else 503)
-
-    @app.get("/internal/metrics", include_in_schema=False)
-    async def metrics() -> Response:
-        return Response(
-            content=telemetry.metrics(active_rooms=await active_room_count()),
-            media_type="text/plain; version=0.0.4",
-        )
 
     @app.exception_handler(AuthorityError)
     async def authority_error_handler(_: Request, error: AuthorityError) -> JSONResponse:
@@ -525,23 +427,6 @@ def create_app(
             _viewer_from_authorization(authorization),
         )
 
-    def record_client_error(
-        room_code: str,
-        command: str,
-        trace_id: str = "",
-        started_at: float | None = None,
-        span: object | None = None,
-        error: AuthorityError | None = None,
-    ) -> None:
-        telemetry.record_websocket(
-            trace_id=trace_id,
-            room_code=room_code,
-            command=command,
-            outcome="server_error" if error is not None and error.status_code >= 500 else "client_error",
-            elapsed_seconds=elapsed_since(started_at) if started_at is not None else 0,
-            span=span,
-        )
-
     async def receive_bounded_text(websocket: WebSocket) -> str | None:
         """Receive one text message, closing the socket with 1009 when it exceeds the fixed bound."""
         if websocket.application_state != WebSocketState.CONNECTED:
@@ -558,27 +443,15 @@ def create_app(
         await websocket.accept()
         canonical_room_code = _canonical_room_code(room_code)
         try:
-            with telemetry.span("websocket.command") as span:
-                trace_id = telemetry.trace_id(span)
-                started_at = time.perf_counter()
-                authentication = await receive_bounded_text(websocket)
-                if authentication is None:
-                    return
-                payload = WebSocketAuthentication.model_validate_json(authentication)
-                snapshot = await app.state.authority.snapshot(
-                    canonical_room_code,
-                    Viewer(credential=payload.credential),
-                )
-                telemetry.record_websocket(
-                    trace_id=trace_id,
-                    room_code=canonical_room_code,
-                    command="authenticate",
-                    outcome="success",
-                    elapsed_seconds=elapsed_since(started_at),
-                    span=span,
-                )
+            authentication = await receive_bounded_text(websocket)
+            if authentication is None:
+                return
+            payload = WebSocketAuthentication.model_validate_json(authentication)
+            snapshot = await app.state.authority.snapshot(
+                canonical_room_code,
+                Viewer(credential=payload.credential),
+            )
         except AuthorityError as error:
-            record_client_error(canonical_room_code, "authenticate", error=error)
             if error.status_code >= 500:
                 # A temporary failure: the Web reconnects after its backoff instead of giving up the room.
                 await websocket.send_json({"type": "error", "code": error.code, "title": error.title})
@@ -587,7 +460,6 @@ def create_app(
             await close_with_error(websocket, error.code, error.title)
             return
         except ValidationError:
-            record_client_error(canonical_room_code, "authenticate")
             await close_with_error(websocket, "invalid_request", "Authentication is invalid")
             return
         except WebSocketDisconnect:
@@ -602,42 +474,28 @@ def create_app(
                 message = await receive_bounded_text(websocket)
                 if message is None:
                     return
-                with telemetry.span("websocket.command") as span:
-                    trace_id = telemetry.trace_id(span)
-                    started_at = time.perf_counter()
-                    try:
-                        command_payload = WebSocketRoomCommand.model_validate_json(message)
-                    except ValidationError:
-                        record_client_error(canonical_room_code, "command", trace_id, started_at, span)
-                        await websocket.send_json({"type": "error", "code": "invalid_request", "title": "Command is invalid"})
-                        continue
-                    command_name = command_payload.type
-                    try:
-                        result = await app.state.authority.execute(
-                            canonical_room_code,
-                            _room_command(command_payload, payload.credential, app.state.authority.now_ms()),
-                        )
-                    except AuthorityError as error:
-                        record_client_error(canonical_room_code, command_name, trace_id, started_at, span, error)
-                        if error.code in _SOCKET_CLOSING_ERRORS:
-                            await close_with_error(websocket, error.code, error.title)
-                            return
-                        if _is_open(websocket):
-                            await websocket.send_json({"type": "error", "code": error.code, "title": error.title})
-                        continue
-                    if isinstance(result, StaleBellResult):
-                        if _is_open(websocket):
-                            await websocket.send_json({"type": "bell_stale", "revealSequence": command_payload.reveal_sequence})
-                    else:
-                        await hub.publish(canonical_room_code, app.state.authority)
-                    telemetry.record_websocket(
-                        trace_id=trace_id,
-                        room_code=canonical_room_code,
-                        command=command_name,
-                        outcome="stale_bell" if isinstance(result, StaleBellResult) else "success",
-                        elapsed_seconds=elapsed_since(started_at),
-                        span=span,
+                try:
+                    command_payload = WebSocketRoomCommand.model_validate_json(message)
+                except ValidationError:
+                    await websocket.send_json({"type": "error", "code": "invalid_request", "title": "Command is invalid"})
+                    continue
+                try:
+                    result = await app.state.authority.execute(
+                        canonical_room_code,
+                        _room_command(command_payload, payload.credential, app.state.authority.now_ms()),
                     )
+                except AuthorityError as error:
+                    if error.code in _SOCKET_CLOSING_ERRORS:
+                        await close_with_error(websocket, error.code, error.title)
+                        return
+                    if _is_open(websocket):
+                        await websocket.send_json({"type": "error", "code": error.code, "title": error.title})
+                    continue
+                if isinstance(result, StaleBellResult):
+                    if _is_open(websocket):
+                        await websocket.send_json({"type": "bell_stale", "revealSequence": command_payload.reveal_sequence})
+                else:
+                    await hub.publish(canonical_room_code, app.state.authority)
         except WebSocketDisconnect:
             pass
         finally:
@@ -646,7 +504,7 @@ def create_app(
     return app
 
 
-app = create_app(summary_interval_seconds=_runtime_summary_interval())
+app = create_app()
 
 
 __all__ = ["app", "create_app"]

@@ -1,0 +1,3 @@
+vm.halligalli.games {
+    reverse_proxy web:80
+}

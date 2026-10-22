@@ -9,7 +9,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from halligalli_api.app import create_app
 from halligalli_api.authority import AuthorityError, Ready, RedisMultiplayerAuthority, Viewer
-from redis_test_case import RedisTestCase, hash_credential
+from redis_test_case import REDIS_URL, RedisTestCase, hash_credential
 
 
 class StartupTest(unittest.TestCase):
@@ -229,3 +229,49 @@ class WebSocketMatchTest(RedisTestCase):
 
         self.assertEqual(created.status_code, 201)
         self.assertNotIn("durationSec", created.json()["snapshot"]["configuration"])
+
+
+class _ShortDeck:
+    """A four-card deck with no exact five, so a match only ever flips and finishes."""
+
+    def new_seed(self) -> int:
+        return 0
+
+    def deal(self, seed: int, table_seat_count: int):
+        return (("banana", 1), ("lemon", 1), ("grape", 1), ("strawberry", 1))
+
+
+class SinglePlayerMatchTest(RedisTestCase):
+    def test_one_human_room_starts_over_websocket_and_finishes_with_neutral_seats(self) -> None:
+        self.authority = RedisMultiplayerAuthority.from_url(REDIS_URL, deck=_ShortDeck(), clock=self.clock)
+        credential = "solo-credential"
+
+        with TestClient(create_app(authority=self.authority)) as client:
+            created = client.post(
+                "/api/v1/rooms",
+                headers={"Idempotency-Key": "0b1f6a52-7c1d-4a43-8d0e-2f4c9b7a1e10"},
+                json={"name": "Solo", "credentialVerifier": hash_credential(credential), "tableSeatCount": 4, "targetHumanParticipantCount": 1, "difficulty": "easy"},
+            )
+            self.assertEqual(created.status_code, 201)
+            room_code = created.json()["roomCode"]
+
+            with client.websocket_connect(f"/ws/v1/rooms/{room_code}") as socket:
+                socket.send_json({"type": "authenticate", "credential": credential})
+                socket.receive_json()
+                socket.send_json({"type": "ready"})
+                socket.receive_json()
+                socket.send_json({"type": "start"})
+                snapshot = socket.receive_json()["snapshot"]
+                revealing_seats = {snapshot["lastReveal"]["seatIndex"]}
+                while snapshot["phase"] == "playing":
+                    self.clock.now_ms = snapshot["turnDeadlineAt"]
+                    snapshot = socket.receive_json()["snapshot"]
+                    if snapshot["lastReveal"] is not None:
+                        revealing_seats.add(snapshot["lastReveal"]["seatIndex"])
+
+        self.assertEqual(len(snapshot["participants"]), 1)
+        self.assertEqual(len(snapshot["seats"]), 4)
+        self.assertEqual(snapshot["phase"], "post_match")
+        self.assertEqual(snapshot["result"]["winnerSeatIndex"], 0)
+        self.assertEqual(len(snapshot["scoreboard"]), 1)
+        self.assertGreater(len(revealing_seats - {0}), 0, "neutral seats must take turns")

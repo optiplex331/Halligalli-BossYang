@@ -1,95 +1,51 @@
+# Minor and patch updates are grouped into one PR per ecosystem.
+# Major updates stay as separate PRs because they can break things.
 version: 2
 updates:
-  - package-ecosystem: npm
-    directory: /
-    target-branch: master
-    schedule:
-      interval: weekly
-      day: monday
-      time: "09:00"
-      timezone: Europe/Amsterdam
-    open-pull-requests-limit: 3
-    ignore:
-      - dependency-name: "@types/node"
-        update-types:
-          - "version-update:semver-major"
-    groups:
-      product-dependencies-minor-patch:
-        patterns:
-          - "*"
-        update-types:
-          - minor
-          - patch
-      product-dependencies-major:
-        patterns:
-          - "*"
-        update-types:
-          - major
-
-  - package-ecosystem: github-actions
-    directory: /
-    target-branch: master
-    schedule:
-      interval: weekly
-      day: monday
-      time: "10:00"
-      timezone: Europe/Amsterdam
-    open-pull-requests-limit: 2
-    groups:
-      actions-minor-patch:
-        patterns:
-          - "*"
-        update-types:
-          - minor
-          - patch
-      actions-major:
-        patterns:
-          - "*"
-        update-types:
-          - major
-
   - package-ecosystem: uv
     directory: /apps/api
-    target-branch: master
     schedule:
       interval: weekly
-      day: monday
-      time: "09:00"
-      timezone: Europe/Amsterdam
-    open-pull-requests-limit: 3
     groups:
-      api-dependencies-minor-patch:
-        patterns:
-          - "*"
-        update-types:
-          - minor
-          - patch
-      api-dependencies-major:
-        patterns:
-          - "*"
-        update-types:
-          - major
+      api-minor-patch:
+        update-types: [minor, patch]
 
-  - package-ecosystem: docker
-    directories:
-      - /apps/web
-      - /apps/api
-    target-branch: master
+  # pnpm projects use the npm ecosystem.
+  - package-ecosystem: npm
+    directory: /apps/web
     schedule:
       interval: weekly
-      day: monday
-      time: "10:00"
-      timezone: Europe/Amsterdam
-    open-pull-requests-limit: 2
+    ignore:
+      # Types must match the Node 24 runtime, not the newest Node.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+    groups:
+      web-minor-patch:
+        update-types: [minor, patch]
+
+  # Updates the pinned SHAs and their version comments.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]
+
+  # Base images in the Dockerfiles; updates both tag and digest.
+  - package-ecosystem: docker
+    directories: [/apps/api, /apps/web]
+    schedule:
+      interval: weekly
     groups:
       base-images-minor-patch:
-        patterns:
-          - "*"
-        update-types:
-          - minor
-          - patch
-      base-images-major:
-        patterns:
-          - "*"
-        update-types:
-          - major
+        update-types: [minor, patch]
+
+  # redis and caddy in the compose files.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      compose-images-minor-patch:
+        update-types: [minor, patch]

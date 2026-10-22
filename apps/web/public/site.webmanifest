@@ -1,7 +1,7 @@
 {
   "name": "Halligalli Arena",
   "short_name": "Arena",
-  "description": "A bilingual browser trainer for exact-five bell reactions.",
+  "description": "A browser trainer for exact-five bell reactions.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#05080f",

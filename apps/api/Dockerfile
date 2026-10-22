@@ -1,36 +1,26 @@
-FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim@sha256:7cf77f594be8042dab6daa9fe326f90962252268b4f120a7f5dccce4d947e6c1 AS build
+FROM astral/uv:python3.14-alpine@sha256:4ce2a2ef69130ffb97688c8446ae771415035406355fbcb7932c59a535f82888 AS build
 
 WORKDIR /app
 
-COPY apps/api/pyproject.toml apps/api/uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+COPY uv.lock pyproject.toml ./
 
-COPY apps/api/src ./src
+RUN uv sync --locked --no-install-project --no-dev
 
-ARG HALLIGALLI_RELEASE_VERSION=local
-ARG HALLIGALLI_RELEASE_COMMIT=development
-RUN python -c 'import json, sys; print(json.dumps({"version": sys.argv[1], "commit": sys.argv[2]}, separators=(",", ":")))' "$HALLIGALLI_RELEASE_VERSION" "$HALLIGALLI_RELEASE_COMMIT" > /app/src/halligalli_api/release-identity.json
-
-FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56
+FROM python:3.14-alpine@sha256:01ddf82b43479870a7ea87037b7d68472bef12cc244941843c26bb75bf9a9b04 AS runtime
 
 WORKDIR /app
 
-# Forwarded client addresses are resolved only by the app (HALLIGALLI_TRUSTED_PROXY_HOPS), and
-# WebSocket messages share the app's 4096-byte bound. The uvicorn CLI reads UVICORN_* here and
-# in the deployment targets that override the command.
-ENV PATH=/app/.venv/bin:$PATH \
-  PYTHONPATH=/app/src \
-  PYTHONDONTWRITEBYTECODE=1 \
-  UVICORN_PROXY_HEADERS=false \
-  UVICORN_WS_MAX_SIZE=4096
+COPY --from=build /app/.venv .venv
 
-COPY --from=build /app/.venv /app/.venv
-COPY --from=build /app/src /app/src
+RUN python -m pip uninstall -y pip
 
-RUN /usr/local/bin/python -m pip uninstall --yes --no-cache-dir pip \
-  && groupadd --gid 10001 halligalli \
-  && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin halligalli
+COPY ./src/halligalli_api halligalli_api
 
-USER 10001:10001
-EXPOSE 8000
-CMD ["uvicorn", "halligalli_api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+RUN addgroup -S api && adduser -S -G api api_user
+
+USER api_user
+
+ENV PATH="/app/.venv/bin:$PATH"
+
+CMD ["uvicorn", "halligalli_api.app:app", "--ws-max-size", "4096", "--port", "8000", "--host", "0.0.0.0"]
+

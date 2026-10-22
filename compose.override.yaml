@@ -1,0 +1,8 @@
+services:
+  api:
+    environment:
+      - HALLIGALLI_TRUSTED_PROXY_HOPS=1
+
+  web:
+    ports:
+      - 8080:80

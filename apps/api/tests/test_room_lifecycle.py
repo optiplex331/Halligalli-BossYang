@@ -71,6 +71,14 @@ class RoomLifecycleTest(RedisAsyncTestCase):
             [("Host", True), ("Guest", False)],
         )
 
+    async def test_a_one_human_match_finishes_without_a_winner_when_its_only_human_forfeits(self) -> None:
+        room_code, credentials = await self._started("one", ("Solo",))
+        finished = await self.authority.execute(room_code, Forfeit(credentials[0], 1_100))
+
+        self.assertEqual(finished.snapshot.phase, "post_match")
+        self.assertEqual((finished.snapshot.result.winner_seat_index, finished.snapshot.result.winner_name), (None, None))
+        self.assertEqual([(score.name, score.forfeited) for score in finished.snapshot.result.participants], [("Solo", True)])
+
     async def test_forfeits_then_continue_create_a_new_sequential_match_and_deduplicate_commands(self) -> None:
         authority = self.authority
         created, credentials = await self.create_room(

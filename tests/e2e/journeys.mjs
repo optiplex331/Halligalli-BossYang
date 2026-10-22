@@ -51,13 +51,14 @@ async function connect(roomCode, credential) {
       this.snapshot = snapshot;
       return snapshot;
     },
-    async command(type) {
+    // Sends a command and returns the first snapshot that satisfies `until`; without one, the first newer revision.
+    async command(type, until) {
       const revision = latestSnapshot?.revision ?? -1;
       socket.send(JSON.stringify({ type, commandId: randomUUID() }));
       let snapshot;
       do {
         snapshot = await this.next();
-      } while (snapshot.revision <= revision);
+      } while (until ? !until(snapshot) : snapshot.revision <= revision);
       return snapshot;
     },
     async waitFor(predicate) {
@@ -104,14 +105,23 @@ async function readyAndStart(clients) {
 }
 
 async function run() {
-  console.log("paired runtime sequential-match journey");
+  console.log("practice-alone journey");
+  const solo = await roomWith(4, 1, "Solo");
+  const soloStarted = await readyAndStart(solo.clients);
+  assert.equal(soloStarted.scoreboard.length, 1);
+  assert.equal(soloStarted.seats.length, 4);
+  const soloFinished = await solo.clients[0].command("forfeit", (snapshot) => snapshot.lastEvent === "forfeit");
+  assert.equal(soloFinished.phase, "post_match", "a one-human match ends when its only human forfeits");
+  solo.clients.forEach((client) => client.close());
+
+  console.log("sequential-match journey");
   const sequential = await roomWith(4, 3, "Next");
   const started = await readyAndStart(sequential.clients);
   assert.equal(started.configuration.tableSeatCount, 4);
   assert.equal(started.configuration.targetHumanParticipantCount, 3);
   assert.equal(started.seats.length, 4);
   assert.equal(started.scoreboard.length, 3);
-  const firstForfeit = await sequential.clients[2].command("forfeit");
+  const firstForfeit = await sequential.clients[2].command("forfeit", (snapshot) => snapshot.lastEvent === "forfeit");
   assert.equal(firstForfeit.phase, "playing", "match continues while two Human Participants remain");
   assert.equal(firstForfeit.lastEvent, "forfeit");
   const requestedForfeit = await sequential.clients[1].command("forfeit");
@@ -134,9 +144,8 @@ async function run() {
   const secondMatch = await readyAndStart([sequential.clients[0], ...replacements]);
   assert.equal(secondMatch.matchNumber, 2);
   replacements.forEach((replacement) => replacement.close());
-  replacement.close();
   sequential.clients.forEach((client) => client.close());
 }
 
 await run();
-console.log("Compose multiplayer journey passed");
+console.log("Journeys passed");

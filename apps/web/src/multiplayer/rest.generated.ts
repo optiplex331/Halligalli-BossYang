@@ -109,11 +109,11 @@ export interface components {
             /** Participants */
             participants: components["schemas"]["ParticipantScore"][];
             /** Score */
-            score: number;
+            score: number | null;
             /** Winnername */
-            winnerName: string;
+            winnerName: string | null;
             /** Winnerseatindex */
-            winnerSeatIndex: number;
+            winnerSeatIndex: number | null;
         };
         /** ParticipantScore */
         ParticipantScore: {

@@ -1,28 +1,20 @@
-FROM node:24-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS build
+FROM --platform=$BUILDPLATFORM node:24-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS build
 
-WORKDIR /workspace
+WORKDIR /app
 
-ARG HALLIGALLI_RELEASE_VERSION=local
-ARG HALLIGALLI_RELEASE_COMMIT=development
-
+# Copy the project requirements into the image
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/web/package.json apps/web/package.json
-RUN corepack enable && pnpm install --frozen-lockfile
 
-COPY apps/web apps/web
-RUN pnpm --dir apps/web run build \
-  && printf '{"version":"%s","commit":"%s"}\n' "$HALLIGALLI_RELEASE_VERSION" "$HALLIGALLI_RELEASE_COMMIT" \
-  > apps/web/dist/internal-identity.json
+# Install the project dependencies
+RUN corepack enable &&\
+    pnpm install --frozen-lockfile
 
-FROM nginxinc/nginx-unprivileged:1.31-alpine@sha256:6a23acdfca2b9cfbcec61419e3f1426bcbedb91362f2f19306a8567423bb4612
+COPY . .
 
-# Alpine fixes often land before a new base digest; the Trivy gate relies on
-# this upgrade, and the published image is still pinned by its own digest.
-USER root
-RUN apk upgrade --no-cache
-USER 101
+RUN pnpm run build 
 
-COPY apps/web/nginx.conf.template /etc/nginx/templates/default.conf.template
-COPY --from=build /workspace/apps/web/dist /usr/share/nginx/html
+FROM nginx:1.30-alpine@sha256:c59d1f8b1e0e42da75be973424cd72e23f7f8adfb54e982f4d1cd0216a5a5576 AS production
 
-EXPOSE 8080
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+COPY --from=build /app/dist /usr/share/nginx/html
