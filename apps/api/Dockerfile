@@ -12,6 +12,8 @@ WORKDIR /app
 
 COPY --from=build /app/.venv .venv
 
+RUN python -m pip uninstall -y pip
+
 COPY ./src/halligalli_api halligalli_api
 
 RUN addgroup -S api && adduser -S -G api api_user
