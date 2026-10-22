@@ -6,6 +6,13 @@ services:
         condition: service_healthy
     environment:
       - HALLIGALLI_REDIS_URL=redis://redis:6379/0
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/internal/ready', timeout=2)"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
 
   redis:
     image: redis:8-alpine@sha256:615b4cedaff0c1437a1548acae4222572df8c021eeb7382d64cb8b5e3a13ac7a
@@ -18,4 +25,4 @@ services:
     build: ./apps/web
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
