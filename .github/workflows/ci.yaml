@@ -102,3 +102,13 @@ jobs:
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
+  # The master ruleset requires only this check, so adding or renaming jobs never needs a ruleset change.
+  ci-ok:
+    runs-on: ubuntu-24.04
+    needs: [api, web, publish]
+    if: always()
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
+      - run: echo "All required jobs passed"
