@@ -81,6 +81,21 @@ jobs:
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: apps/${{ matrix.app }}
+          load: true
+          push: false
+          tags: ${{ env.IMAGE_PREFIX }}/${{ matrix.app }}:${{ github.sha }}
+          platforms: linux/amd64
+          cache-from: type=gha,scope=${{ matrix.app }}
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_PREFIX }}/${{ matrix.app }}:${{ github.sha }}
+          format: table
+          exit-code: 1
+          ignore-unfixed: true
+          severity: "CRITICAL,HIGH"
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: apps/${{ matrix.app }}
           push: ${{ github.event_name  == 'push'}}
           tags: ${{ env.IMAGE_PREFIX }}/${{ matrix.app }}:${{ github.sha }}
           platforms: linux/amd64,linux/arm64
