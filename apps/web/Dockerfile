@@ -13,7 +13,7 @@ COPY . .
 
 RUN pnpm run build 
 
-FROM nginx:1.30-alpine@sha256:c59d1f8b1e0e42da75be973424cd72e23f7f8adfb54e982f4d1cd0216a5a5576 AS production
+FROM nginx:1.31-alpine@sha256:713fc2ebfd92e8217db451477182ee91944b123d2b1ee9fd5a8c6e91ca6c3a11 AS production
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
