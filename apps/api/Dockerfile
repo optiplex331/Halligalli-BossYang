@@ -6,7 +6,7 @@ COPY uv.lock pyproject.toml ./
 
 RUN uv sync --locked --no-install-project --no-dev
 
-FROM python:3.14-alpine@sha256:01ddf82b43479870a7ea87037b7d68472bef12cc244941843c26bb75bf9a9b04 AS runtime
+FROM python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd AS runtime
 
 WORKDIR /app
 
